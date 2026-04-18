@@ -1,9 +1,8 @@
-import http.cookiejar
 import json
 import os
 import re
 import subprocess
-import urllib.request
+import tempfile
 from dataclasses import dataclass
 from enum import Enum
 
@@ -69,13 +68,6 @@ def extract_video_id(url: str) -> str | None:
         if match:
             return match.group(1)
     return None
-
-
-def _make_opener(cookies_path: str | None) -> urllib.request.OpenerDirector:
-    jar = http.cookiejar.MozillaCookieJar()
-    if cookies_path and os.path.exists(cookies_path):
-        jar.load(cookies_path, ignore_discard=True, ignore_expires=True)
-    return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 
 
 def _run_ytdlp(args: list[str], cookies_path: str | None, timeout: int = 30) -> tuple[str, str, int]:
@@ -188,67 +180,76 @@ def extract_subtitles(
         )
 
     try:
-        # Step 1: get metadata via yt-dlp (no download)
-        stdout, stderr, code = _run_ytdlp(
-            ["--skip-download", "--print-json", url],
-            cookies_path, timeout=30,
-        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            stdout, stderr, code = _run_ytdlp(
+                [
+                    "--skip-download",
+                    "--print-json",
+                    "--write-subs",
+                    "--write-auto-subs",
+                    "--sub-lang", language,
+                    "--sub-format", "vtt",
+                    "-o", os.path.join(tmpdir, "sub"),
+                    url,
+                ],
+                cookies_path, timeout=60,
+            )
 
-        if not stdout.strip():
-            return _classify_error(stderr)
+            if not stdout.strip():
+                return _classify_error(stderr)
 
-        info = json.loads(stdout.strip())
-        metadata = _build_metadata(info)
-        available_languages = _get_available_languages(info)
-        subtitle_formats, source_type = _find_subtitle_track(info, language)
+            info = json.loads(stdout.strip())
+            metadata = _build_metadata(info)
+            available_languages = _get_available_languages(info)
+            subtitle_formats, source_type = _find_subtitle_track(info, language)
 
-        if not subtitle_formats:
-            if not available_languages:
+            if not subtitle_formats:
+                if not available_languages:
+                    return ExtractionResult(
+                        success=False, metadata=metadata, available_languages=[],
+                        error_type=ExtractionErrorType.NO_SUBTITLES,
+                        error_message="This video has no subtitles available.",
+                    )
                 return ExtractionResult(
-                    success=False, metadata=metadata, available_languages=[],
-                    error_type=ExtractionErrorType.NO_SUBTITLES,
-                    error_message="This video has no subtitles available.",
+                    success=False, metadata=metadata, available_languages=available_languages,
+                    error_type=ExtractionErrorType.LANGUAGE_NOT_AVAILABLE,
+                    error_message=(
+                        f"Subtitles not available in '{language}'. "
+                        f"Available: {', '.join(available_languages[:10])}"
+                    ),
                 )
+
+            vtt_content = None
+            for fname in os.listdir(tmpdir):
+                if fname.endswith(".vtt"):
+                    with open(os.path.join(tmpdir, fname), encoding="utf-8") as f:
+                        vtt_content = f.read()
+                    break
+
+            if not vtt_content:
+                s = stderr.lower()
+                if "429" in s or "too many requests" in s:
+                    return ExtractionResult(
+                        success=False, metadata=metadata,
+                        error_type=ExtractionErrorType.NETWORK_ERROR,
+                        error_message="YouTube rate limit reached. Please try again later.",
+                    )
+                return ExtractionResult(
+                    success=False, metadata=metadata,
+                    error_type=ExtractionErrorType.UNKNOWN,
+                    error_message="Could not download subtitle file.",
+                )
+
+            entries = _parse_vtt_to_entries(vtt_content)
+
             return ExtractionResult(
-                success=False, metadata=metadata, available_languages=available_languages,
-                error_type=ExtractionErrorType.LANGUAGE_NOT_AVAILABLE,
-                error_message=(
-                    f"Subtitles not available in '{language}'. "
-                    f"Available: {', '.join(available_languages[:10])}"
-                ),
+                success=True,
+                metadata=metadata,
+                subtitles=entries,
+                language=language,
+                source_type=source_type,
+                available_languages=available_languages,
             )
-
-        # Step 2: download VTT via urllib with cookies (no second yt-dlp call)
-        vtt_url = next(
-            (f["url"] for f in subtitle_formats if f.get("ext") == "vtt"),
-            subtitle_formats[0].get("url") if subtitle_formats else None,
-        )
-
-        if not vtt_url:
-            return ExtractionResult(
-                success=False, metadata=metadata,
-                error_type=ExtractionErrorType.UNKNOWN,
-                error_message="Could not retrieve subtitle file URL.",
-            )
-
-        opener = _make_opener(cookies_path)
-        req = urllib.request.Request(
-            vtt_url,
-            headers={"User-Agent": "Mozilla/5.0"},
-        )
-        with opener.open(req, timeout=30) as response:
-            vtt_content = response.read().decode("utf-8")
-
-        entries = _parse_vtt_to_entries(vtt_content)
-
-        return ExtractionResult(
-            success=True,
-            metadata=metadata,
-            subtitles=entries,
-            language=language,
-            source_type=source_type,
-            available_languages=available_languages,
-        )
 
     except subprocess.TimeoutExpired:
         return ExtractionResult(
