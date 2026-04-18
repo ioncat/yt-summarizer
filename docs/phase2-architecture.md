@@ -83,24 +83,12 @@ subtitle_extractor → text_formatter → [Phase 1 done]
 
 ---
 
-## Future: RAG over Accumulated Library
-
-Once the user has N videos in the DB, a Q&A layer becomes valuable:
-
-```
-User question → vector search over subtitles_formatted → relevant chunks → LLM answer
-```
-
-This enables: "What have I learned about X across all my saved videos?"
-
-Same architecture works for OnPage Summarizer library.
-
----
-
 ## Key Principle
 
-> The machine removes noise (video → text, rolling window → clean paragraphs).  
-> The machine summarizes paragraph by paragraph.  
-> The human reads a short, faithful summary and decides what to dive into.
+> One-shot decision: watch or skip. No accumulation, no search, no return.
 
-This preserves accuracy at every step instead of compressing everything at once.
+The user needs a summary short enough to read in 30 seconds and accurate enough
+to make a reliable watch/skip decision. That's the only success criterion.
+
+History in DB is incidental (avoid reprocessing same video), not a feature.
+RAG and cross-video search are out of scope — the task is inherently single-use.
