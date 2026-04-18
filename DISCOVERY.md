@@ -354,11 +354,35 @@ How strict should accuracy be?
 
 ## 8. Future Considerations (Not in MVP)
 
-### Phase 2: LLM Integration
-- Extract key points from formatted text
-- Generate summaries
-- Customizable prompts for different use cases
-- Support local and external LLMs
+### Phase 2: LLM Integration — Map-Reduce Summarization
+
+**Core problem**: Single-pass LLM summarization loses meaning because the model has to choose what's important across the entire text at once.
+
+**Chosen approach: Map-Reduce Summarization**
+
+```
+formatted text (paragraphs)
+    ↓ MAP: LLM processes each paragraph → paragraph_summary
+    ↓ REDUCE: LLM combines all paragraph_summaries → final_summary
+```
+
+**Why this is better than single-pass:**
+- Each paragraph is one idea — LLM has more "attention" per unit of meaning
+- Errors are localized (one bad paragraph doesn't corrupt the whole summary)
+- Preserves local detail while building global understanding
+- Natural fit for our paragraph structure from text_formatter.py
+
+**Alternative approaches considered:**
+- **Refine** — sequential: summary[i] + paragraph[i+1] → updated summary. Better for narrative continuity, slower.
+- **Chain of Density** (2023) — iterative densification: start sparse, add details each pass. Experimentally better quality.
+- **RAG** — different paradigm: store as vector embeddings, answer user questions on demand. Better for Q&A over accumulated video library.
+- **Extractive** — pick actual sentences from original (TextRank, LexRank). Zero hallucination risk, but reads mechanically.
+
+**Recommended final architecture for Phase 2:**
+- Map-reduce for per-video summaries (stored in new `summaries` DB table, two levels: paragraph + document)
+- RAG on top of accumulated subtitle library for cross-video Q&A
+
+**Connection to OnPage Summarizer:** Same fundamental problem — both tools convert media to text, the hard part is text → meaning. Same solution applies.
 
 ### Phase 3: Speech-to-Text Fallback
 - Extract audio when subtitles unavailable
