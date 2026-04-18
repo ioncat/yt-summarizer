@@ -92,7 +92,7 @@ def _run_ytdlp(args: list[str], cookies_path: str | None, timeout: int = 30) -> 
 
 
 def _parse_vtt_to_entries(vtt_content: str) -> list[SubtitleEntry]:
-    entries = []
+    raw: list[SubtitleEntry] = []
     seen_texts: set[str] = set()
     lines = vtt_content.splitlines()
     i = 0
@@ -111,9 +111,21 @@ def _parse_vtt_to_entries(vtt_content: str) -> list[SubtitleEntry]:
             if text and text not in seen_texts:
                 seen_texts.add(text)
                 ts = timestamp[:8] if len(timestamp) >= 8 else timestamp
-                entries.append(SubtitleEntry(timestamp=ts, text=text))
+                raw.append(SubtitleEntry(timestamp=ts, text=text))
         else:
             i += 1
+
+    # YouTube auto-captions use a rolling window: same timestamp can appear
+    # multiple times with progressively more text. Keep only the longest.
+    entries: list[SubtitleEntry] = []
+    i = 0
+    while i < len(raw):
+        j = i + 1
+        while j < len(raw) and raw[j].timestamp == raw[i].timestamp:
+            j += 1
+        best = max(raw[i:j], key=lambda e: len(e.text))
+        entries.append(best)
+        i = j
     return entries
 
 
