@@ -11,7 +11,7 @@ Core functionality to extract YouTube subtitles and format them into readable te
 ### Epic 1: Core Subtitle Extraction
 **Description**: User can submit YouTube video URL and receive extracted subtitles
 
-**Status**: 🟡 Ready for Implementation | **Priority**: 🔴 P0  
+**Status**: ✅ Done | **Priority**: 🔴 P0  
 **User Stories**: US-101, US-102, US-103, US-104  
 [View Epic →](./epics/EPIC-1.md)
 
@@ -20,7 +20,7 @@ Core functionality to extract YouTube subtitles and format them into readable te
 ### Epic 2: Text Formatting & Presentation
 **Description**: Convert raw subtitles into clean, properly formatted markdown text
 
-**Status**: 🟡 Ready for Implementation | **Priority**: 🔴 P0  
+**Status**: ✅ Done | **Priority**: 🔴 P0  
 **User Stories**: US-201, US-202, US-203, US-204  
 [View Epic →](./epics/EPIC-2.md)
 
@@ -29,7 +29,7 @@ Core functionality to extract YouTube subtitles and format them into readable te
 ### Epic 3: Data Persistence
 **Description**: Save extracted subtitles and metadata to database for later retrieval
 
-**Status**: 🟡 Ready for Implementation | **Priority**: 🔴 P0  
+**Status**: ✅ Done | **Priority**: 🔴 P0  
 **User Stories**: US-301, US-302, US-303, US-304  
 [View Epic →](./epics/EPIC-3.md)
 
@@ -38,7 +38,7 @@ Core functionality to extract YouTube subtitles and format them into readable te
 ### Epic 4: Error Handling & Edge Cases
 **Description**: Handle all error scenarios gracefully with clear, user-friendly messages
 
-**Status**: 🟡 Ready for Implementation | **Priority**: 🟠 P1  
+**Status**: ✅ Done | **Priority**: 🟠 P1  
 **User Stories**: US-401, US-402, US-403, US-404, US-405  
 [View Epic →](./epics/EPIC-4.md)
 
@@ -47,7 +47,7 @@ Core functionality to extract YouTube subtitles and format them into readable te
 ### Epic 5: Web User Interface
 **Description**: Build intuitive web interface for interacting with the application
 
-**Status**: 🟡 Ready for Implementation | **Priority**: 🔴 P0  
+**Status**: ✅ Done | **Priority**: 🔴 P0  
 **User Stories**: US-501, US-502, US-503, US-504, US-505  
 [View Epic →](./epics/EPIC-5.md)
 
@@ -55,28 +55,32 @@ Core functionality to extract YouTube subtitles and format them into readable te
 
 ## Phase 2: LLM Integration & Self-Raising
 
-*(Details to be defined after Phase 1 completion)*
-
-Extract key points and summaries from formatted text using LLM models.
+Extract key points and summaries from formatted subtitle text using LLM.  
+Architecture: map-reduce — paragraph summaries → document summary. See `docs/phase2-architecture.md`.
 
 **Expected Epics**:
-- LLM Integration
-- Prompt Management
-- Summary Generation
-- Key Points Extraction
+
+| Epic | Description | Status |
+|------|-------------|--------|
+| Epic 6: LLM Summarization | Map-reduce pipeline: paragraph → paragraph_summary → document_summary | 🔵 Planned |
+| Epic 7: Prompt Management | Configurable system prompts, language-aware prompting | 🔵 Planned |
+| Epic 8: Summary Display | Show summary + key points alongside full subtitle text in UI | 🔵 Planned |
 
 ---
 
 ## Phase 3: Speech-to-Text Fallback
 
-*(Details to be defined after Phase 1 + Phase 2 completion)*
-
-Add speech-to-text processing for videos without subtitles (architecture-ready in Phase 1).
+Add speech-to-text processing for videos without subtitles (architecture-ready in Phase 1).  
+**Key design**: language parameter from Phase 1 is reused directly — no extra user input needed.  
+UX bridge: "Subtitles unavailable in [lang] → Run Speech-to-Text in [lang]?" offered in one click.
 
 **Expected Epics**:
-- Audio Extraction
-- Speech-to-Text Processing
-- Fallback Mechanism
+
+| Epic | Description | Status |
+|------|-------------|--------|
+| Epic 9: Audio Extraction | Extract audio from YouTube video via yt-dlp | 🔵 Planned |
+| Epic 10: Whisper Transcription | Local Whisper model, language param from Phase 1 | 🔵 Planned |
+| Epic 11: Fallback UX | Seamless fallback offer when subtitles missing | 🔵 Planned |
 
 ---
 
@@ -120,6 +124,6 @@ Add speech-to-text processing for videos without subtitles (architecture-ready i
 ## Document Control
 
 - **Version**: 1.0
-- **Last Updated**: 2024-04-18
+- **Last Updated**: 2026-04-18
 - **Status**: ✅ Ready for Development
 - **Owner**: Product & Engineering Team

@@ -1,5 +1,8 @@
 FROM python:3.12-slim
 
+# Node.js required by yt-dlp for YouTube bot-detection bypass
+RUN apt-get update && apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY requirements.txt .

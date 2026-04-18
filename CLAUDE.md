@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Vision**: Reduce cognitive load by allowing users to scan video content before deciding whether to watch in detail.
 
-**Current Phase**: MVP - Subtitle Extraction & Formatting (Phase 1)
+**Current Phase**: Phase 2 — LLM Integration (Phase 1 complete)
 
 ---
 
@@ -16,11 +16,56 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | Component | Technology |
 |-----------|------------|
-| Frontend | React + TypeScript |
+| Frontend | React + TypeScript + Vite |
 | Backend | Python + FastAPI |
-| Video Processing | yt-dlp (no API keys required) |
-| Database | SQLite |
+| Video Processing | yt-dlp (no API keys required) + Node.js (JS runtime for yt-dlp) |
+| Database | SQLite (aiosqlite + SQLAlchemy async) |
 | Text Format | Markdown (stored in DB) |
+
+---
+
+## Development Phases
+
+### ✅ Phase 1: MVP - Subtitle Extraction & Formatting — COMPLETE
+
+All 5 epics done. Full stack running:
+- FastAPI backend: subtitle extraction, text formatting, 5 REST endpoints, async background tasks
+- React frontend: 4 pages (Home, Processing, Result, History)
+- Language UX: shows available languages when requested one is missing, one-click retry
+
+### 🔮 Phase 2: LLM Integration & Self-Raising
+Map-reduce summarization pipeline. See `docs/phase2-architecture.md`.
+
+### 🔮 Phase 3: Speech-to-Text Fallback
+Whisper fallback. Language parameter from Phase 1 carries over directly — no extra user input.
+
+---
+
+## Running Locally
+
+### Backend
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
+
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev        # → http://localhost:3000
+```
+
+### Docker (both services)
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+### Required: YouTube cookies
+Export from Chrome via "Get cookies.txt LOCALLY" extension → save to `data/www.youtube.com_cookies.txt`.
+Set `COOKIES_PATH` in `.env`. Re-export if you get 429 or sign-in errors.
 
 ---
 
@@ -28,126 +73,70 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```
 yt-summarizer/
-├── PROJECT_PLAN.md          # Complete project plan, architecture, schema, API design
-├── CLAUDE.md                # This file
-├── README.md
-├── docs/
-│   └── requirements.md      # Functional requirements for all phases
-├── frontend/                # React + TypeScript web UI
+├── backend/
+│   ├── main.py                      # App entry, DB init, router registration
+│   ├── config.py                    # Settings via pydantic-settings (.env)
+│   ├── models/
+│   │   ├── database.py              # Async engine, session factory, init_db()
+│   │   └── models.py                # ORM: Video, SubtitleRaw, SubtitleFormatted, ProcessingTask
+│   ├── routers/api.py               # 5 REST endpoints
+│   └── services/
+│       ├── subtitle_extractor.py    # yt-dlp wrapper, VTT parser, error classification
+│       ├── text_formatter.py        # Overlap dedup + time-gap paragraph splitting
+│       └── video_service.py         # DB CRUD, task lifecycle
+├── frontend/
 │   ├── src/
-│   ├── package.json
-│   └── ...
-├── backend/                 # FastAPI backend (Python)
-│   ├── main.py
-│   ├── requirements.txt
-│   └── ...
-└── DATABASE.md              # Database schema and migrations (when created)
+│   │   ├── api.ts                   # Typed fetch wrappers for all endpoints
+│   │   ├── App.tsx                  # Routes
+│   │   ├── index.css                # All styles
+│   │   └── pages/                   # HomePage, ProcessingPage, ResultPage, HistoryPage
+│   ├── vite.config.ts               # Port 3000, proxy /api → localhost:8000
+│   └── Dockerfile                   # Multi-stage: Node builder → nginx
+├── data/
+│   ├── db/yt_summarizer.sqlite      # SQLite DB (auto-created)
+│   └── www.youtube.com_cookies.txt  # YouTube cookies (gitignored)
+├── docs/
+│   ├── requirements.md              # Functional requirements (all phases)
+│   └── phase2-architecture.md       # LLM map-reduce design
+└── backlog/
+    ├── BACKLOG.md                   # Epic overview + phase roadmap
+    └── epics/EPIC-1..5.md           # User stories per epic
 ```
 
 ---
 
-## Development Phases
+## API Endpoints
 
-### ✅ Phase 1: MVP - Subtitle Extraction & Formatting
-**Current**: Requirements gathering and planning complete. Ready for implementation.
-
-**Core Features**:
-1. Submit YouTube URL via web form
-2. Extract subtitles using yt-dlp (ru, en, uk)
-3. Format into clean, readable markdown text (100% accurate, no alterations)
-4. Store in SQLite database
-5. Display results in web UI
-6. Show processing history
-
-**Success Criteria**:
-- Subtitles extracted accurately
-- Text formatted properly (capitals, punctuation, structure)
-- Database storage working
-- Web UI functional
-- Error handling clear and helpful
-
-### 🔮 Phase 2: LLM Integration & Self-Raising
-Dependencies on Phase 1. Create summaries and key points using LLM.
-
-### 🔮 Phase 3: Speech-to-Text Fallback
-Dependencies on Phase 1+2. Architecture-ready in Phase 1.
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/process` | Submit URL + language → returns task_id, video_id |
+| GET | `/api/status/{task_id}` | Poll status; returns `available_languages` on language error |
+| GET | `/api/result/{video_id}` | Formatted subtitle text + metadata |
+| GET | `/api/history?page=N` | Paginated history (20 per page) |
+| DELETE | `/api/result/{video_id}` | Delete video + all related data |
 
 ---
 
-## Key Requirements
+## Key Implementation Details
 
-### Functional
-1. **100% Content Accuracy**: No alterations, additions, or omissions to original subtitles
-2. **Proper Formatting**: Correct capitalization, punctuation, paragraph structure
-3. **Multi-Language**: Russian, English, Ukrainian support
-4. **Error Handling**: Clear messages for invalid URLs, missing subtitles
-5. **No API Keys**: Use yt-dlp without YouTube API authentication
+**Single yt-dlp call**: `--print-json --write-subs --write-auto-subs --sub-lang {lang}` in one subprocess. Two separate calls trigger YouTube 429 rate limiting.
 
-### Architecture
-- **Modular Design**: Easy to add speech-to-text processing later
-- **Async Processing**: Handle long-running subtitle extraction
-- **Loose Coupling**: Frontend/backend independent
+**VTT rolling window**: YouTube auto-captions repeat timestamps with growing text. Keep longest text per timestamp group.
 
----
+**Overlap deduplication**: Sequential subtitle entries share text via suffix/prefix overlap — strip overlap before joining. Then group by ≥4 sec time gaps → paragraphs.
 
-## API Endpoints (Backend)
+**Task lifecycle**: `create_pending_task` creates `__pending__{video_id}` placeholder Video + task. On completion, `complete_task` detects existing video by `video_id` (not URL — handles youtu.be vs youtube.com), reassigns task FK, deletes placeholder. Must flush reassignment before delete to avoid ORM cascade nulling FK.
 
-See `PROJECT_PLAN.md` section 6 for complete API design.
+**Language error UX**: When extraction fails with `LANGUAGE_NOT_AVAILABLE`, `available_languages` stored as JSON in `error_message`. Status endpoint parses and returns as separate field. Frontend shows quick-select buttons.
 
-Quick reference:
-- `POST /api/process` - Submit video for processing
-- `GET /api/status/{task_id}` - Check processing progress
-- `GET /api/result/{video_id}` - Retrieve formatted text
-- `GET /api/history` - Get processing history
-- `DELETE /api/result/{video_id}` - Delete result
-
----
-
-## Database Schema
-
-See `PROJECT_PLAN.md` section 5 for complete schema.
-
-Key tables:
-- `videos` - Video metadata
-- `subtitles_raw` - Original subtitles with timestamps
-- `subtitles_formatted` - Formatted markdown text
-- `processing_tasks` - Task status tracking
-
----
-
-## Before Starting Development
-
-1. ✅ Read `PROJECT_PLAN.md` for complete architecture
-2. ✅ Review `docs/requirements.md` for functional requirements
-3. ✅ Understand database schema and API design
-4. 🔄 Set up frontend repo (React + TypeScript)
-5. 🔄 Set up backend repo (Python + FastAPI + yt-dlp)
-6. 🔄 Initialize SQLite database with schema
-7. 🔄 Start with backend subtitle extraction service (core MVP)
-
----
-
-## Important Notes for Development
-
-1. **Test with real YouTube videos** throughout development
-2. **Preserve 100% of original content** - this is non-negotiable
-3. **Handle edge cases**: Videos with multiple languages, no subtitles, restricted videos
-4. **Use async/await** for long-running operations
-5. **Log all processing steps** for debugging
-6. **Keep services loosely coupled** for extensibility
-
----
-
-## Common Development Tasks
-
-*(To be added as development begins)*
+**DB note**: `scalar_one_or_none()` on SubtitleFormatted/Video queries crashes when a video is reprocessed. Always use `.scalars().first()` with `.order_by(created_at.desc())`.
 
 ---
 
 ## References
 
-- **Project Plan**: See `PROJECT_PLAN.md` for architecture, schema, API design, and development phases
-- **Functional Requirements**: See `docs/requirements.md` for detailed requirements per feature
-- **yt-dlp Documentation**: https://github.com/yt-dlp/yt-dlp
-- **FastAPI Documentation**: https://fastapi.tiangolo.com/
-- **React Documentation**: https://react.dev/
+- **Functional Requirements**: `docs/requirements.md`
+- **Phase 2 LLM Architecture**: `docs/phase2-architecture.md`
+- **Effort Log**: `docs/effort-log.md`
+- **yt-dlp**: https://github.com/yt-dlp/yt-dlp
+- **FastAPI**: https://fastapi.tiangolo.com/

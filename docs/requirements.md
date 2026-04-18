@@ -30,10 +30,20 @@ YT Summarizer is a web application that extracts YouTube video subtitles, format
 **Acceptance Criteria**:
 - Extract subtitles using yt-dlp without API keys
 - Support multiple languages: Russian, English, Ukrainian
-- Allow user to select language if multiple available
-- Handle videos with no subtitles gracefully
-- Show clear error message when subtitles unavailable
+- User selects desired language before submitting — the UI explains this upfront
+- If selected language is unavailable, return list of available subtitle languages
+- UI shows available languages as quick-select options so user can retry in one click
+- Handle videos with no subtitles in any language gracefully
 - Preserve 100% of original subtitle content (no omissions)
+
+**Language parameter design note**:
+The language field is a cross-phase parameter. Its meaning evolves across phases:
+- **Phase 1**: tells yt-dlp which subtitle track to download
+- **Phase 3**: tells Whisper which language to use for Speech-to-Text transcription
+
+This enables a seamless fallback UX: if subtitles are unavailable in the selected language,
+the system already knows the target language and can immediately offer Speech-to-Text
+as an alternative — without asking the user again.
 
 ---
 
@@ -122,7 +132,8 @@ YT Summarizer is a web application that extracts YouTube video subtitles, format
 
 **Acceptance Criteria**:
 - Invalid YouTube URL → "Invalid YouTube URL. Please check and try again."
-- Video has no subtitles → "This video has no subtitles available."
+- Requested language unavailable → "Subtitles not available in [language]. Available: [list]" + quick-select buttons per language
+- Video has no subtitles in any language → "This video has no subtitles available." (+ Phase 3: offer Speech-to-Text)
 - Network error → "Network error. Please check your connection and try again."
 - Video restricted/private → "This video is not accessible."
 - Processing timeout → "Processing took too long. Please try again."
@@ -144,8 +155,10 @@ YT Summarizer is a web application that extracts YouTube video subtitles, format
 *(Architecture-ready, detailed after Phase 1+2 completion)*
 
 - Extract audio when subtitles unavailable
-- Process through local speech-to-text
+- Process through local speech-to-text (Whisper)
 - Fallback mechanism when manual subtitles missing
+- Target language already known from Phase 1 language selection — no extra input needed from user
+- UX bridge: "Subtitles not found in [lang] → Run Speech-to-Text in [lang]?" offered in one click
 
 ---
 

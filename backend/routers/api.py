@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -38,7 +39,11 @@ async def _run_processing(task_id: str, url: str, language: str) -> None:
         )
         async with AsyncSessionLocal() as db:
             if not extraction.success:
-                await update_task_failed(db, task_id, extraction.error_message or "Extraction failed")
+                await update_task_failed(
+                    db, task_id,
+                    extraction.error_message or "Extraction failed",
+                    available_languages=extraction.available_languages,
+                )
                 return
             formatted = format_subtitles(extraction.subtitles)
             await complete_task(db, task_id, url, extraction, formatted)
@@ -68,11 +73,23 @@ async def get_status(task_id: str, db: Annotated[AsyncSession, Depends(get_db)])
     task = await get_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    error_message = task.error_message
+    available_languages = None
+    if error_message:
+        try:
+            parsed = json.loads(error_message)
+            error_message = parsed.get("message", error_message)
+            available_languages = parsed.get("available_languages")
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
     return {
         "task_id": task.id,
         "status": task.status,
         "progress": task.progress,
-        "error_message": task.error_message,
+        "error_message": error_message,
+        "available_languages": available_languages,
     }
 
 

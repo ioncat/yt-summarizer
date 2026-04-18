@@ -246,6 +246,19 @@ def extract_subtitles(
                         error_type=ExtractionErrorType.NETWORK_ERROR,
                         error_message="YouTube rate limit reached. Please try again later.",
                     )
+                # Language listed in metadata but VTT not downloaded (e.g. auto-translated)
+                real_langs = [l for l in available_languages if not l.endswith("-orig")]
+                if language not in real_langs:
+                    display = real_langs or available_languages
+                    return ExtractionResult(
+                        success=False, metadata=metadata,
+                        available_languages=display,
+                        error_type=ExtractionErrorType.LANGUAGE_NOT_AVAILABLE,
+                        error_message=(
+                            f"Subtitles not available in '{language}'. "
+                            f"Available: {', '.join(display[:10])}"
+                        ),
+                    )
                 return ExtractionResult(
                     success=False, metadata=metadata,
                     error_type=ExtractionErrorType.UNKNOWN,

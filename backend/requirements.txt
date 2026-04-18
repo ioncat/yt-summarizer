@@ -3,7 +3,7 @@ fastapi==0.115.0
 uvicorn[standard]==0.30.6
 
 # YouTube subtitle extraction
-yt-dlp==2024.10.7
+yt-dlp>=2026.3.17
 
 # Database
 sqlalchemy[asyncio]==2.0.36

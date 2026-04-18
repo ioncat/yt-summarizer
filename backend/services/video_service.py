@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from sqlalchemy import select, delete
@@ -11,7 +12,7 @@ from services.subtitle_extractor import ExtractionResult, subtitles_to_json
 
 
 async def create_pending_task(db: AsyncSession, url: str, video_id: str) -> ProcessingTask:
-    # Return existing pending task if already submitted
+    # Return existing in-progress task to avoid double-processing
     stmt = (
         select(ProcessingTask)
         .join(Video, ProcessingTask.video_id == Video.id)
@@ -20,6 +21,14 @@ async def create_pending_task(db: AsyncSession, url: str, video_id: str) -> Proc
     existing = (await db.execute(stmt)).scalar_one_or_none()
     if existing:
         return existing
+
+    # Clean up stale __pending__ video left over from a previous failed task
+    stale_stmt = select(Video).where(Video.url == f"__pending__{video_id}")
+    stale_video = (await db.execute(stale_stmt)).scalar_one_or_none()
+    if stale_video:
+        await db.execute(delete(ProcessingTask).where(ProcessingTask.video_id == stale_video.id))
+        await db.delete(stale_video)
+        await db.flush()
 
     video = Video(
         id=generate_id(),
@@ -59,11 +68,14 @@ async def complete_task(
     if not video:
         return
 
-    # If real URL already exists (e.g. duplicate submit), remove the pending placeholder
-    dup_stmt = select(Video).where(Video.url == url)
-    dup = (await db.execute(dup_stmt)).scalar_one_or_none()
+    # If a completed video with same video_id exists, reuse it and discard the placeholder
+    dup_stmt = select(Video).where(Video.video_id == extraction_result.metadata.video_id, Video.id != video.id)
+    dup = (await db.execute(dup_stmt)).scalars().first()
     if dup and dup.id != video.id:
-        await db.execute(delete(ProcessingTask).where(ProcessingTask.video_id == video.id))
+        # Reassign task to existing video first, flush so FK points away from placeholder
+        task.video_id = dup.id
+        await db.flush()
+        # Now safe to delete the placeholder
         await db.delete(video)
         await db.flush()
         video = dup
@@ -109,12 +121,18 @@ async def complete_task(
     await db.commit()
 
 
-async def update_task_failed(db: AsyncSession, task_id: str, error: str) -> None:
+async def update_task_failed(
+    db: AsyncSession, task_id: str, error: str, available_languages: list[str] | None = None
+) -> None:
     stmt = select(ProcessingTask).where(ProcessingTask.id == task_id)
     task = (await db.execute(stmt)).scalar_one_or_none()
     if task:
         task.status = "failed"
-        task.error_message = error
+        task.error_message = (
+            json.dumps({"message": error, "available_languages": available_languages})
+            if available_languages is not None
+            else error
+        )
         task.completed_at = datetime.utcnow()
         await db.commit()
 
@@ -126,7 +144,7 @@ async def get_task(db: AsyncSession, task_id: str) -> ProcessingTask | None:
 
 async def get_result(db: AsyncSession, video_id: str) -> dict | None:
     stmt = select(Video).where(Video.video_id == video_id, ~Video.url.startswith("__pending__"))
-    video = (await db.execute(stmt)).scalar_one_or_none()
+    video = (await db.execute(stmt)).scalars().first()
     if not video:
         return None
 
@@ -135,7 +153,7 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
         .where(SubtitleFormatted.video_id == video.id)
         .order_by(SubtitleFormatted.created_at.desc())
     )
-    fmt = (await db.execute(fmt_stmt)).scalar_one_or_none()
+    fmt = (await db.execute(fmt_stmt)).scalars().first()
 
     return {
         "video_id": video.video_id,
