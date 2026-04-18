@@ -12,12 +12,12 @@ from models.database import get_db
 from services.subtitle_extractor import extract_subtitles, extract_video_id
 from services.text_formatter import format_subtitles
 from services.video_service import (
+    complete_task,
     create_pending_task,
     delete_video,
     get_history,
     get_result,
     get_task,
-    save_processing_result,
     update_task_failed,
 )
 
@@ -32,21 +32,20 @@ class ProcessRequest(BaseModel):
 async def _run_processing(task_id: str, url: str, language: str) -> None:
     from models.database import AsyncSessionLocal
 
-    async with AsyncSessionLocal() as db:
-        try:
-            extraction = await asyncio.to_thread(
-                extract_subtitles, url, language, settings.cookies_path
-            )
+    try:
+        extraction = await asyncio.to_thread(
+            extract_subtitles, url, language, settings.cookies_path
+        )
+        async with AsyncSessionLocal() as db:
             if not extraction.success:
                 await update_task_failed(db, task_id, extraction.error_message or "Extraction failed")
                 return
-
             formatted = format_subtitles(extraction.subtitles)
-            await save_processing_result(db, url, extraction, formatted)
+            await complete_task(db, task_id, url, extraction, formatted)
 
-        except Exception as e:
-            async with AsyncSessionLocal() as db2:
-                await update_task_failed(db2, task_id, str(e))
+    except Exception as e:
+        async with AsyncSessionLocal() as db:
+            await update_task_failed(db, task_id, str(e))
 
 
 @router.post("/process")
@@ -59,7 +58,7 @@ async def process_video(
     if not video_id:
         raise HTTPException(status_code=400, detail="Invalid YouTube URL")
 
-    task = await create_pending_task(db, video_id)
+    task = await create_pending_task(db, body.url, video_id)
     background_tasks.add_task(_run_processing, task.id, body.url, body.language)
     return {"task_id": task.id, "video_id": video_id}
 

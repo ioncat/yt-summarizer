@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime
 
 from sqlalchemy import select, delete
@@ -11,81 +10,21 @@ from models.models import generate_id
 from services.subtitle_extractor import ExtractionResult, subtitles_to_json
 
 
-async def get_or_create_video(db: AsyncSession, url: str, result: ExtractionResult) -> Video:
-    stmt = select(Video).where(Video.url == url)
+async def create_pending_task(db: AsyncSession, url: str, video_id: str) -> ProcessingTask:
+    # Return existing pending task if already submitted
+    stmt = (
+        select(ProcessingTask)
+        .join(Video, ProcessingTask.video_id == Video.id)
+        .where(Video.video_id == video_id, ProcessingTask.status == "pending")
+    )
     existing = (await db.execute(stmt)).scalar_one_or_none()
     if existing:
         return existing
 
-    m = result.metadata
     video = Video(
         id=generate_id(),
-        url=url,
-        video_id=m.video_id,
-        title=m.title,
-        author=m.author,
-        duration=m.duration,
-        channel_id=m.channel_id,
-        channel_name=m.channel_name,
-        upload_date=m.upload_date,
-        view_count=m.view_count,
-        description=m.description,
-        thumbnail_url=m.thumbnail_url,
-        language_detected=result.language,
-        has_subtitles=True,
-        subtitles_type=result.source_type.value if result.source_type else None,
-    )
-    db.add(video)
-    await db.flush()
-    return video
-
-
-async def save_processing_result(
-    db: AsyncSession,
-    url: str,
-    extraction_result: ExtractionResult,
-    formatted: dict,
-) -> tuple[Video, ProcessingTask]:
-    video = await get_or_create_video(db, url, extraction_result)
-
-    raw = SubtitleRaw(
-        id=generate_id(),
-        video_id=video.id,
-        language=extraction_result.language,
-        original_subtitles=subtitles_to_json(extraction_result.subtitles),
-        source_type=extraction_result.source_type.value if extraction_result.source_type else None,
-    )
-    db.add(raw)
-
-    fmt = SubtitleFormatted(
-        id=generate_id(),
-        video_id=video.id,
-        language=extraction_result.language,
-        formatted_text=formatted["formatted_text"],
-        text_length=formatted["char_count"],
-        processing_status="success",
-    )
-    db.add(fmt)
-
-    task = ProcessingTask(
-        id=generate_id(),
-        video_id=video.id,
-        status="completed",
-        progress=100,
-        started_at=datetime.utcnow(),
-        completed_at=datetime.utcnow(),
-    )
-    db.add(task)
-
-    await db.commit()
-    return video, task
-
-
-async def create_pending_task(db: AsyncSession, placeholder_video_id: str) -> ProcessingTask:
-    video = Video(
-        id=generate_id(),
-        url=f"__pending__{placeholder_video_id}",
-        video_id=placeholder_video_id,
+        url=f"__pending__{video_id}",
+        video_id=video_id,
     )
     db.add(video)
     await db.flush()
@@ -95,10 +34,79 @@ async def create_pending_task(db: AsyncSession, placeholder_video_id: str) -> Pr
         video_id=video.id,
         status="pending",
         progress=0,
+        started_at=datetime.utcnow(),
     )
     db.add(task)
     await db.commit()
     return task
+
+
+async def complete_task(
+    db: AsyncSession,
+    task_id: str,
+    url: str,
+    extraction_result: ExtractionResult,
+    formatted: dict,
+) -> None:
+    # Find pending task and its placeholder video
+    task_stmt = select(ProcessingTask).where(ProcessingTask.id == task_id)
+    task = (await db.execute(task_stmt)).scalar_one_or_none()
+    if not task:
+        return
+
+    video_stmt = select(Video).where(Video.id == task.video_id)
+    video = (await db.execute(video_stmt)).scalar_one_or_none()
+    if not video:
+        return
+
+    # If real URL already exists (e.g. duplicate submit), remove the pending placeholder
+    dup_stmt = select(Video).where(Video.url == url)
+    dup = (await db.execute(dup_stmt)).scalar_one_or_none()
+    if dup and dup.id != video.id:
+        await db.execute(delete(ProcessingTask).where(ProcessingTask.video_id == video.id))
+        await db.delete(video)
+        await db.flush()
+        video = dup
+
+    # Update placeholder video with real metadata
+    m = extraction_result.metadata
+    video.url = url
+    video.video_id = m.video_id
+    video.title = m.title
+    video.author = m.author
+    video.duration = m.duration
+    video.channel_id = m.channel_id
+    video.channel_name = m.channel_name
+    video.upload_date = m.upload_date
+    video.view_count = m.view_count
+    video.description = m.description
+    video.thumbnail_url = m.thumbnail_url
+    video.language_detected = extraction_result.language
+    video.has_subtitles = True
+    video.subtitles_type = extraction_result.source_type.value if extraction_result.source_type else None
+
+    db.add(SubtitleRaw(
+        id=generate_id(),
+        video_id=video.id,
+        language=extraction_result.language,
+        original_subtitles=subtitles_to_json(extraction_result.subtitles),
+        source_type=extraction_result.source_type.value if extraction_result.source_type else None,
+    ))
+
+    db.add(SubtitleFormatted(
+        id=generate_id(),
+        video_id=video.id,
+        language=extraction_result.language,
+        formatted_text=formatted["formatted_text"],
+        text_length=formatted["char_count"],
+        processing_status="success",
+    ))
+
+    task.status = "completed"
+    task.progress = 100
+    task.completed_at = datetime.utcnow()
+
+    await db.commit()
 
 
 async def update_task_failed(db: AsyncSession, task_id: str, error: str) -> None:
@@ -117,7 +125,7 @@ async def get_task(db: AsyncSession, task_id: str) -> ProcessingTask | None:
 
 
 async def get_result(db: AsyncSession, video_id: str) -> dict | None:
-    stmt = select(Video).where(Video.video_id == video_id)
+    stmt = select(Video).where(Video.video_id == video_id, ~Video.url.startswith("__pending__"))
     video = (await db.execute(stmt)).scalar_one_or_none()
     if not video:
         return None
