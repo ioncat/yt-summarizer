@@ -83,12 +83,20 @@ subtitle_extractor → text_formatter → [Phase 1 done]
 
 ---
 
+## Output Size
+
+Target length is measured in **words, not time** — reading speed is individual.
+
+Default: `summary_words = 500`. Configurable — user adjusts based on preference.
+Range to experiment with: 300–1000 words. This is the human "context window" for
+a watch/skip decision, and it's personal. Since this is a single-user tool, that's fine.
+
 ## Key Principle
 
 > One-shot decision: watch or skip. No accumulation, no search, no return.
 
-The user needs a summary short enough to read in 30 seconds and accurate enough
-to make a reliable watch/skip decision. That's the only success criterion.
+Success criterion: summary is short enough to read quickly AND accurate enough
+to make a reliable watch/skip call. Word count is the lever to tune that balance.
 
 History in DB is incidental (avoid reprocessing same video), not a feature.
 RAG and cross-video search are out of scope — the task is inherently single-use.
