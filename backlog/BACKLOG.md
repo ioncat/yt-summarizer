@@ -83,7 +83,7 @@ Local LLM cleanup via Ollama. Runs on demand. No data leaves the machine.
 ### Epic 12: Cancel Cleanup
 **Description**: Stop button in UI to interrupt a running AI cleanup. In-memory cancel flag checked before each paragraph in Ollama loop. Status resets to null on cancel. Backend: `DELETE /api/result/{video_id}/cleanup`. Frontend: "✕ Stop" button while cleanup_status === 'processing'.
 
-**Status**: 🔵 Planned | **Priority**: 🟡 P2
+**Status**: 🟡 Next | **Priority**: 🔴 P0
 
 ---
 
