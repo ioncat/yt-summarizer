@@ -13,6 +13,7 @@ Time analysis based on git history (commit timestamps).
 |------|---------|-----------------|-------------|
 | 2026-04-18 | 13 | Full project bootstrap: discovery docs, repo structure, FastAPI backend, DB models, subtitle extractor (yt-dlp, cookies, 429 fix), text formatter, DB service layer, REST API (5 endpoints), Phase 2 architecture docs | ~1 h 35 min (15:06–16:41) |
 | 2026-04-18 | — | Frontend (React + TypeScript + Vite, 4 pages), language UX feature (available-language buttons on error), multiple backend bug fixes (duplicate video rows, FK cascade on ORM delete, scalar_one_or_none on multi-row results, stale pending cleanup) | ~3 h |
+| 2026-04-25 | 3 | .gitignore cleanup (untrack Claude local config), one-click dev launchers (start.vbs / start.sh), fix .env.example (CORS_ORIGINS JSON format, correct data/ paths) | ~30 min |
 
 *Table updated after each session.*
 
@@ -26,7 +27,8 @@ Time analysis based on git history (commit timestamps).
 | Phase 1 — Backend (extractor + formatter + API) | 7 | ~1 h |
 | Phase 1 — Docs (Phase 2 architecture) | 3 | ~20 min |
 | Phase 1 — Frontend + Language UX + bug fixes | — | ~3 h |
-| **Total** | **13+** | **~4 h 35 min** |
+| Tooling — launchers, .gitignore, .env fixes | 3 | ~30 min |
+| **Total** | **16+** | **~5 h 5 min** |
 
 ---
 
@@ -68,4 +70,16 @@ Then update the tables above manually (or ask Claude).
 | Blockers | Multiple ORM edge cases from re-processing same video. Each required a targeted fix. |
 | Commits | — (no git commits this session) |
 | Time | ~3 h |
+| Next | Phase 2 — LLM summarization (Epic 6) |
+
+## Session 3 — 2026-04-25
+
+| Parameter | Value |
+|-----------|-------|
+| Date | 2026-04-25 |
+| Status | ✅ Tooling complete |
+| Completed | **Gitignore cleanup**: untracked `.claude/` and `docs/project-bootstrap-guide.md` from repo. **One-click launchers**: `start.vbs` (Windows — Windows Terminal split panes or two cmd fallback, auto-opens browser) and `start.sh` (Linux/macOS — parallel background processes, Ctrl+C stops both). **Env fixes**: `CORS_ORIGINS` as JSON list `["..."]` (pydantic v2 requirement), paths `./data/` → `../data/` in `.env.example`. |
+| Blockers | — |
+| Commits | 3 |
+| Time | ~30 min |
 | Next | Phase 2 — LLM summarization (Epic 6) |

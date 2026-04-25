@@ -44,23 +44,31 @@ docker compose down
 - Node.js 18+ (required by yt-dlp for YouTube bot detection bypass)
 - yt-dlp (`pip install yt-dlp` or system package)
 
-### Backend
+### One-click launch
 
 ```bash
-cd backend
-pip install -r requirements.txt
-
-# Set up env
-cp ../.env.example ../.env
-# Edit .env: set DATABASE_PATH and COOKIES_PATH
-
-# Run
-uvicorn main:app --reload --port 8000
+# Set up env once
+cp .env.example .env
 ```
 
-### Frontend
+**Windows** — double-click `start.vbs`.
+Opens Windows Terminal with two split panes (backend + frontend) and launches the browser automatically.
+
+**Linux / macOS**:
+```bash
+chmod +x start.sh && ./start.sh
+# Ctrl+C stops both services
+```
+
+### Manual launch (two terminals)
 
 ```bash
+# Terminal 1 — Backend
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+
+# Terminal 2 — Frontend
 cd frontend
 npm install
 npm run dev
