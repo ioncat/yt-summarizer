@@ -71,6 +71,7 @@ Thumbs.db
 .claude/
 frontend/.claude/
 docs/project-bootstrap-guide.md
+AGENTS.md
 
 # ========================
 # Logs

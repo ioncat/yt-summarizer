@@ -1,6 +1,6 @@
 # YT Summarizer
 
-Extract, format, and store YouTube video subtitles for quick content review. Paste a URL, pick a language — get clean, readable text without watching the video. Optionally clean up the transcript with a local LLM (Ollama) to fix punctuation and remove filler words.
+Turn YouTube videos into scannable text so you can decide what to watch, save, or skip.
 
 ## Watch or Skip
 
@@ -10,7 +10,7 @@ Video is expensive to evaluate:
 - Titles and thumbnails rarely show the real substance.
 - Intros, delivery, pacing, filler, and repetition add cognitive load.
 
-YT Summarizer turns video into scannable text, so you can:
+YT Summarizer extracts subtitles, cleans them into readable text, and helps you:
 
 - understand the core idea quickly;
 - decide whether the full video deserves your attention;
