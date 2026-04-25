@@ -12,10 +12,11 @@ function formatDuration(seconds: number | null): string {
 export default function ResultPage() {
   const { videoId } = useParams<{ videoId: string }>()
   const navigate = useNavigate()
+  type Tab = 'subtitles' | 'cleaned'
   const [result, setResult] = useState<ResultResponse | null>(null)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
-  const [showCleaned, setShowCleaned] = useState(true)
+  const [activeTab, setActiveTab] = useState<Tab>('cleaned')
 
   useEffect(() => {
     if (!videoId) return
@@ -24,7 +25,9 @@ export default function ResultPage() {
       .catch(() => setError('Could not load result'))
   }, [videoId])
 
-  const displayText = (showCleaned && result?.cleaned_text) ? result.cleaned_text : result?.formatted_text
+  const displayText = (activeTab === 'cleaned' && result?.cleaned_text)
+    ? result.cleaned_text
+    : result?.formatted_text
 
   async function handleCopy() {
     if (!displayText) return
@@ -70,22 +73,22 @@ export default function ResultPage() {
             Open video
           </a>
         </div>
-        {result.cleaned_text && (
-          <div className="text-toggle">
-            <button
-              className={`toggle-btn ${!showCleaned ? 'active' : ''}`}
-              onClick={() => setShowCleaned(false)}
-            >
-              Original
-            </button>
-            <button
-              className={`toggle-btn ${showCleaned ? 'active' : ''}`}
-              onClick={() => setShowCleaned(true)}
-            >
-              Cleaned
-            </button>
-          </div>
-        )}
+        <div className="result-tabs">
+          <button
+            className={`result-tab ${activeTab === 'subtitles' ? 'active' : ''}`}
+            onClick={() => setActiveTab('subtitles')}
+          >
+            Subtitles
+          </button>
+          <button
+            className={`result-tab ${activeTab === 'cleaned' ? 'active' : ''} ${result.cleanup_status === 'unavailable' ? 'tab-unavailable' : ''}`}
+            onClick={() => result.cleanup_status === 'done' && setActiveTab('cleaned')}
+            title={result.cleanup_status === 'unavailable' ? 'Ollama was not available during processing' : undefined}
+          >
+            Cleaned
+            {result.cleanup_status === 'unavailable' && <span className="tab-hint"> (Ollama offline)</span>}
+          </button>
+        </div>
         <div className="formatted-text">{displayText}</div>
       </div>
     </div>

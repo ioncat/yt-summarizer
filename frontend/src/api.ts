@@ -22,6 +22,7 @@ export interface ResultResponse {
   language: string | null
   formatted_text: string | null
   cleaned_text: string | null
+  cleanup_status: 'done' | 'unavailable'
   char_count: number | null
   created_at: string
 }

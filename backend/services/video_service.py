@@ -157,6 +157,7 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
     )
     fmt = (await db.execute(fmt_stmt)).scalars().first()
 
+    cleaned = fmt.cleaned_text if fmt else None
     return {
         "video_id": video.video_id,
         "url": video.url,
@@ -165,7 +166,8 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
         "duration": video.duration,
         "language": fmt.language if fmt else None,
         "formatted_text": fmt.formatted_text if fmt else None,
-        "cleaned_text": fmt.cleaned_text if fmt else None,
+        "cleaned_text": cleaned,
+        "cleanup_status": "done" if cleaned else "unavailable",
         "char_count": fmt.text_length if fmt else None,
         "created_at": video.created_at.isoformat(),
     }

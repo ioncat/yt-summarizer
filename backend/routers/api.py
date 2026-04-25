@@ -29,10 +29,9 @@ router = APIRouter(prefix="/api")
 class ProcessRequest(BaseModel):
     url: str
     language: str = "ru"
-    enable_cleanup: bool = False
 
 
-async def _run_processing(task_id: str, url: str, language: str, enable_cleanup: bool = False) -> None:
+async def _run_processing(task_id: str, url: str, language: str) -> None:
     from models.database import AsyncSessionLocal
 
     try:
@@ -48,7 +47,7 @@ async def _run_processing(task_id: str, url: str, language: str, enable_cleanup:
                 )
                 return
             formatted = format_subtitles(extraction.subtitles)
-            cleaned = await clean_text(formatted["formatted_text"]) if enable_cleanup else None
+            cleaned = await clean_text(formatted["formatted_text"])
             await complete_task(db, task_id, url, extraction, formatted, cleaned_text=cleaned)
 
     except Exception as e:
@@ -67,7 +66,7 @@ async def process_video(
         raise HTTPException(status_code=400, detail="Invalid YouTube URL")
 
     task = await create_pending_task(db, body.url, video_id)
-    background_tasks.add_task(_run_processing, task.id, body.url, body.language, body.enable_cleanup)
+    background_tasks.add_task(_run_processing, task.id, body.url, body.language)
     return {"task_id": task.id, "video_id": video_id}
 
 
