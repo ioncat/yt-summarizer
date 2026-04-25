@@ -66,6 +66,13 @@ Thumbs.db
 *.swo
 
 # ========================
+# Claude Code local config
+# ========================
+.claude/
+frontend/.claude/
+docs/project-bootstrap-guide.md
+
+# ========================
 # Logs
 # ========================
 logs/
