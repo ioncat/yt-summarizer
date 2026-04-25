@@ -1,6 +1,6 @@
 # YT Summarizer
 
-Extract, format, and store YouTube video subtitles for quick content review. Paste a URL, pick a language, get clean readable text — without watching the video.
+Extract, format, and store YouTube video subtitles for quick content review. Paste a URL, pick a language — get clean, readable text without watching the video. Optionally clean up the transcript with a local LLM (Ollama) to fix punctuation and remove filler words.
 
 ---
 
@@ -43,6 +43,7 @@ docker compose down
 - Python 3.12+
 - Node.js 18+ (required by yt-dlp for YouTube bot detection bypass)
 - yt-dlp (`pip install yt-dlp` or system package)
+- [Ollama](https://ollama.com) with `cas/aya-expanse-8b` *(optional — for AI text cleanup)*
 
 ### One-click launch
 
@@ -89,6 +90,11 @@ COOKIES_PATH=../data/www.youtube.com_cookies.txt
 
 # Debug mode (enables SQLAlchemy query logging)
 DEBUG=false
+
+# Ollama — local LLM for text cleanup (optional)
+# Install Ollama, then: ollama pull cas/aya-expanse-8b
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=cas/aya-expanse-8b
 ```
 
 ### Cookies setup
@@ -104,13 +110,16 @@ Re-export if you start getting 429 or "sign in required" errors.
 
 ## How It Works
 
-1. User submits a YouTube URL and selects subtitle language
+1. User submits a YouTube URL, selects subtitle language, optionally enables AI cleanup
 2. Backend spawns an async background task
 3. yt-dlp downloads subtitle metadata + VTT file in a single call (avoids rate limiting)
 4. Text formatter deduplicates rolling-window VTT cues, splits into paragraphs by time gaps
-5. Result stored in SQLite, displayed in browser
+5. *(Optional)* Each paragraph is sent to Ollama — punctuation fixed, filler words removed, fragments merged
+6. Result stored in SQLite (both original and cleaned versions), displayed in browser with a toggle
 
 **Language behavior**: if the selected language has no subtitles, the UI shows which languages are available with one-click retry buttons. The language parameter carries forward to Phase 3 (Speech-to-Text) — no extra input needed.
+
+**AI cleanup**: runs locally via Ollama — no data leaves the machine. If Ollama is not running, the pipeline completes normally and the toggle simply doesn't appear.
 
 ---
 
@@ -126,6 +135,7 @@ yt-summarizer/
 │   └── services/
 │       ├── subtitle_extractor.py   # yt-dlp wrapper
 │       ├── text_formatter.py       # VTT → clean markdown
+│       ├── text_cleaner.py         # Ollama LLM cleanup (paragraph-by-paragraph)
 │       └── video_service.py        # DB CRUD
 ├── frontend/                # React + TypeScript + Vite
 │   └── src/
@@ -143,7 +153,7 @@ yt-summarizer/
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/process` | Submit video URL for processing |
+| POST | `/api/process` | Submit URL + language + `enable_cleanup` flag |
 | GET | `/api/status/{task_id}` | Poll processing status |
 | GET | `/api/result/{video_id}` | Get formatted subtitle text |
 | GET | `/api/history` | Paginated processing history |
@@ -156,6 +166,7 @@ yt-summarizer/
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Phase 1 — Subtitle Extraction | ✅ Done | Extract, format, store, display subtitles |
+| Phase 1.5 — LLM Text Cleanup | ✅ Done | Local Ollama cleans up auto-generated transcripts |
 | Phase 2 — LLM Summarization | 🔵 Planned | Map-reduce summarization (paragraph → document summary) |
 | Phase 3 — Speech-to-Text | 🔵 Planned | Whisper fallback when subtitles unavailable |
 
