@@ -56,6 +56,7 @@ async def complete_task(
     url: str,
     extraction_result: ExtractionResult,
     formatted: dict,
+    cleaned_text: str | None = None,
 ) -> None:
     # Find pending task and its placeholder video
     task_stmt = select(ProcessingTask).where(ProcessingTask.id == task_id)
@@ -110,6 +111,7 @@ async def complete_task(
         video_id=video.id,
         language=extraction_result.language,
         formatted_text=formatted["formatted_text"],
+        cleaned_text=cleaned_text,
         text_length=formatted["char_count"],
         processing_status="success",
     ))
@@ -163,6 +165,7 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
         "duration": video.duration,
         "language": fmt.language if fmt else None,
         "formatted_text": fmt.formatted_text if fmt else None,
+        "cleaned_text": fmt.cleaned_text if fmt else None,
         "char_count": fmt.text_length if fmt else None,
         "created_at": video.created_at.isoformat(),
     }

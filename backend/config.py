@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     text_formatting_timeout: int = 10
     max_retries: int = 3
 
+    # Ollama (Phase 1.5 text cleanup + Phase 2 summarization)
+    ollama_url: str = "http://localhost:11434"
+    ollama_model: str = "cas/aya-expanse-8b"
+
     class Config:
         env_file = "../.env"
         env_file_encoding = "utf-8"

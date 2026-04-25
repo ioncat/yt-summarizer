@@ -21,6 +21,7 @@ export interface ResultResponse {
   duration: number | null
   language: string | null
   formatted_text: string | null
+  cleaned_text: string | null
   char_count: number | null
   created_at: string
 }
@@ -38,11 +39,15 @@ export interface HistoryResponse {
   items: HistoryItem[]
 }
 
-export async function processVideo(url: string, language: string): Promise<ProcessResponse> {
+export async function processVideo(
+  url: string,
+  language: string,
+  enableCleanup = false,
+): Promise<ProcessResponse> {
   const res = await fetch(`${BASE}/process`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, language }),
+    body: JSON.stringify({ url, language, enable_cleanup: enableCleanup }),
   })
   if (!res.ok) throw new Error((await res.json()).detail || 'Error')
   return res.json()

@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Vision**: Reduce cognitive load by allowing users to scan video content before deciding whether to watch in detail.
 
-**Current Phase**: Phase 2 — LLM Integration (Phase 1 complete)
+**Current Phase**: Phase 1.5 — LLM Text Cleanup (Phase 1 complete, Phase 2 summarization next)
 
 ---
 
@@ -21,6 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Video Processing | yt-dlp (no API keys required) + Node.js (JS runtime for yt-dlp) |
 | Database | SQLite (aiosqlite + SQLAlchemy async) |
 | Text Format | Markdown (stored in DB) |
+| LLM (local) | Ollama — `cas/aya-expanse-8b` (text cleanup + future summarization) |
 
 ---
 
@@ -33,8 +34,18 @@ All 5 epics done. Full stack running:
 - React frontend: 4 pages (Home, Processing, Result, History)
 - Language UX: shows available languages when requested one is missing, one-click retry
 
-### 🔮 Phase 2: LLM Integration & Self-Raising
-Map-reduce summarization pipeline. See `docs/phase2-architecture.md`.
+### 🔄 Phase 1.5: LLM Text Cleanup — IN PROGRESS
+
+Optional cleanup step via Ollama (local, no API key). Runs after `text_formatter`, before saving to DB.
+- `text_cleaner.py` sends each paragraph to Ollama `/api/chat` with editing instructions
+- Model: `cas/aya-expanse-8b` (configurable via `OLLAMA_MODEL` in `.env`)
+- If Ollama is unreachable — pipeline continues, `cleaned_text = null`
+- DB: `subtitles_formatted.cleaned_text` (nullable Text column, auto-migrated)
+- API: `POST /api/process` accepts `enable_cleanup: bool`
+- Frontend: checkbox on submit + toggle Original/Cleaned on result page
+
+### 🔮 Phase 2: LLM Summarization
+Map-reduce summarization pipeline. See `docs/phase2-architecture.md`. Uses same Ollama infra as Phase 1.5.
 
 ### 🔮 Phase 3: Speech-to-Text Fallback
 Whisper fallback. Language parameter from Phase 1 carries over directly — no extra user input.
@@ -83,6 +94,7 @@ yt-summarizer/
 │   └── services/
 │       ├── subtitle_extractor.py    # yt-dlp wrapper, VTT parser, error classification
 │       ├── text_formatter.py        # Overlap dedup + time-gap paragraph splitting
+│       ├── text_cleaner.py          # Ollama HTTP client, paragraph-by-paragraph LLM cleanup
 │       └── video_service.py         # DB CRUD, task lifecycle
 ├── frontend/
 │   ├── src/
@@ -109,7 +121,7 @@ yt-summarizer/
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/process` | Submit URL + language → returns task_id, video_id |
+| POST | `/api/process` | Submit URL + language + `enable_cleanup` → returns task_id, video_id |
 | GET | `/api/status/{task_id}` | Poll status; returns `available_languages` on language error |
 | GET | `/api/result/{video_id}` | Formatted subtitle text + metadata |
 | GET | `/api/history?page=N` | Paginated history (20 per page) |
@@ -130,6 +142,10 @@ yt-summarizer/
 **Language error UX**: When extraction fails with `LANGUAGE_NOT_AVAILABLE`, `available_languages` stored as JSON in `error_message`. Status endpoint parses and returns as separate field. Frontend shows quick-select buttons.
 
 **DB note**: `scalar_one_or_none()` on SubtitleFormatted/Video queries crashes when a video is reprocessed. Always use `.scalars().first()` with `.order_by(created_at.desc())`.
+
+**DB migrations**: No Alembic. `database.py` has `_migrate_db()` — checks `PRAGMA table_info` and runs `ALTER TABLE ... ADD COLUMN` for any new columns. Add entries there when extending the schema.
+
+**Ollama integration**: `text_cleaner.py` calls `POST {OLLAMA_URL}/api/chat`. First does a lightweight `GET /api/tags` to check availability — returns `None` silently if Ollama is down. Model and URL configured via `OLLAMA_URL` / `OLLAMA_MODEL` in `.env`. Same client reused for Phase 2 summarization.
 
 ---
 

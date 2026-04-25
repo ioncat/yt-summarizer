@@ -61,6 +61,7 @@ class SubtitleFormatted(Base):
     video_id: Mapped[str] = mapped_column(ForeignKey("videos.id"), nullable=False)
     language: Mapped[str | None] = mapped_column(String)
     formatted_text: Mapped[str | None] = mapped_column(Text)  # Markdown
+    cleaned_text: Mapped[str | None] = mapped_column(Text)    # LLM-cleaned version
     text_length: Mapped[int | None] = mapped_column(Integer)
     processing_status: Mapped[str | None] = mapped_column(String)  # success | error | pending
     processing_error: Mapped[str | None] = mapped_column(Text)

@@ -11,6 +11,7 @@ const LANGUAGES = [
 export default function HomePage() {
   const [url, setUrl] = useState('')
   const [language, setLanguage] = useState('ru')
+  const [enableCleanup, setEnableCleanup] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
@@ -20,7 +21,7 @@ export default function HomePage() {
     setError('')
     setLoading(true)
     try {
-      const res = await processVideo(url.trim(), language)
+      const res = await processVideo(url.trim(), language, enableCleanup)
       navigate(`/processing/${res.task_id}/${res.video_id}?url=${encodeURIComponent(url.trim())}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
@@ -55,6 +56,17 @@ export default function HomePage() {
               ))}
             </select>
             <p className="field-hint">Select the language of the video's subtitles. If unavailable, we'll show which languages are.</p>
+          </div>
+          <div className="form-group form-group--inline">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={enableCleanup}
+                onChange={e => setEnableCleanup(e.target.checked)}
+              />
+              Clean up text with AI
+            </label>
+            <p className="field-hint">Uses local Ollama to fix punctuation, remove filler words, and merge broken phrases.</p>
           </div>
           {error && <div className="error-box" style={{ marginBottom: '1rem' }}>{error}</div>}
           <button className="btn btn-primary" type="submit" disabled={loading || !url.trim()}>

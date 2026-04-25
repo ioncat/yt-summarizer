@@ -15,6 +15,7 @@ export default function ResultPage() {
   const [result, setResult] = useState<ResultResponse | null>(null)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [showCleaned, setShowCleaned] = useState(true)
 
   useEffect(() => {
     if (!videoId) return
@@ -23,9 +24,11 @@ export default function ResultPage() {
       .catch(() => setError('Could not load result'))
   }, [videoId])
 
+  const displayText = (showCleaned && result?.cleaned_text) ? result.cleaned_text : result?.formatted_text
+
   async function handleCopy() {
-    if (!result?.formatted_text) return
-    await navigator.clipboard.writeText(result.formatted_text)
+    if (!displayText) return
+    await navigator.clipboard.writeText(displayText)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -67,7 +70,23 @@ export default function ResultPage() {
             Open video
           </a>
         </div>
-        <div className="formatted-text">{result.formatted_text}</div>
+        {result.cleaned_text && (
+          <div className="text-toggle">
+            <button
+              className={`toggle-btn ${!showCleaned ? 'active' : ''}`}
+              onClick={() => setShowCleaned(false)}
+            >
+              Original
+            </button>
+            <button
+              className={`toggle-btn ${showCleaned ? 'active' : ''}`}
+              onClick={() => setShowCleaned(true)}
+            >
+              Cleaned
+            </button>
+          </div>
+        )}
+        <div className="formatted-text">{displayText}</div>
       </div>
     </div>
   )

@@ -119,6 +119,15 @@ input[type="text"]:focus, select:focus { border-color: #e00; }
 
 .field-hint { font-size: 0.8rem; color: #999; margin-top: 0.4rem; }
 .error-box { color: #c00; background: #ffeaea; padding: 1rem; border-radius: 6px; }
+
+.form-group--inline { display: flex; flex-direction: column; gap: 0.2rem; }
+.checkbox-label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.95rem; }
+.checkbox-label input[type="checkbox"] { width: 1rem; height: 1rem; cursor: pointer; accent-color: #e53935; }
+
+.text-toggle { display: flex; margin-bottom: 1rem; border: 1px solid #333; border-radius: 6px; overflow: hidden; width: fit-content; }
+.toggle-btn { padding: 0.4rem 1.1rem; background: transparent; border: none; color: #aaa; cursor: pointer; font-size: 0.85rem; transition: background 0.15s, color 0.15s; }
+.toggle-btn:hover { background: #2a2a2a; color: #fff; }
+.toggle-btn.active { background: #e53935; color: #fff; }
 .empty { text-align: center; color: #888; padding: 3rem; }
 
 h1 { font-size: 1.6rem; margin-bottom: 0.5rem; }
