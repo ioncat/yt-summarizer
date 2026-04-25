@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getResult, deleteResult, ResultResponse } from '../api'
 
+type Tab = 'subtitles' | 'cleaned'
+
 function formatDuration(seconds: number | null): string {
   if (!seconds) return '—'
   const m = Math.floor(seconds / 60)
@@ -12,16 +14,19 @@ function formatDuration(seconds: number | null): string {
 export default function ResultPage() {
   const { videoId } = useParams<{ videoId: string }>()
   const navigate = useNavigate()
-  type Tab = 'subtitles' | 'cleaned'
   const [result, setResult] = useState<ResultResponse | null>(null)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
-  const [activeTab, setActiveTab] = useState<Tab>('cleaned')
+  const [activeTab, setActiveTab] = useState<Tab>('subtitles')
 
   useEffect(() => {
     if (!videoId) return
     getResult(videoId)
-      .then(setResult)
+      .then(data => {
+        setResult(data)
+        // default to Cleaned tab only if cleanup succeeded
+        setActiveTab(data.cleanup_status === 'done' ? 'cleaned' : 'subtitles')
+      })
       .catch(() => setError('Could not load result'))
   }, [videoId])
 
