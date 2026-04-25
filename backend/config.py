@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # Ollama (Phase 1.5 text cleanup + Phase 2 summarization)
     ollama_url: str = "http://localhost:11434"
-    ollama_model: str = "cas/aya-expanse-8b"
+    ollama_model: str = "qwen3:8b"
 
     class Config:
         env_file = "../.env"

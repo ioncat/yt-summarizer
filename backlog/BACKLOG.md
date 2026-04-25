@@ -4,126 +4,120 @@ Navigation and overview of all epics and user stories for YT Summarizer, organiz
 
 ---
 
-## Phase 1: MVP - Subtitle Extraction & Formatting
-
-Core functionality to extract YouTube subtitles and format them into readable text.
+## Phase 1: MVP - Subtitle Extraction & Formatting ✅
 
 ### Epic 1: Core Subtitle Extraction
-**Description**: User can submit YouTube video URL and receive extracted subtitles
-
 **Status**: ✅ Done | **Priority**: 🔴 P0  
-**User Stories**: US-101, US-102, US-103, US-104  
 [View Epic →](./epics/EPIC-1.md)
 
----
-
 ### Epic 2: Text Formatting & Presentation
-**Description**: Convert raw subtitles into clean, properly formatted markdown text
-
 **Status**: ✅ Done | **Priority**: 🔴 P0  
-**User Stories**: US-201, US-202, US-203, US-204  
 [View Epic →](./epics/EPIC-2.md)
 
----
-
 ### Epic 3: Data Persistence
-**Description**: Save extracted subtitles and metadata to database for later retrieval
-
 **Status**: ✅ Done | **Priority**: 🔴 P0  
-**User Stories**: US-301, US-302, US-303, US-304  
 [View Epic →](./epics/EPIC-3.md)
 
----
-
 ### Epic 4: Error Handling & Edge Cases
-**Description**: Handle all error scenarios gracefully with clear, user-friendly messages
-
 **Status**: ✅ Done | **Priority**: 🟠 P1  
-**User Stories**: US-401, US-402, US-403, US-404, US-405  
 [View Epic →](./epics/EPIC-4.md)
 
----
-
 ### Epic 5: Web User Interface
-**Description**: Build intuitive web interface for interacting with the application
-
 **Status**: ✅ Done | **Priority**: 🔴 P0  
-**User Stories**: US-501, US-502, US-503, US-504, US-505  
 [View Epic →](./epics/EPIC-5.md)
 
 ---
 
-## Phase 2: LLM Integration & Self-Raising
+## Phase 1.5: LLM Text Cleanup & UX Polish 🔄
 
-Extract key points and summaries from formatted subtitle text using LLM.  
-Architecture: map-reduce — paragraph summaries → document summary. See `docs/phase2-architecture.md`.
+Local LLM cleanup via Ollama. Runs on demand. No data leaves the machine.
 
-**Expected Epics**:
+### Epic 6: LLM Text Cleanup (Ollama)
+**Description**: Manual AI cleanup trigger, spinner, polling, health check, Cleaned tab
 
-| Epic | Description | Status |
-|------|-------------|--------|
-| Epic 6: LLM Summarization | Map-reduce pipeline: paragraph → paragraph_summary → document_summary | 🔵 Planned |
-| Epic 7: Prompt Management | Configurable system prompts, language-aware prompting | 🔵 Planned |
-| Epic 8: Summary Display | Show summary + key points alongside full subtitle text in UI | 🔵 Planned |
+**Status**: ✅ Done | **Priority**: 🟠 P1  
+[View Epic →](./epics/EPIC-6.md)
 
 ---
 
-## Phase 3: Speech-to-Text Fallback
+### Epic 7: Markdown Output & Rendering
+**Description**: Instruct LLM to output proper Markdown; render it in the UI with react-markdown
 
-Add speech-to-text processing for videos without subtitles (architecture-ready in Phase 1).  
-**Key design**: language parameter from Phase 1 is reused directly — no extra user input needed.  
-UX bridge: "Subtitles unavailable in [lang] → Run Speech-to-Text in [lang]?" offered in one click.
+**Status**: 🟡 Next | **Priority**: 🟠 P1  
+[View Epic →](./epics/EPIC-7.md)
 
-**Expected Epics**:
+---
+
+### Epic 8: Per-Tab Character Count
+**Description**: Show separate character counts for Subtitles tab and Cleaned tab
+
+**Status**: 🟡 Next | **Priority**: 🟡 P2  
+[View Epic →](./epics/EPIC-8.md)
+
+---
+
+### Epic 9: Auto-Pipeline Toggle
+**Description**: Checkbox on Home page to automatically run cleanup after extraction (Summary skipped — not ready)
+
+**Status**: 🔵 Planned | **Priority**: 🟡 P2  
+[View Epic →](./epics/EPIC-9.md)
+
+---
+
+### Epic 10: Settings Page — Prompts & Models Per Stage
+**Description**: Web UI for editing system/user prompts and selecting models separately for cleanup and summarization stages
+
+**Status**: 🔵 Planned | **Priority**: 🟡 P2  
+[View Epic →](./epics/EPIC-10.md)
+
+---
+
+### Epic 11: Model Selection in UI
+**Description**: Select Ollama model per pipeline stage from the web interface; model list fetched live from Ollama
+
+**Status**: 🔵 Planned | **Priority**: 🟡 P2  
+**Note**: Superseded by Epic 10 (Settings page covers model selection per stage). Keep as standalone if Settings page is deferred.  
+[View Epic →](./epics/EPIC-11.md)
+
+---
+
+## Phase 2: LLM Summarization 🔵
+
+Map-reduce summarization: paragraph summaries → document summary. See `docs/phase2-architecture.md`.
 
 | Epic | Description | Status |
 |------|-------------|--------|
-| Epic 9: Audio Extraction | Extract audio from YouTube video via yt-dlp | 🔵 Planned |
-| Epic 10: Whisper Transcription | Local Whisper model, language param from Phase 1 | 🔵 Planned |
-| Epic 11: Fallback UX | Seamless fallback offer when subtitles missing | 🔵 Planned |
+| Epic 12: LLM Summarization Pipeline | Map-reduce: paragraph → paragraph_summary → document_summary | 🔵 Planned |
+| Epic 13: Prompt Management | Prompts per stage, language-aware (covered partly by Epic 10) | 🔵 Planned |
+| Epic 14: Summary Display | Summary tab in UI alongside Subtitles and Cleaned | 🔵 Planned |
+
+---
+
+## Phase 3: Speech-to-Text Fallback 🔵
+
+Whisper fallback when no subtitles are available. Language param from Phase 1 reused directly.
+
+| Epic | Description | Status |
+|------|-------------|--------|
+| Epic 15: Audio Extraction | Extract audio via yt-dlp | 🔵 Planned |
+| Epic 16: Whisper Transcription | Local Whisper model | 🔵 Planned |
+| Epic 17: Fallback UX | One-click fallback offer when subtitles missing | 🔵 Planned |
 
 ---
 
 ## Summary Statistics
 
-### Phase 1 (MVP)
-- **Total Epics**: 5
-- **Total User Stories**: 21
-- **Estimated Effort**: 4-6 weeks (team-dependent)
-- **Priority**: All P0-P1 (Critical/High)
-
-### Development Order
-1. **Epic 1** (Core Extraction) - Foundation
-2. **Epic 2** (Text Formatting) - Value delivery
-3. **Epic 3** (Data Persistence) - User value
-4. **Epic 4** (Error Handling) - Quality & stability
-5. **Epic 5** (Web UI) - User experience
-
----
-
-## Backlog Management Notes
-
-- Each epic contains all its user stories in a single file for easy reference
-- User stories follow Product Delivery Conventions (see product-delivery-conventions.md)
-- Stories include: Title, User Story statement, Acceptance Criteria, Edge Cases, Out of Scope, Notes for Engineering, Dependencies
-- Definition of Ready and Definition of Done specified for each story
-- Analytics/Events documented for tracking and validation
-
----
-
-## How to Use This Backlog
-
-1. **Browse Epics**: Start with [Phase 1 Epics](#phase-1-mvp---subtitle-extraction--formatting)
-2. **View Details**: Click "View Epic" link to open full epic file
-3. **Read User Stories**: Each epic contains all its stories with full details
-4. **Implementation**: Follow dependency order for smooth development
-5. **Tracking**: Update epic status as work progresses
+| Phase | Epics | Status |
+|-------|-------|--------|
+| Phase 1 — MVP | 1–5 | ✅ Done |
+| Phase 1.5 — LLM Cleanup & UX | 6–11 | 🔄 In Progress (Epic 6 done) |
+| Phase 2 — Summarization | 12–14 | 🔵 Planned |
+| Phase 3 — STT Fallback | 15–17 | 🔵 Planned |
 
 ---
 
 ## Document Control
 
-- **Version**: 1.0
-- **Last Updated**: 2026-04-18
-- **Status**: ✅ Ready for Development
-- **Owner**: Product & Engineering Team
+- **Version**: 1.3
+- **Last Updated**: 2026-04-25
+- **Status**: 🔄 Active Development
