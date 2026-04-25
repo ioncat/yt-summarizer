@@ -143,18 +143,48 @@ Re-export if you start getting 429 or "sign in required" errors.
 
 ---
 
-## How It Works
+## Pipeline
 
-1. User submits a YouTube URL, selects subtitle language, optionally enables AI cleanup
-2. Backend spawns an async background task
-3. yt-dlp downloads subtitle metadata + VTT file in a single call (avoids rate limiting)
-4. Text formatter deduplicates rolling-window VTT cues, splits into paragraphs by time gaps
-5. *(Optional)* Each paragraph is sent to Ollama — punctuation fixed, filler words removed, fragments merged
-6. Result stored in SQLite (both original and cleaned versions), displayed in browser with a toggle
+Each processed layer is stored separately in SQLite and shown as a dedicated tab in the UI.
 
-**Language behavior**: if the selected language has no subtitles, the UI shows which languages are available with one-click retry buttons. The language parameter carries forward to Phase 3 (Speech-to-Text) — no extra input needed.
+```mermaid
+flowchart TD
+    URL[/"YouTube URL + language"/] --> EXT
 
-**AI cleanup**: runs locally via Ollama — no data leaves the machine. If Ollama is not running, the pipeline completes normally and the toggle simply doesn't appear.
+    subgraph step1 ["① Extract"]
+        EXT["yt-dlp\nsingle call — metadata + VTT"]
+        EXT --> PARSE["VTT parser\ndeduplicate rolling-window entries"]
+    end
+
+    subgraph step2 ["② Format"]
+        PARSE --> FMT["Text formatter\nremove overlap · split by time gaps → paragraphs"]
+        FMT --> DB1[("SQLite\nformatted_text")]
+    end
+
+    subgraph step3 ["③ AI Cleanup · Phase 1.5"]
+        DB1 --> LLM["Ollama · aya-expanse-8b\nper paragraph:\nfix punctuation · remove fillers · merge fragments"]
+        LLM --> DB2[("SQLite\ncleaned_text")]
+    end
+
+    subgraph step4 ["④ Summarize · Phase 2 🔵"]
+        DB2 --> MAP["MAP — LLM summarizes each paragraph"]
+        MAP --> RED["REDUCE — LLM combines into document summary"]
+        RED --> DB3[("SQLite\nsummary")]
+    end
+
+    subgraph ui ["Frontend tabs"]
+        DB1 --> T1["Subtitles"]
+        DB2 --> T2["Cleaned"]
+        DB3 --> T3["Summary 🔵"]
+    end
+
+    EXT -. "no subtitles" .-> STT
+    STT["Phase 3 — Whisper STT 🔵\nfallback when no subtitles"] --> FMT
+```
+
+**Language**: if the requested language has no subtitles, the UI shows available languages with one-click retry. The language parameter carries forward to Phase 3 (Whisper) — no extra input needed.
+
+**AI cleanup**: runs locally via Ollama — no data leaves the machine. If Ollama is offline, "Cleaned" tab is greyed-out with a tooltip.
 
 ---
 
