@@ -5,12 +5,11 @@ from typing import Optional
 
 import httpx
 
-from config import settings
-
 logger = logging.getLogger(__name__)
 
-# These are the single source of truth for default prompts.
-# video_service.py imports them for STAGE_DEFAULTS.
+# Default prompts — source of truth for text_cleaner defaults.
+# video_service.py imports these for STAGE_DEFAULTS.
+# Model has NO default here: user must pick one via the web Settings page.
 DEFAULT_SYSTEM_PROMPT = (
     "You are a professional text editor specializing in cleaning up "
     "auto-generated subtitle transcripts. "
@@ -38,13 +37,14 @@ async def _clean_paragraph(
     system_prompt: str,
     user_prompt_template: str,
     model: str,
+    ollama_url: str,
 ) -> str:
     """Send one paragraph to Ollama. Returns the original text on any failure."""
     if not text.strip():
         return text
     try:
         response = await client.post(
-            f"{settings.ollama_url}/api/chat",
+            f"{ollama_url}/api/chat",
             json={
                 "model": model,
                 "messages": [
@@ -68,17 +68,24 @@ async def clean_text(
     system_prompt: str | None = None,
     user_prompt_template: str | None = None,
     model: str | None = None,
+    ollama_url: str | None = None,
+    is_cancelled: "Callable[[], bool] | None" = None,
 ) -> Optional[str]:
     """
     Clean each paragraph via Ollama.
 
-    Prompts and model are passed by the caller (loaded from DB settings).
-    Falls back to DEFAULT_* constants if not provided.
-    Returns None if Ollama is unreachable.
+    model and ollama_url must be provided (loaded from DB app_settings).
+    Returns None if model/url not configured, Ollama unreachable, or cancelled.
     """
+    if not model:
+        logger.warning("clean_text: no model configured. Select one in Settings.")
+        return None
+    if not ollama_url:
+        logger.warning("clean_text: no ollama_url configured. Set it in Settings.")
+        return None
+
     effective_system = system_prompt or DEFAULT_SYSTEM_PROMPT
     effective_user = user_prompt_template or DEFAULT_USER_PROMPT_TEMPLATE
-    effective_model = model or settings.ollama_model
 
     paragraphs = [p for p in formatted_text.split("\n\n") if p.strip()]
     if not paragraphs:
@@ -86,16 +93,20 @@ async def clean_text(
 
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as client:
-            await client.get(f"{settings.ollama_url}/api/tags", timeout=3.0)
+            await client.get(f"{ollama_url}/api/tags", timeout=3.0)
 
-            cleaned = [
-                await _clean_paragraph(client, p, effective_system, effective_user, effective_model)
-                for p in paragraphs
-            ]
+            cleaned = []
+            for p in paragraphs:
+                if is_cancelled and is_cancelled():
+                    logger.info("Cleanup cancelled mid-run.")
+                    return None
+                cleaned.append(
+                    await _clean_paragraph(client, p, effective_system, effective_user, model, ollama_url)
+                )
             return "\n\n".join(cleaned)
 
     except httpx.ConnectError:
-        logger.info("Ollama not available at %s — skipping cleanup", settings.ollama_url)
+        logger.info("Ollama not available at %s — skipping cleanup", ollama_url)
         return None
     except Exception as exc:
         logger.warning("text_cleaner failed: %s", exc)

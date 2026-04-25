@@ -88,9 +88,12 @@ export default function ResultPage() {
       setCleanupError('')
       await startCleanup(videoId)
       setResult({ ...result, cleanup_status: 'processing', cleaned_text: null })
+      if (pollRef.current) clearInterval(pollRef.current)
       pollRef.current = setInterval(() => loadResult(false), 3000)
-    } catch {
-      setCleanupError('Could not reach the backend. Make sure it is running on port 8000.')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      console.error('[Cleanup] failed:', err)
+      setCleanupError(msg)
     }
   }
 
@@ -167,7 +170,9 @@ export default function ResultPage() {
                 : 'No cleaned version yet. Click "✦ Clean with AI" above to start.'}
           </div>
         ) : (
-          <div className="formatted-text">{displayText}</div>
+          <div className="formatted-text">
+            {displayText}
+          </div>
         )}
       </div>
     </div>

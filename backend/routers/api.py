@@ -4,11 +4,12 @@ import asyncio
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+import os
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config import settings
 from models.database import get_db
 from services.subtitle_extractor import extract_subtitles, extract_video_id
 from services.text_cleaner import clean_text
@@ -18,12 +19,15 @@ from services.video_service import (
     create_pending_task,
     delete_video,
     finish_cleanup,
+    get_all_app_settings,
     get_all_settings,
+    get_app_setting,
     get_history,
     get_result,
     get_stage_settings,
     get_task,
     reset_stage_settings,
+    save_app_settings,
     save_stage_settings,
     set_cleanup_processing,
     update_task_failed,
@@ -43,12 +47,22 @@ class StageSettingsRequest(BaseModel):
     model: str | None = None
 
 
+class AppSettingsRequest(BaseModel):
+    ollama_url: str | None = None
+    ytdlp_path: str | None = None
+    cookies_path: str | None = None
+
+
 async def _run_processing(task_id: str, url: str, language: str) -> None:
     from models.database import AsyncSessionLocal
 
     try:
+        async with AsyncSessionLocal() as db:
+            cookies_path = await get_app_setting(db, "cookies_path")
+            ytdlp_path = await get_app_setting(db, "ytdlp_path") or "yt-dlp"
+
         extraction = await asyncio.to_thread(
-            extract_subtitles, url, language, settings.cookies_path
+            extract_subtitles, url, language, cookies_path, ytdlp_path
         )
         async with AsyncSessionLocal() as db:
             if not extraction.success:
@@ -132,12 +146,14 @@ async def _run_cleanup(video_id: str) -> None:
             return
         formatted_text = fmt["formatted_text"]
         stage = await get_stage_settings(db, "cleanup")
+        ollama_url = await get_app_setting(db, "ollama_url")
 
     cleaned = await clean_text(
         formatted_text,
         system_prompt=stage.get("system_prompt"),
         user_prompt_template=stage.get("user_prompt_template"),
         model=stage.get("model"),
+        ollama_url=ollama_url,
     )
 
     async with AsyncSessionLocal() as db:
@@ -150,6 +166,18 @@ async def trigger_cleanup(
     background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    stage = await get_stage_settings(db, "cleanup")
+    if not stage.get("model"):
+        raise HTTPException(
+            status_code=400,
+            detail="No model configured. Please select a model in Settings first."
+        )
+    ollama_url = await get_app_setting(db, "ollama_url")
+    if not ollama_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Ollama URL not configured. Please set it in Settings → General."
+        )
     ok = await set_cleanup_processing(db, video_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Result not found")
@@ -158,16 +186,18 @@ async def trigger_cleanup(
 
 
 @router.get("/health")
-async def health_check():
+async def health_check(db: Annotated[AsyncSession, Depends(get_db)]):
     """Returns backend status and Ollama availability."""
     import httpx
     ollama_ok = False
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(f"{settings.ollama_url}/api/tags")
-            ollama_ok = resp.status_code == 200
-    except Exception:
-        pass
+    ollama_url = await get_app_setting(db, "ollama_url")
+    if ollama_url:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get(f"{ollama_url}/api/tags")
+                ollama_ok = resp.status_code == 200
+        except Exception:
+            pass
     return {"backend": True, "ollama": ollama_ok}
 
 
@@ -185,7 +215,18 @@ async def delete_result(video_id: str, db: Annotated[AsyncSession, Depends(get_d
 
 @router.get("/settings")
 async def get_settings(db: Annotated[AsyncSession, Depends(get_db)]):
-    return await get_all_settings(db)
+    pipeline = await get_all_settings(db)
+    app = await get_all_app_settings(db)
+    return {"app": app, **pipeline}
+
+
+@router.put("/settings/app")
+async def update_app_settings(
+    body: AppSettingsRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    return await save_app_settings(db, updates)
 
 
 @router.put("/settings/{stage}")
@@ -208,13 +249,32 @@ async def reset_settings(stage: str, db: Annotated[AsyncSession, Depends(get_db)
     return await reset_stage_settings(db, stage)
 
 
+@router.post("/settings/upload-cookies")
+async def upload_cookies(
+    file: UploadFile = File(...),
+    db: Annotated[AsyncSession, Depends(get_db)] = None,
+):
+    """Upload a cookies.txt file and save it to the data directory."""
+    cookies_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data"))
+    os.makedirs(cookies_dir, exist_ok=True)
+    save_path = os.path.join(cookies_dir, "www.youtube.com_cookies.txt")
+    content = await file.read()
+    with open(save_path, "wb") as f:
+        f.write(content)
+    await save_app_settings(db, {"cookies_path": save_path})
+    return {"path": save_path}
+
+
 @router.get("/models")
-async def list_models():
+async def list_models(db: Annotated[AsyncSession, Depends(get_db)]):
     """Return available Ollama models."""
     import httpx
+    ollama_url = await get_app_setting(db, "ollama_url")
+    if not ollama_url:
+        raise HTTPException(status_code=400, detail="Ollama URL not configured")
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{settings.ollama_url}/api/tags")
+            resp = await client.get(f"{ollama_url}/api/tags")
             resp.raise_for_status()
             models = [m["name"] for m in resp.json().get("models", [])]
             return {"models": models}

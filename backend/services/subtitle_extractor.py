@@ -6,7 +6,7 @@ import tempfile
 from dataclasses import dataclass
 from enum import Enum
 
-YTDLP_PATH = os.environ.get("YTDLP_PATH", "yt-dlp")
+from config import settings
 
 
 class SubtitleSourceType(str, Enum):
@@ -70,9 +70,9 @@ def extract_video_id(url: str) -> str | None:
     return None
 
 
-def _run_ytdlp(args: list[str], cookies_path: str | None, timeout: int = 30) -> tuple[str, str, int]:
+def _run_ytdlp(args: list[str], cookies_path: str | None, ytdlp_path: str, timeout: int = 30) -> tuple[str, str, int]:
     cmd = [
-        YTDLP_PATH,
+        ytdlp_path,
         "--no-warnings",
         "--js-runtimes", "node",
     ]
@@ -182,7 +182,7 @@ def _classify_error(stderr: str) -> ExtractionResult:
 
 
 def extract_subtitles(
-    url: str, language: str = "en", cookies_path: str | None = None
+    url: str, language: str = "en", cookies_path: str | None = None, ytdlp_path: str = "yt-dlp"
 ) -> ExtractionResult:
     if not extract_video_id(url):
         return ExtractionResult(
@@ -204,7 +204,7 @@ def extract_subtitles(
                     "-o", os.path.join(tmpdir, "sub"),
                     url,
                 ],
-                cookies_path, timeout=60,
+                cookies_path, ytdlp_path=ytdlp_path, timeout=60,
             )
 
             if not stdout.strip():

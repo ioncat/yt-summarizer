@@ -2,6 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    # Infrastructure — not user-facing, required to start the server
     backend_host: str = "0.0.0.0"
     backend_port: int = 8000
     debug: bool = True
@@ -10,16 +11,14 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
-    cookies_path: str = "../data/www.youtube.com_cookies.txt"
+    # Seed values — written to DB on first launch, then managed via web UI
+    ollama_url: str = "http://localhost:11434"
     ytdlp_path: str = "C:/ytdlp/yt-dlp.exe"
+    cookies_path: str = "../data/www.youtube.com_cookies.txt"
 
     subtitle_extraction_timeout: int = 30
     text_formatting_timeout: int = 10
     max_retries: int = 3
-
-    # Ollama (Phase 1.5 text cleanup + Phase 2 summarization)
-    ollama_url: str = "http://localhost:11434"
-    ollama_model: str = "qwen3:8b"
 
     class Config:
         env_file = "../.env"

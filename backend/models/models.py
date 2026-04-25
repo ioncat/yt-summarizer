@@ -87,6 +87,17 @@ class PipelineSettings(Base):
     )
 
 
+class AppSetting(Base):
+    """Key-value store for application-level settings (Ollama URL, paths, etc.)."""
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str | None] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
 class ProcessingTask(Base):
     __tablename__ = "processing_tasks"
 

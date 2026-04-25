@@ -36,7 +36,30 @@ async def _migrate_db() -> None:
                 await conn.execute(text(sql))
 
 
+async def _seed_app_settings() -> None:
+    """Seed default app settings on first launch if table is empty."""
+    from sqlalchemy import text
+    from config import settings as cfg
+    defaults = {
+        "ollama_url": cfg.ollama_url,
+        "ytdlp_path": cfg.ytdlp_path,
+        "cookies_path": cfg.cookies_path,
+    }
+    async with AsyncSessionLocal() as session:
+        for key, value in defaults.items():
+            exists = await session.execute(
+                text("SELECT 1 FROM app_settings WHERE key = :key"), {"key": key}
+            )
+            if not exists.scalar():
+                await session.execute(
+                    text("INSERT INTO app_settings (key, value, updated_at) VALUES (:key, :value, datetime('now'))"),
+                    {"key": key, "value": value},
+                )
+        await session.commit()
+
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await _migrate_db()
+    await _seed_app_settings()

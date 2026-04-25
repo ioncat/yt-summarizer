@@ -51,9 +51,8 @@ Local LLM cleanup via Ollama. Runs on demand. No data leaves the machine.
 ### Epic 8: Markdown Rendering (frontend only)
 **Description**: Add react-markdown renderer to the Result page. Prompt part configured via Settings page (Epic 7).
 
-**Status**: 🟡 Next | **Priority**: 🟠 P1  
-**Depends on**: Epic 7 ✅  
-[View Epic →](./epics/EPIC-8.md)
+**Status**: ❌ Dropped | **Priority**: 🟠 P1  
+**Note**: Tested — LLM output quality inconsistent. Plain text rendering retained.
 
 ---
 
@@ -81,15 +80,29 @@ Local LLM cleanup via Ollama. Runs on demand. No data leaves the machine.
 
 ---
 
+### Epic 12: Cancel Cleanup
+**Description**: Stop button in UI to interrupt a running AI cleanup. In-memory cancel flag checked before each paragraph in Ollama loop. Status resets to null on cancel. Backend: `DELETE /api/result/{video_id}/cleanup`. Frontend: "✕ Stop" button while cleanup_status === 'processing'.
+
+**Status**: 🔵 Planned | **Priority**: 🟡 P2
+
+---
+
+### Epic 13: Settings 2.0 — All Config via Web UI
+**Description**: Move all user-facing settings out of config files into the DB, configurable exclusively via web. Includes: Ollama URL, cookies path, yt-dlp path. Settings page redesign with tabs (no scroll). Notification if model or prompt is missing before cleanup. Upload cookies via web. Single source of truth = DB.
+
+**Status**: 🔵 Planned | **Priority**: 🟠 P1
+
+---
+
 ## Phase 2: LLM Summarization 🔵
 
 Map-reduce summarization: paragraph summaries → document summary. See `docs/phase2-architecture.md`.
 
 | Epic | Description | Status |
 |------|-------------|--------|
-| Epic 12: LLM Summarization Pipeline | Map-reduce: paragraph → paragraph_summary → document_summary | 🔵 Planned |
-| Epic 13: Prompt Management | Prompts per stage, language-aware (covered partly by Epic 10) | 🔵 Planned |
-| Epic 14: Summary Display | Summary tab in UI alongside Subtitles and Cleaned | 🔵 Planned |
+| Epic 14: LLM Summarization Pipeline | Map-reduce: paragraph → paragraph_summary → document_summary | 🔵 Planned |
+| Epic 15: Prompt Management | Prompts per stage, language-aware (covered partly by Epic 10) | 🔵 Planned |
+| Epic 16: Summary Display | Summary tab in UI alongside Subtitles and Cleaned | 🔵 Planned |
 
 ---
 
@@ -99,9 +112,9 @@ Whisper fallback when no subtitles are available. Language param from Phase 1 re
 
 | Epic | Description | Status |
 |------|-------------|--------|
-| Epic 15: Audio Extraction | Extract audio via yt-dlp | 🔵 Planned |
-| Epic 16: Whisper Transcription | Local Whisper model | 🔵 Planned |
-| Epic 17: Fallback UX | One-click fallback offer when subtitles missing | 🔵 Planned |
+| Epic 17: Audio Extraction | Extract audio via yt-dlp | 🔵 Planned |
+| Epic 18: Whisper Transcription | Local Whisper model | 🔵 Planned |
+| Epic 19: Fallback UX | One-click fallback offer when subtitles missing | 🔵 Planned |
 
 ---
 
@@ -110,9 +123,9 @@ Whisper fallback when no subtitles are available. Language param from Phase 1 re
 | Phase | Epics | Status |
 |-------|-------|--------|
 | Phase 1 — MVP | 1–5 | ✅ Done |
-| Phase 1.5 — LLM Cleanup & UX | 6–11 | 🔄 In Progress (Epics 6–7 done) |
-| Phase 2 — Summarization | 12–14 | 🔵 Planned |
-| Phase 3 — STT Fallback | 15–17 | 🔵 Planned |
+| Phase 1.5 — LLM Cleanup & UX | 6–13 | 🔄 In Progress (6–7 done, 8 dropped) |
+| Phase 2 — Summarization | 14–16 | 🔵 Planned |
+| Phase 3 — STT Fallback | 17–19 | 🔵 Planned |
 
 ---
 

@@ -6,19 +6,20 @@ from datetime import datetime
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.models import Video, SubtitleRaw, SubtitleFormatted, ProcessingTask, PipelineSettings
+from models.models import Video, SubtitleRaw, SubtitleFormatted, ProcessingTask, PipelineSettings, AppSetting
 from models.models import generate_id
 from services.text_cleaner import DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE
 
 # ---------------------------------------------------------------------------
 # Pipeline settings — defaults (source of truth is text_cleaner.py constants)
+# Model has no default: user must select one via the web Settings page.
 # ---------------------------------------------------------------------------
 
 STAGE_DEFAULTS: dict[str, dict] = {
     "cleanup": {
         "system_prompt": DEFAULT_SYSTEM_PROMPT,
         "user_prompt_template": DEFAULT_USER_PROMPT_TEMPLATE,
-        "model": None,  # None → falls back to settings.ollama_model at runtime
+        "model": None,
     },
     "summarization": {
         "system_prompt": None,
@@ -198,19 +199,25 @@ async def get_history(db: AsyncSession, page: int = 1, page_size: int = 20) -> d
         .limit(page_size)
     )
     rows = (await db.execute(stmt)).scalars().all()
-    return {
-        "page": page,
-        "items": [
-            {
-                "video_id": v.video_id,
-                "title": v.title,
-                "author": v.author,
-                "language": v.language_detected,
-                "created_at": v.created_at.isoformat(),
-            }
-            for v in rows
-        ],
-    }
+
+    items = []
+    for v in rows:
+        fmt_stmt = (
+            select(SubtitleFormatted)
+            .where(SubtitleFormatted.video_id == v.id)
+            .order_by(SubtitleFormatted.created_at.desc())
+        )
+        fmt = (await db.execute(fmt_stmt)).scalars().first()
+        items.append({
+            "video_id": v.video_id,
+            "title": v.title,
+            "author": v.author,
+            "language": v.language_detected,
+            "char_count": fmt.text_length if fmt else None,
+            "created_at": v.created_at.isoformat(),
+        })
+
+    return {"page": page, "items": items}
 
 
 async def get_formatted_subtitle(db: AsyncSession, video_id: str) -> SubtitleFormatted | None:
@@ -287,7 +294,7 @@ def _stage_to_dict(row: PipelineSettings | None, stage: str) -> dict:
         "stage": stage,
         "system_prompt": row.system_prompt if row.system_prompt is not None else defaults.get("system_prompt"),
         "user_prompt_template": row.user_prompt_template if row.user_prompt_template is not None else defaults.get("user_prompt_template"),
-        "model": row.model,
+        "model": row.model if row.model is not None else defaults.get("model"),
         "is_default": False,
     }
 
@@ -340,3 +347,40 @@ async def reset_stage_settings(db: AsyncSession, stage: str) -> dict:
         await db.delete(row)
         await db.commit()
     return _stage_to_dict(None, stage)
+
+
+# ---------------------------------------------------------------------------
+# App settings CRUD (key-value: ollama_url, ytdlp_path, cookies_path)
+# ---------------------------------------------------------------------------
+
+APP_SETTING_KEYS = ("ollama_url", "ytdlp_path", "cookies_path")
+
+
+async def get_all_app_settings(db: AsyncSession) -> dict:
+    stmt = select(AppSetting).where(AppSetting.key.in_(APP_SETTING_KEYS))
+    rows = (await db.execute(stmt)).scalars().all()
+    result = {k: None for k in APP_SETTING_KEYS}
+    for row in rows:
+        result[row.key] = row.value
+    return result
+
+
+async def save_app_settings(db: AsyncSession, updates: dict) -> dict:
+    for key, value in updates.items():
+        if key not in APP_SETTING_KEYS:
+            continue
+        stmt = select(AppSetting).where(AppSetting.key == key)
+        row = (await db.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            row = AppSetting(key=key, value=value)
+            db.add(row)
+        else:
+            row.value = value
+    await db.commit()
+    return await get_all_app_settings(db)
+
+
+async def get_app_setting(db: AsyncSession, key: str) -> str | None:
+    stmt = select(AppSetting).where(AppSetting.key == key)
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    return row.value if row else None

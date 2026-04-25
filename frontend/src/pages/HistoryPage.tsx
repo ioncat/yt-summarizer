@@ -48,6 +48,7 @@ export default function HistoryPage() {
                   <div className="history-meta">
                     {item.author && <>{item.author} · </>}
                     {new Date(item.created_at).toLocaleDateString()}
+                    {item.char_count && <> · {item.char_count.toLocaleString()} chars</>}
                   </div>
                 </div>
                 {item.language && <span className="lang-badge">{item.language.toUpperCase()}</span>}

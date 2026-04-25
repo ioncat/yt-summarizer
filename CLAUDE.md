@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Vision**: Reduce cognitive load by allowing users to scan video content before deciding whether to watch in detail.
 
-**Current Phase**: Phase 1.5 — LLM Text Cleanup (Epic 6 ✅, Epic 7 ✅, Epic 8 next)
+**Current Phase**: Phase 1.5 — LLM Text Cleanup (Epics 6 ✅, 7 ✅, 8 ❌ dropped, 13 ✅)
 
 ---
 
@@ -49,8 +49,25 @@ All 5 epics done. Full stack running:
 - `pipeline_settings` DB table: per-stage system_prompt, user_prompt_template, model
 - Service layer: `get_all_settings`, `save_stage_settings`, `reset_stage_settings`
 - API: `GET /api/settings`, `PUT /api/settings/{stage}`, `DELETE /api/settings/{stage}`, `GET /api/models`
-- Frontend: `/settings` page — Cleanup (editable) + Summarization (locked, Phase 2)
+- Frontend: `/settings` page — tabs (General, AI Cleanup, Summarization locked)
 - `text_cleaner.py` reads prompts/model from DB via `_run_cleanup`; falls back to `DEFAULT_*` constants
+
+#### Epic 8 ❌ — Markdown Rendering (Dropped)
+- Tested react-markdown + Markdown prompt rule — LLM output inconsistent. Reverted to plain text.
+
+#### Epic 13 ✅ — Settings 2.0 (All Config via Web UI)
+- `app_settings` DB table: key-value store (`ollama_url`, `ytdlp_path`, `cookies_path`)
+- Seeded from config.py defaults on first launch (`_seed_app_settings`)
+- `config.py` now infrastructure-only (host, port, DB path, CORS) — no user-facing settings
+- `subtitle_extractor.py` accepts `ytdlp_path` as parameter (no module-level constant)
+- `text_cleaner.py` accepts `ollama_url` as parameter; no model default — must be set by user
+- `api.py` reads `cookies_path`, `ytdlp_path`, `ollama_url` from DB before each operation
+- API: `PUT /api/settings/app`, `POST /api/settings/upload-cookies`
+- `GET /api/settings` now returns `{app, cleanup, summarization}`
+- Frontend: Settings page redesigned with tabs (General / AI Cleanup / Summarization)
+- Notifications: warning banners for missing required fields on Settings, Home, Result pages
+- Cookie upload via web (multipart, saved to `data/www.youtube.com_cookies.txt`)
+- History page: char_count added to each item
 
 ### 🔮 Phase 2: LLM Summarization
 Map-reduce summarization pipeline. See `docs/phase2-architecture.md`. Uses same Ollama infra as Phase 1.5.
@@ -97,8 +114,8 @@ yt-summarizer/
 │   ├── config.py                    # Settings via pydantic-settings (.env)
 │   ├── models/
 │   │   ├── database.py              # Async engine, session factory, init_db()
-│   │   └── models.py                # ORM: Video, SubtitleRaw, SubtitleFormatted, ProcessingTask
-│   ├── routers/api.py               # 11 REST endpoints
+│   │   └── models.py                # ORM: Video, SubtitleRaw, SubtitleFormatted, PipelineSettings, AppSetting, ProcessingTask
+│   ├── routers/api.py               # 13 REST endpoints
 │   └── services/
 │       ├── subtitle_extractor.py    # yt-dlp wrapper, VTT parser, error classification
 │       ├── text_formatter.py        # Overlap dedup + time-gap paragraph splitting
@@ -137,10 +154,12 @@ yt-summarizer/
 | DELETE | `/api/result/{video_id}` | Delete video + all related data |
 | POST | `/api/result/{video_id}/cleanup` | Trigger background AI cleanup |
 | GET | `/api/health` | `{backend: true, ollama: true/false}` |
-| GET | `/api/settings` | All stage settings (cleanup + summarization) |
-| PUT | `/api/settings/{stage}` | Save settings for a stage |
+| GET | `/api/settings` | All settings: `{app, cleanup, summarization}` |
+| PUT | `/api/settings/app` | Save app settings (ollama_url, ytdlp_path, cookies_path) |
+| PUT | `/api/settings/{stage}` | Save pipeline settings for a stage |
 | DELETE | `/api/settings/{stage}` | Reset stage to hardcoded defaults |
 | GET | `/api/models` | Available Ollama models (live from Ollama) |
+| POST | `/api/settings/upload-cookies` | Upload cookies.txt file |
 
 ---
 
@@ -166,7 +185,11 @@ copy data\db\yt_summarizer.sqlite data\db\yt_summarizer.sqlite.bak
 ```
 Do this BEFORE restarting the backend with new model/migration code. No exceptions.
 
-**Ollama integration**: `text_cleaner.py` calls `POST {OLLAMA_URL}/api/chat`. First does a lightweight `GET /api/tags` to check availability — returns `None` silently if Ollama is down. Model and URL configured via `OLLAMA_URL` / `OLLAMA_MODEL` in `.env`. Same client reused for Phase 2 summarization.
+**Ollama integration**: `text_cleaner.py` calls `POST {ollama_url}/api/chat`. First does a lightweight `GET /api/tags` to check availability — returns `None` silently if Ollama is down. `ollama_url` and model read from DB (`app_settings` + `pipeline_settings`) at request time — never from config. Same client reused for Phase 2 summarization.
+
+**App settings (single source of truth)**: `app_settings` table stores `ollama_url`, `ytdlp_path`, `cookies_path`. Seeded from `config.py` on first launch. After that, managed exclusively via web UI (Settings → General). `config.py` is infrastructure-only.
+
+**No model default**: `text_cleaner.py` has no fallback model. If model is null → cleanup returns None → status `failed`. User must select a model in Settings → AI Cleanup.
 
 ---
 

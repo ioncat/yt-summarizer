@@ -16,6 +16,7 @@ Time analysis based on git history (commit timestamps).
 | 2026-04-25 | 3 | .gitignore cleanup (untrack Claude local config), one-click dev launchers (start.vbs / start.sh), fix .env.example (CORS_ORIGINS JSON format, correct data/ paths) | ~30 min |
 | 2026-04-25 | — | **Epic 6**: AI cleanup refactored to manual button (POST /cleanup, polling, cleanup_status field, Re-run support); StatusBar (health dots for backend + Ollama); tab CSS fix; backlog restructure (Epics 6–11); README/docs cleanup; config cleanup (OLLAMA_MODEL removed from .env) | ~3 h |
 | 2026-04-25 | — | **Epic 7**: Settings Page — PipelineSettings model, service CRUD, API endpoints (GET/PUT/DELETE /settings, GET /models), SettingsPage.tsx with editable Cleanup + locked Summarization panels; text_cleaner.py wired to DB settings; tab switching bug fixed; backup rule added | ~2 h |
+| 2026-04-26 | — | **Epic 8 (dropped)**: react-markdown + Markdown prompt rule tested — LLM output inconsistent, reverted to plain text. **Cleanup bug fix**: default model was qwen3:8b (not installed) → silently returned original text; fixed by removing hardcoded model default (user must pick via Settings). **History**: char_count added. **Epic 13**: Settings 2.0 — AppSetting model + app_settings table, seed on first launch, config.py infrastructure-only; ytdlp_path/cookies_path/ollama_url moved to DB; Settings page redesigned with tabs (General/AI Cleanup/Summarization); warning banners for missing required fields on Home + Settings; cookie upload via web; PUT /api/settings/app + POST /api/settings/upload-cookies | ~3 h |
 
 *Table updated after each session.*
 
@@ -32,7 +33,8 @@ Time analysis based on git history (commit timestamps).
 | Tooling — launchers, .gitignore, .env fixes | 3 | ~30 min |
 | Phase 1.5 — Epic 6: AI Cleanup (manual, polling, health check) | — | ~3 h |
 | Phase 1.5 — Epic 7: Settings Page (prompts + models per stage) | — | ~2 h |
-| **Total** | **16+** | **~10 h 5 min** |
+| Phase 1.5 — Epic 8 (dropped) + cleanup fix + Epic 13: Settings 2.0 | — | ~3 h |
+| **Total** | **16+** | **~13 h 5 min** |
 
 ---
 

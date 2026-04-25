@@ -32,6 +32,7 @@ export interface HistoryItem {
   title: string | null
   author: string | null
   language: string | null
+  char_count: number | null
   created_at: string
 }
 
@@ -79,7 +80,10 @@ export async function deleteResult(videoId: string): Promise<void> {
 
 export async function startCleanup(videoId: string): Promise<void> {
   const res = await fetch(`${BASE}/result/${videoId}/cleanup`, { method: 'POST' })
-  if (!res.ok) throw new Error('Failed to start cleanup')
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || 'Failed to start cleanup')
+  }
 }
 
 export interface HealthResponse {
@@ -93,6 +97,12 @@ export async function getHealth(): Promise<HealthResponse> {
   return res.json()
 }
 
+export interface AppSettings {
+  ollama_url: string | null
+  ytdlp_path: string | null
+  cookies_path: string | null
+}
+
 export interface StageSettings {
   stage: string
   system_prompt: string | null
@@ -102,6 +112,7 @@ export interface StageSettings {
 }
 
 export interface AllSettings {
+  app: AppSettings
   cleanup: StageSettings
   summarization: StageSettings
 }
@@ -109,6 +120,16 @@ export interface AllSettings {
 export async function getSettings(): Promise<AllSettings> {
   const res = await fetch(`${BASE}/settings`)
   if (!res.ok) throw new Error('Failed to load settings')
+  return res.json()
+}
+
+export async function saveAppSettings(data: Partial<AppSettings>): Promise<AppSettings> {
+  const res = await fetch(`${BASE}/settings/app`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) throw new Error('Failed to save app settings')
   return res.json()
 }
 

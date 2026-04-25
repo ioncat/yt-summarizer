@@ -1,6 +1,6 @@
-import { useState, FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { processVideo } from '../api'
+import { useState, useEffect, FormEvent } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
+import { processVideo, getSettings } from '../api'
 
 const LANGUAGES = [
   { value: 'ru', label: 'Russian' },
@@ -13,7 +13,17 @@ export default function HomePage() {
   const [language, setLanguage] = useState('ru')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [missingConfig, setMissingConfig] = useState<string[]>([])
   const navigate = useNavigate()
+
+  useEffect(() => {
+    getSettings().then(s => {
+      const missing: string[] = []
+      if (!s.app.ytdlp_path) missing.push('yt-dlp path')
+      if (!s.app.cookies_path) missing.push('Cookies')
+      setMissingConfig(missing)
+    }).catch(() => {})
+  }, [])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -31,6 +41,12 @@ export default function HomePage() {
 
   return (
     <div className="container">
+      {missingConfig.length > 0 && (
+        <div className="settings-warning" style={{ marginBottom: '1rem' }}>
+          ⚠ Required settings missing: <strong>{missingConfig.join(', ')}</strong>.{' '}
+          <Link to="/settings">Go to Settings →</Link>
+        </div>
+      )}
       <div className="card">
         <h1>YT Summarizer</h1>
         <p className="subtitle">Paste a YouTube URL to extract and format subtitles.</p>
