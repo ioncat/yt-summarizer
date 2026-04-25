@@ -89,7 +89,7 @@ yt-summarizer/
 ├── frontend/                # React + TypeScript + Vite
 │   └── src/
 │       ├── api.ts           # Typed fetch wrappers
-│       └── pages/           # Home, Processing, Result, History
+│       └── pages/           # Home, Processing, Result, History, Settings
 ├── data/
 │   ├── db/                  # SQLite database
 │   └── www.youtube.com_cookies.txt  # YouTube cookies (gitignored)
@@ -110,6 +110,12 @@ yt-summarizer/
 | GET | `/api/health` | Backend + Ollama status |
 | GET | `/api/history` | Paginated processing history |
 | DELETE | `/api/result/{video_id}` | Delete video and all its data |
+| GET | `/api/settings` | All settings (app + pipeline stages) |
+| PUT | `/api/settings/app` | Save app settings (Ollama URL, paths) |
+| PUT | `/api/settings/{stage}` | Save pipeline settings (model, prompts) |
+| DELETE | `/api/settings/{stage}` | Reset stage to defaults |
+| GET | `/api/models` | Available Ollama models |
+| POST | `/api/settings/upload-cookies` | Upload YouTube cookies file |
 
 ---
 
@@ -118,7 +124,7 @@ yt-summarizer/
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Phase 1 — Subtitle Extraction | ✅ Done | Extract, format, store, display subtitles |
-| Phase 1.5 — LLM Text Cleanup | ✅ Done | Local Ollama cleans up auto-generated transcripts |
+| Phase 1.5 — LLM Text Cleanup | 🔄 In Progress | Local Ollama cleanup, Settings UI, all config via web (Epics 9, 10, 12 remaining) |
 | Phase 2 — LLM Summarization | 🔵 Planned | Map-reduce summarization (paragraph → document summary) |
 | Phase 3 — Speech-to-Text | 🔵 Planned | Whisper fallback when subtitles unavailable |
 
