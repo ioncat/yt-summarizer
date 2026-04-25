@@ -92,3 +92,48 @@ export async function getHealth(): Promise<HealthResponse> {
   if (!res.ok) throw new Error('Backend unreachable')
   return res.json()
 }
+
+export interface StageSettings {
+  stage: string
+  system_prompt: string | null
+  user_prompt_template: string | null
+  model: string | null
+  is_default: boolean
+}
+
+export interface AllSettings {
+  cleanup: StageSettings
+  summarization: StageSettings
+}
+
+export async function getSettings(): Promise<AllSettings> {
+  const res = await fetch(`${BASE}/settings`)
+  if (!res.ok) throw new Error('Failed to load settings')
+  return res.json()
+}
+
+export async function saveSettings(
+  stage: string,
+  data: { system_prompt: string | null; user_prompt_template: string | null; model: string | null }
+): Promise<StageSettings> {
+  const res = await fetch(`${BASE}/settings/${stage}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) throw new Error('Failed to save settings')
+  return res.json()
+}
+
+export async function resetSettings(stage: string): Promise<StageSettings> {
+  const res = await fetch(`${BASE}/settings/${stage}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to reset settings')
+  return res.json()
+}
+
+export async function getModels(): Promise<string[]> {
+  const res = await fetch(`${BASE}/models`)
+  if (!res.ok) return []
+  const data = await res.json()
+  return data.models ?? []
+}

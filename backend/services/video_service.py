@@ -6,8 +6,26 @@ from datetime import datetime
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.models import Video, SubtitleRaw, SubtitleFormatted, ProcessingTask
+from models.models import Video, SubtitleRaw, SubtitleFormatted, ProcessingTask, PipelineSettings
 from models.models import generate_id
+from services.text_cleaner import DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE
+
+# ---------------------------------------------------------------------------
+# Pipeline settings — defaults (source of truth is text_cleaner.py constants)
+# ---------------------------------------------------------------------------
+
+STAGE_DEFAULTS: dict[str, dict] = {
+    "cleanup": {
+        "system_prompt": DEFAULT_SYSTEM_PROMPT,
+        "user_prompt_template": DEFAULT_USER_PROMPT_TEMPLATE,
+        "model": None,  # None → falls back to settings.ollama_model at runtime
+    },
+    "summarization": {
+        "system_prompt": None,
+        "user_prompt_template": None,
+        "model": None,
+    },
+}
 from services.subtitle_extractor import ExtractionResult, subtitles_to_json
 
 
@@ -248,3 +266,77 @@ async def delete_video(db: AsyncSession, video_id: str) -> bool:
     await db.delete(video)
     await db.commit()
     return True
+
+
+# ---------------------------------------------------------------------------
+# Pipeline settings CRUD
+# ---------------------------------------------------------------------------
+
+def _stage_to_dict(row: PipelineSettings | None, stage: str) -> dict:
+    """Merge DB row with defaults. Missing fields fall back to STAGE_DEFAULTS."""
+    defaults = STAGE_DEFAULTS.get(stage, {})
+    if row is None:
+        return {
+            "stage": stage,
+            "system_prompt": defaults.get("system_prompt"),
+            "user_prompt_template": defaults.get("user_prompt_template"),
+            "model": defaults.get("model"),
+            "is_default": True,
+        }
+    return {
+        "stage": stage,
+        "system_prompt": row.system_prompt if row.system_prompt is not None else defaults.get("system_prompt"),
+        "user_prompt_template": row.user_prompt_template if row.user_prompt_template is not None else defaults.get("user_prompt_template"),
+        "model": row.model,
+        "is_default": False,
+    }
+
+
+async def _get_stage_row(db: AsyncSession, stage: str) -> PipelineSettings | None:
+    stmt = select(PipelineSettings).where(PipelineSettings.stage == stage)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def get_all_settings(db: AsyncSession) -> dict:
+    """Return settings for all stages, merged with defaults."""
+    cleanup_row = await _get_stage_row(db, "cleanup")
+    summ_row = await _get_stage_row(db, "summarization")
+    return {
+        "cleanup": _stage_to_dict(cleanup_row, "cleanup"),
+        "summarization": _stage_to_dict(summ_row, "summarization"),
+    }
+
+
+async def get_stage_settings(db: AsyncSession, stage: str) -> dict:
+    """Return settings for a single stage, merged with defaults."""
+    row = await _get_stage_row(db, stage)
+    return _stage_to_dict(row, stage)
+
+
+async def save_stage_settings(
+    db: AsyncSession,
+    stage: str,
+    system_prompt: str | None,
+    user_prompt_template: str | None,
+    model: str | None,
+) -> dict:
+    """Upsert settings for a stage. Returns the saved state."""
+    row = await _get_stage_row(db, stage)
+    if row is None:
+        row = PipelineSettings(id=generate_id(), stage=stage)
+        db.add(row)
+    row.system_prompt = system_prompt
+    row.user_prompt_template = user_prompt_template
+    row.model = model
+    await db.commit()
+    await db.refresh(row)
+    return _stage_to_dict(row, stage)
+
+
+async def reset_stage_settings(db: AsyncSession, stage: str) -> dict:
+    """Delete the DB row for a stage, reverting to hardcoded defaults."""
+    row = await _get_stage_row(db, stage)
+    if row is not None:
+        await db.delete(row)
+        await db.commit()
+    return _stage_to_dict(None, stage)

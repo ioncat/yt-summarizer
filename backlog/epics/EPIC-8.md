@@ -1,69 +1,97 @@
-# Epic 8: Per-Tab Character Count
+# Epic 8: Markdown Output & Rendering
 
 ## Summary
-Currently the Result page shows a single `Characters:` count for the whole video. With two tabs (Subtitles and Cleaned), each may have different character counts — the cleaned version is typically shorter (filler words removed). Show the count for whichever tab is active.
+The LLM cleanup prompt should be updated to explicitly instruct the model to output clean Markdown (paragraphs, bold for emphasis). The frontend should render this Markdown properly using `react-markdown` instead of displaying it as plain `pre-wrap` text.
+
+**Key insight**: Markdown formatting is primarily a **prompt engineering task** — if the LLM outputs proper Markdown, all that's needed on the frontend is a renderer. The two concerns are separable but ship together.
 
 ## Business Value
-Character count helps users estimate reading time and content density. Showing the count for the current tab makes it immediately meaningful — e.g. "Cleanup removed 800 characters of filler."
+Currently the `formatted-text` block shows raw text with `\n\n` gaps visible and any `**bold**` symbols rendered literally. Proper Markdown rendering + correct LLM output makes the result look like a polished document, not raw subtitle dump.
 
 ## Scope
 
 ### Included
-- Character count in the metadata block updates when the user switches tabs
-- Backend returns both `char_count` (formatted text) and `cleaned_char_count` (cleaned text)
-- "Characters" label stays in the same position in the meta row
+- Update `text_cleaner.py` prompt to explicitly request Markdown output (paragraphs, bold for key terms)
+- Add `react-markdown` to frontend, replace plain text block on Result page
+- Both Subtitles and Cleaned tabs use the same renderer
 
 ### Not Included
-- Word count, sentence count, reading time estimate (future US)
-- Diff view showing what was removed (future)
+- User editing of Markdown
+- Export to HTML/PDF (separate epic)
+- Syntax highlighting for code blocks (not relevant for subtitles)
 
 ---
 
 ## User Stories
 
-### US-801: Show Character Count for Active Tab
+### US-701: Update Cleanup Prompt to Output Markdown
 
-**Title**: Character count reflects the currently visible text
+**Title**: LLM outputs clean Markdown formatting
+
+**User Story**:
+```
+As a developer
+I want the cleanup LLM to format its output as Markdown
+So that the result is structured and ready for rendering
+```
+
+**Acceptance Criteria**:
+- Cleanup prompt includes explicit instruction: output Markdown with paragraphs separated by blank lines, bold for emphasis on key terms or names
+- Model does not add `\`\`\`` code blocks or unnecessary headers
+- Paragraph structure preserved from input
+- Output can be directly passed to a Markdown renderer
+
+**Notes for Engineering**:
+- Edit `_user_prompt()` in `text_cleaner.py`
+- Add to rules: "8. Format output as Markdown: separate paragraphs with a blank line, use **bold** for important names or terms."
+- Test with a few sample paragraphs — model behaviour varies
+
+---
+
+### US-702: Render Markdown in Result Page
+
+**Title**: Result page displays text as rendered Markdown
 
 **User Story**:
 ```
 As a user
-I want to see the character count for the text I'm currently reading
-So that I can compare the length of the original and cleaned versions
+I want to see the text formatted with proper paragraphs and emphasis
+So that the content is easy to read
 ```
 
 **Acceptance Criteria**:
 
-**Given**: Result page is open
+**Given**: Result page shows either Subtitles or Cleaned tab
 
-**When**: User switches between Subtitles and Cleaned tabs
+**When**: Text content loads
 
 **Then**:
-- "Characters:" in the metadata row updates to reflect active tab's text length
-- Subtitles tab → count of `formatted_text`
-- Cleaned tab → count of `cleaned_text`
-- If Cleaned text doesn't exist yet → shows Subtitles count regardless of tab
+- Paragraphs are spaced correctly (not squashed together)
+- `**bold**` renders as **bold** (no raw asterisks visible)
+- No raw Markdown syntax symbols visible in output
+- Long text scrolls smoothly
+- HTML characters (`<`, `>`) are safely escaped — no XSS
 
 **Edge Cases**:
-1. Cleanup running → show Subtitles count (Cleaned not ready)
-2. Cleanup failed → show Subtitles count
-3. `cleaned_text` length = 0 → show 0, not Subtitles count
+1. `formatted_text` is null → empty state, no crash
+2. Very long text → renders without freezing
+3. Text from old videos (no Markdown) → renders as plain paragraphs, no breakage
 
 **Notes for Engineering**:
-- Add `cleaned_char_count: number | null` to `ResultResponse` API schema
-- In `get_result()` (video_service.py): add `"cleaned_char_count": len(fmt.cleaned_text) if fmt and fmt.cleaned_text else None`
-- In `ResultPage.tsx`: `const displayCount = activeTab === 'cleaned' && result.cleaned_char_count != null ? result.cleaned_char_count : result.char_count`
-- Replace `{result.char_count.toLocaleString()}` with `{displayCount?.toLocaleString()}`
-- No DB migration needed — count computed on the fly
+- `npm install react-markdown`
+- Replace `<div className="formatted-text">{displayText}</div>` with:
+  `<ReactMarkdown className="formatted-text">{displayText ?? ''}</ReactMarkdown>`
+- `react-markdown` does not render raw HTML by default — XSS safe
+- May need to add CSS: `.formatted-text p { margin-bottom: 1em; }`
 
 ---
 
 ## Dependencies
 
-- Epic 6 (Cleaned tab, `cleanup_status`)
-- Epic 5 (Result page meta block)
+- Epic 6 (Cleaned tab exists, `displayText` shared between tabs)
 
 ## Status
 
-**Status**: 🟡 Next  
-**Priority**: 🟡 P2
+**Status**: 🔵 Planned — depends on Epic 10  
+**Priority**: 🟠 P1  
+**Note**: US-701 (prompt update) is replaced by the default prompt set in Epic 10 Settings page. Only US-702 (react-markdown renderer) remains as a code task.

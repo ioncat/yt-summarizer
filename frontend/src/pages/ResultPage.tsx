@@ -28,6 +28,7 @@ export default function ResultPage() {
   const [copied, setCopied] = useState(false)
   const [activeTab, setActiveTab] = useState<Tab>('subtitles')
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const prevCleanupStatusRef = useRef<string | null | undefined>(undefined)
 
   function stopPolling() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
@@ -37,8 +38,15 @@ export default function ResultPage() {
     if (!videoId) return
     getResult(videoId)
       .then(data => {
+        const prevStatus = prevCleanupStatusRef.current
+        prevCleanupStatusRef.current = data.cleanup_status
         setResult(data)
-        if (switchTab) setActiveTab(data.cleanup_status === 'done' ? 'cleaned' : 'subtitles')
+        if (switchTab) {
+          setActiveTab(data.cleanup_status === 'done' ? 'cleaned' : 'subtitles')
+        } else if (prevStatus === 'processing' && data.cleanup_status === 'done') {
+          // Auto-switch only on transition processing → done
+          setActiveTab('cleaned')
+        }
         if (data.cleanup_status !== 'processing') stopPolling()
       })
       .catch(() => setError('Could not load result'))
@@ -53,7 +61,7 @@ export default function ResultPage() {
   // Start polling if we land on a page already being cleaned
   useEffect(() => {
     if (result?.cleanup_status === 'processing' && !pollRef.current) {
-      pollRef.current = setInterval(() => loadResult(true), 3000)
+      pollRef.current = setInterval(() => loadResult(false), 3000)
     }
   }, [result?.cleanup_status])
 
@@ -80,7 +88,7 @@ export default function ResultPage() {
       setCleanupError('')
       await startCleanup(videoId)
       setResult({ ...result, cleanup_status: 'processing', cleaned_text: null })
-      pollRef.current = setInterval(() => loadResult(true), 3000)
+      pollRef.current = setInterval(() => loadResult(false), 3000)
     } catch {
       setCleanupError('Could not reach the backend. Make sure it is running on port 8000.')
     }
@@ -142,15 +150,25 @@ export default function ResultPage() {
             Subtitles
           </button>
           <button
-            className={`result-tab ${activeTab === 'cleaned' ? 'active' : ''} ${!result.cleanup_status || result.cleanup_status === 'failed' ? 'tab-unavailable' : ''}`}
-            onClick={() => result.cleanup_status === 'done' && setActiveTab('cleaned')}
+            className={`result-tab ${activeTab === 'cleaned' ? 'active' : ''}`}
+            onClick={() => setActiveTab('cleaned')}
           >
             {result.cleanup_status === 'processing'
               ? <><span className="tab-spinner" />Cleaning…</>
               : 'Cleaned'}
           </button>
         </div>
-        <div className="formatted-text">{displayText}</div>
+        {activeTab === 'cleaned' && !result.cleaned_text ? (
+          <div className="empty">
+            {result.cleanup_status === 'processing'
+              ? 'AI cleanup is running…'
+              : result.cleanup_status === 'failed'
+                ? 'Cleanup failed. Click "↺ Re-run AI cleanup" to try again.'
+                : 'No cleaned version yet. Click "✦ Clean with AI" above to start.'}
+          </div>
+        ) : (
+          <div className="formatted-text">{displayText}</div>
+        )}
       </div>
     </div>
   )

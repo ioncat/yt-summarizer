@@ -3,6 +3,7 @@ import HomePage from './pages/HomePage'
 import ProcessingPage from './pages/ProcessingPage'
 import ResultPage from './pages/ResultPage'
 import HistoryPage from './pages/HistoryPage'
+import SettingsPage from './pages/SettingsPage'
 import StatusBar from './components/StatusBar'
 
 export default function App() {
@@ -12,6 +13,7 @@ export default function App() {
         <NavLink to="/" className="logo">YT Summarizer</NavLink>
         <NavLink to="/">New</NavLink>
         <NavLink to="/history">History</NavLink>
+        <NavLink to="/settings">Settings</NavLink>
         <StatusBar />
       </nav>
       <Routes>
@@ -19,6 +21,7 @@ export default function App() {
         <Route path="/processing/:taskId/:videoId" element={<ProcessingPage />} />
         <Route path="/result/:videoId" element={<ResultPage />} />
         <Route path="/history" element={<HistoryPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
       </Routes>
     </>
   )

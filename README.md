@@ -2,129 +2,28 @@
 
 Extract, format, and store YouTube video subtitles for quick content review. Paste a URL, pick a language — get clean, readable text without watching the video. Optionally clean up the transcript with a local LLM (Ollama) to fix punctuation and remove filler words.
 
----
+## Watch or Skip
 
-## Quick Start (Docker)
+Video is expensive to evaluate:
 
-> Requires: Docker, Docker Compose, YouTube cookies file
+- A 10-minute video can take 10 minutes just to judge.
+- Titles and thumbnails rarely show the real substance.
+- Intros, delivery, pacing, filler, and repetition add cognitive load.
 
-```bash
-# 1. Clone the repo
-git clone <repo-url>
-cd yt-summarizer
+YT Summarizer turns video into scannable text, so you can:
 
-# 2. Export YouTube cookies
-#    Install "Get cookies.txt LOCALLY" in Chrome, open youtube.com, export.
-#    Save the file as:
-cp /path/to/exported-cookies.txt data/www.youtube.com_cookies.txt
+- understand the core idea quickly;
+- decide whether the full video deserves your attention;
+- skip low-value content without spending time on it.
 
-# 3. Copy env config
-cp .env.example .env
+The goal: turn a watch-or-skip guess into a fast, informed decision.
 
-# 4. Build and start
-docker compose up --build
-
-# App is available at:
-#   Frontend  → http://localhost:3000
-#   API       → http://localhost:8000
-```
-
-To stop:
-```bash
-docker compose down
-```
+→ **[Quick Start Guide](docs/quick-start-guide.md)**
 
 ---
 
-## Quick Start (Local Dev)
-
-### Requirements
-
-- Python 3.12+
-- Node.js 18+ (required by yt-dlp for YouTube bot detection bypass)
-- yt-dlp (`pip install yt-dlp` or system package)
-- [Ollama](https://ollama.com) with `cas/aya-expanse-8b` *(optional — for AI text cleanup)*
-
-### One-click launch
-
-```bash
-# Set up env once
-cp .env.example .env
-```
-
-**Windows** — double-click `start.vbs`.
-Opens Windows Terminal with two split panes (backend + frontend) and launches the browser automatically.
-
-**Linux / macOS**:
-```bash
-chmod +x start.sh && ./start.sh
-# Ctrl+C stops both services
-```
-
-### Manual launch (two terminals)
-
-```bash
-# Terminal 1 — Backend
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-
-# Terminal 2 — Frontend
-cd frontend
-npm install
-npm run dev
-# → http://localhost:3000
-```
-
----
-
-## Configuration (`.env`)
-
-```env
-# Path to SQLite database (created automatically)
-DATABASE_PATH=../data/db/yt_summarizer.sqlite
-
-# Path to YouTube cookies file (Netscape format)
-# Required to bypass YouTube bot detection
-COOKIES_PATH=../data/www.youtube.com_cookies.txt
-
-# Debug mode (enables SQLAlchemy query logging)
-DEBUG=false
-
-# Ollama — local LLM for text cleanup (optional)
-# Install Ollama, then: ollama pull cas/aya-expanse-8b
-OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=cas/aya-expanse-8b
-```
-
-### Ollama setup (AI text cleanup)
-
-Text cleanup runs locally via [Ollama](https://ollama.com) — no API keys, no data leaves the machine.
-
-**1. Install Ollama**
-Download and run the installer from [ollama.com](https://ollama.com/download).
-
-**2. Pull a model of your choice**
-```bash
-ollama pull <model-name>
-```
-
-Browse available models at [ollama.com/library](https://ollama.com/library). Any instruction-following model works; multilingual models perform better on non-English transcripts.
-
-**3. Set the model name in the configuration** — see the [Configuration](#configuration-env) section.
-
-**If Ollama is not running** — the pipeline completes normally, the "Cleaned" tab is shown as greyed-out with a tooltip explaining why.
-
----
-
-### Cookies setup
-
-YouTube blocks yt-dlp without valid cookies. To export:
-1. Install **"Get cookies.txt LOCALLY"** extension in Chrome
-2. Open [youtube.com](https://www.youtube.com) and log in
-3. Click the extension → Export cookies → Save as `data/www.youtube.com_cookies.txt`
-
-Re-export if you start getting 429 or "sign in required" errors.
+If you care about reducing cognitive load and saving time in the age of information overload, you might also find this useful:  
+**[llm-onpage-summarizer](https://github.com/ioncat/llm-onpage-summarizer)** — summarize any web page with a local LLM, right in your browser.
 
 ---
 
@@ -147,7 +46,7 @@ flowchart TD
     end
 
     subgraph step3 ["③ AI Cleanup · Phase 1.5"]
-        DB1 --> LLM["Ollama · aya-expanse-8b\nper paragraph:\nfix punctuation · remove fillers · merge fragments"]
+        DB1 --> LLM["Ollama · configurable model\nper paragraph:\nfix punctuation · remove fillers · merge fragments"]
         LLM --> DB2[("SQLite\ncleaned_text")]
     end
 
@@ -167,7 +66,7 @@ flowchart TD
     STT["Phase 3 — Whisper STT 🔵\nfallback when no subtitles"] --> FMT
 ```
 
-**Language**: if the requested language has no subtitles, the UI shows available languages with one-click retry. The language parameter carries forward to Phase 3 (Whisper) — no extra input needed.
+**Language**: if the requested language has no subtitles, the UI shows available languages with one-click retry.
 
 **AI cleanup**: runs locally via Ollama — no data leaves the machine. If Ollama is offline, "Cleaned" tab is greyed-out with a tooltip.
 
@@ -184,7 +83,7 @@ yt-summarizer/
 │   ├── routers/api.py       # REST endpoints
 │   └── services/
 │       ├── subtitle_extractor.py   # yt-dlp wrapper
-│       ├── text_formatter.py       # VTT → clean markdown
+│       ├── text_formatter.py       # VTT → clean text
 │       ├── text_cleaner.py         # Ollama LLM cleanup (paragraph-by-paragraph)
 │       └── video_service.py        # DB CRUD
 ├── frontend/                # React + TypeScript + Vite
@@ -195,7 +94,8 @@ yt-summarizer/
 │   ├── db/                  # SQLite database
 │   └── www.youtube.com_cookies.txt  # YouTube cookies (gitignored)
 └── docs/
-    ├── requirements.md      # Functional requirements
+    ├── quick-start-guide.md    # Setup and launch instructions
+    ├── requirements.md         # Functional requirements
     └── phase2-architecture.md  # LLM summarization design
 ```
 
@@ -203,9 +103,11 @@ yt-summarizer/
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/process` | Submit URL + language + `enable_cleanup` flag |
+| POST | `/api/process` | Submit URL + language |
 | GET | `/api/status/{task_id}` | Poll processing status |
-| GET | `/api/result/{video_id}` | Get formatted subtitle text |
+| GET | `/api/result/{video_id}` | Get subtitle text + metadata |
+| POST | `/api/result/{video_id}/cleanup` | Trigger AI cleanup |
+| GET | `/api/health` | Backend + Ollama status |
 | GET | `/api/history` | Paginated processing history |
 | DELETE | `/api/result/{video_id}` | Delete video and all its data |
 

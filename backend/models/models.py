@@ -74,6 +74,19 @@ class SubtitleFormatted(Base):
     video: Mapped["Video"] = relationship(back_populates="subtitles_formatted")
 
 
+class PipelineSettings(Base):
+    __tablename__ = "pipeline_settings"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=generate_id)
+    stage: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)  # cleanup | summarization
+    system_prompt: Mapped[str | None] = mapped_column(Text)
+    user_prompt_template: Mapped[str | None] = mapped_column(Text)
+    model: Mapped[str | None] = mapped_column(String)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
 class ProcessingTask(Base):
     __tablename__ = "processing_tasks"
 

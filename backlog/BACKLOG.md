@@ -40,32 +40,33 @@ Local LLM cleanup via Ollama. Runs on demand. No data leaves the machine.
 
 ---
 
-### Epic 7: Markdown Output & Rendering
-**Description**: Instruct LLM to output proper Markdown; render it in the UI with react-markdown
+### Epic 7: Settings Page — Prompts & Models Per Stage
+**Description**: Web UI for editing system/user prompts and selecting models separately for cleanup and summarization stages
 
-**Status**: 🟡 Next | **Priority**: 🟠 P1  
+**Status**: ✅ Done | **Priority**: 🟠 P1  
 [View Epic →](./epics/EPIC-7.md)
 
 ---
 
-### Epic 8: Per-Tab Character Count
-**Description**: Show separate character counts for Subtitles tab and Cleaned tab
+### Epic 8: Markdown Rendering (frontend only)
+**Description**: Add react-markdown renderer to the Result page. Prompt part configured via Settings page (Epic 7).
 
-**Status**: 🟡 Next | **Priority**: 🟡 P2  
+**Status**: 🟡 Next | **Priority**: 🟠 P1  
+**Depends on**: Epic 7 ✅  
 [View Epic →](./epics/EPIC-8.md)
 
 ---
 
-### Epic 9: Auto-Pipeline Toggle
-**Description**: Checkbox on Home page to automatically run cleanup after extraction (Summary skipped — not ready)
+### Epic 9: Per-Tab Character Count
+**Description**: Show separate character counts for Subtitles tab and Cleaned tab
 
 **Status**: 🔵 Planned | **Priority**: 🟡 P2  
 [View Epic →](./epics/EPIC-9.md)
 
 ---
 
-### Epic 10: Settings Page — Prompts & Models Per Stage
-**Description**: Web UI for editing system/user prompts and selecting models separately for cleanup and summarization stages
+### Epic 10: Auto-Pipeline Toggle
+**Description**: Checkbox on Home page to automatically run cleanup after extraction (Summary skipped — not ready)
 
 **Status**: 🔵 Planned | **Priority**: 🟡 P2  
 [View Epic →](./epics/EPIC-10.md)
@@ -73,10 +74,9 @@ Local LLM cleanup via Ollama. Runs on demand. No data leaves the machine.
 ---
 
 ### Epic 11: Model Selection in UI
-**Description**: Select Ollama model per pipeline stage from the web interface; model list fetched live from Ollama
+**Description**: Covered by Epic 7 (Settings page). Standalone version only if Epic 7 is deferred.
 
-**Status**: 🔵 Planned | **Priority**: 🟡 P2  
-**Note**: Superseded by Epic 10 (Settings page covers model selection per stage). Keep as standalone if Settings page is deferred.  
+**Status**: 🔵 Deferred | **Priority**: 🟡 P2  
 [View Epic →](./epics/EPIC-11.md)
 
 ---
@@ -110,7 +110,7 @@ Whisper fallback when no subtitles are available. Language param from Phase 1 re
 | Phase | Epics | Status |
 |-------|-------|--------|
 | Phase 1 — MVP | 1–5 | ✅ Done |
-| Phase 1.5 — LLM Cleanup & UX | 6–11 | 🔄 In Progress (Epic 6 done) |
+| Phase 1.5 — LLM Cleanup & UX | 6–11 | 🔄 In Progress (Epics 6–7 done) |
 | Phase 2 — Summarization | 12–14 | 🔵 Planned |
 | Phase 3 — STT Fallback | 15–17 | 🔵 Planned |
 
@@ -118,6 +118,6 @@ Whisper fallback when no subtitles are available. Language param from Phase 1 re
 
 ## Document Control
 
-- **Version**: 1.3
+- **Version**: 1.4
 - **Last Updated**: 2026-04-25
 - **Status**: 🔄 Active Development

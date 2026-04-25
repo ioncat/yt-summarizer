@@ -1,183 +1,131 @@
-# Epic 10: Settings Page — Prompts & Models Per Stage
+# Epic 10: Auto-Pipeline Toggle
 
 ## Summary
-A dedicated Settings page in the web UI where the user can view and edit the system prompt, user prompt template, and model selection for each pipeline stage independently. 
+A checkbox on the Home page — "Run full pipeline automatically" — that, when checked, automatically triggers AI cleanup immediately after subtitle extraction completes. The user submits the URL once and gets the cleaned result without manually pressing "Clean with AI" on the result page.
 
-**Key insight from product**: Cleanup and Summarization are different tasks that benefit from different models. For example:
-- **Cleanup (Phase 1.5)** — short, fast, per-paragraph → AYA (`cas/aya-expanse-8b`) works well
-- **Summarization (Phase 2)** — long context, complex reasoning → Qwen or a larger model may perform better
-
-Prompts are also different: cleanup fixes punctuation and removes fillers; summarization condenses meaning.
+**Important constraint**: The Summary stage (Phase 2) is not yet implemented. Auto-pipeline covers only Extract → Format → Cleanup. Summary will be added to the auto-pipeline when Phase 2 is ready.
 
 ## Business Value
-Currently prompts are hardcoded in `text_cleaner.py` and `text_summarizer.py`. To tune output quality, the user must edit Python files and restart the backend — high friction for non-developers. A settings UI makes prompt iteration fast and accessible.
+For users who always want the cleaned version, the current two-step flow (submit → wait → go to result → click "Clean with AI" → wait again) is tedious. The checkbox collapses this into a single submit action.
 
 ## Scope
 
 ### Included
-- Settings page (new route `/settings`)
-- Nav link to Settings
-- Per-stage configuration: **Cleanup** and **Summarization** (Summary stage shown but locked until Phase 2)
-- Per stage: system prompt (editable textarea), user prompt template (editable textarea), model selector (dropdown from Ollama)
-- Default values = current hardcoded prompts from source
-- Settings persisted in DB (new `pipeline_settings` table) so they survive restarts
-- "Reset to defaults" button per stage
-- Live model list from Ollama (same as Epic 11)
+- Checkbox on Home page: "Run full pipeline automatically (Extract + AI Cleanup)"
+- Checkbox state persisted in `localStorage`
+- Processing page shows extended status: "Extracting… → Formatting… → Cleaning with AI…"
+- Auto-cleanup triggered from frontend when extraction completes (Processing page polls, detects completion, fires cleanup POST)
+- Result page opens on Cleaned tab when auto-pipeline was used
 
 ### Not Included
-- Per-video prompt overrides
-- Prompt versioning / history
-- A/B testing prompts
-- Prompt import/export (future)
-- Authentication/access control
+- Auto-summary (Phase 2 not ready)
+- Server-side pipeline chaining (frontend orchestrates for now — simpler, no backend changes)
+- Background processing without the Processing page (requires push notifications)
 
 ---
 
 ## User Stories
 
-### US-1001: View Settings Page
+### US-901: Auto-Pipeline Checkbox on Home Page
 
-**Title**: User can navigate to a Settings page
-
-**User Story**:
-```
-As a user
-I want a dedicated settings area
-So that I can configure the pipeline without touching code
-```
-
-**Acceptance Criteria**:
-
-**Given**: App is running
-
-**When**: User clicks "Settings" in nav or navigates to `/settings`
-
-**Then**:
-- Settings page loads with two sections: "AI Cleanup" and "Summarization"
-- Each section shows: current model, system prompt, user prompt template
-- Summarization section is visually marked as "Phase 2 — coming soon" and fields are read-only until implemented
-- "Save" and "Reset to defaults" buttons per section
-
----
-
-### US-1002: Edit Cleanup Prompts
-
-**Title**: User can edit the system and user prompt for the cleanup stage
+**Title**: User opts into automatic cleanup at submission time
 
 **User Story**:
 ```
 As a user
-I want to edit the cleanup prompt
-So that I can tune how the LLM fixes my transcripts
+I want to check a box before submitting
+So that cleanup runs automatically without extra steps
 ```
 
 **Acceptance Criteria**:
 
-**Given**: User is on Settings page, Cleanup section
+**Given**: User is on the Home page
 
-**When**: User edits system prompt or user prompt textarea and clicks Save
+**When**: Page loads
 
 **Then**:
-- New prompts are saved to DB (`pipeline_settings` table, stage = `cleanup`)
-- Next cleanup run uses the new prompts
-- Toast confirmation: "Cleanup settings saved"
-- "Reset to defaults" restores the original hardcoded prompts
-
-**Prompt variables available in user prompt template**:
-- `{text}` — the paragraph text to clean
+- Checkbox below language selector: "☐ Run AI cleanup automatically"
+- Default: unchecked (current behaviour preserved)
+- State saved in `localStorage` (remembered across sessions)
+- Small hint text: "Runs after extraction. Requires Ollama."
+- Checkbox disabled with tooltip if Ollama is offline (health check)
 
 **Notes for Engineering**:
-- New DB table: `pipeline_settings(id, stage TEXT, system_prompt TEXT, user_prompt_template TEXT, model TEXT, updated_at)`
-- Stage values: `cleanup`, `summarization`
-- `text_cleaner.py`: load prompts from DB at call time (or cache with TTL)
-- API: `GET /api/settings` → `{cleanup: {...}, summarization: {...}}`
-- API: `PUT /api/settings/{stage}` → updates one stage
-- Migration: `CREATE TABLE IF NOT EXISTS pipeline_settings (...)`
+- `localStorage` key: `yt_summarizer_auto_pipeline`
+- Pass `autoPipeline: boolean` to ProcessingPage via router state or encode in URL query param
+- Ollama online/offline: read from health check (already available via StatusBar)
 
 ---
 
-### US-1003: Select Model Per Stage
+### US-902: Processing Page Shows Extended Pipeline Status
 
-**Title**: User can choose a different Ollama model for cleanup vs summarization
+**Title**: Processing page reflects cleanup phase when auto-pipeline is active
 
 **User Story**:
 ```
 As a user
-I want to use AYA for cleanup and Qwen for summarization
-So that each stage uses the best model for its task
+I want to see the pipeline progressing through all stages
+So that I know what's happening at each step
 ```
 
 **Acceptance Criteria**:
 
-**Given**: User is on Settings page
+**Given**: Auto-pipeline was enabled at submission
 
-**When**: User opens the model dropdown for a stage and selects a model
+**When**: Processing page is showing
 
 **Then**:
-- Model saved to `pipeline_settings` for that stage
-- Next run of that stage uses the selected model
-- Available models fetched live from Ollama (same `GET /api/models` endpoint as Epic 11)
-- Default model = `OLLAMA_MODEL` from `.env` (for both stages initially)
-- If Ollama is offline → dropdown disabled, tooltip "Ollama offline — cannot load models"
+- Stage indicators visible: "① Extracting subtitles" → "② Formatting text" → "③ Cleaning with AI…"
+- Active stage highlighted
+- Completed stages shown with ✓
+- If cleanup fails → warning shown, user still redirected to result with Subtitles tab
+
+**Edge Cases**:
+1. Ollama goes offline between extraction and cleanup → show warning, open Subtitles tab
+2. User navigates away during cleanup → cleanup continues in background (existing polling mechanism)
 
 **Notes for Engineering**:
-- `text_cleaner.py`: `clean_text(text, model=None)` — `model` param; if None, read from `pipeline_settings` table (stage=`cleanup`); if not in DB, fall back to `settings.ollama_model`
-- `text_summarizer.py` (Phase 2): same pattern for `stage=summarization`
+- Processing page currently polls `/api/status/{task_id}`
+- When status = `completed` AND `autoPipeline = true`:
+  1. POST `/api/result/{video_id}/cleanup`
+  2. Show "③ Cleaning with AI…"
+  3. Poll `/api/result/{video_id}` every 3s until `cleanup_status !== 'processing'`
+  4. Navigate to result page (Cleaned tab if done, Subtitles tab if failed)
+- No backend changes needed
 
 ---
 
-### US-1004: Reset Stage to Defaults
+### US-903: Result Page Opens on Correct Tab After Auto-Pipeline
 
-**Title**: User can reset a stage's settings to factory defaults
+**Title**: Result page defaults to Cleaned tab when auto-pipeline completed successfully
 
 **User Story**:
 ```
 As a user
-I want a "Reset to defaults" button
-So that I can recover if I've made the prompts worse
+I want to land on the Cleaned tab automatically
+So that I immediately see the result I asked for
 ```
 
 **Acceptance Criteria**:
 
-**Given**: User has modified prompts or model for a stage
+**Given**: Auto-pipeline ran and cleanup succeeded
 
-**When**: User clicks "Reset to defaults" and confirms
+**When**: Result page opens
 
 **Then**:
-- DB row for that stage is deleted (fallback to hardcoded defaults)
-- Fields in UI refresh to show default values
-- Next run uses hardcoded defaults from source
+- Cleaned tab is active by default (not Subtitles)
+- This already works via existing logic (`cleanup_status === 'done'` → default to Cleaned tab)
+
+**Notes for Engineering**:
+- No additional changes needed — `setActiveTab` logic in ResultPage already handles this
+- Verify: `data.cleanup_status === 'done' ? 'cleaned' : 'subtitles'` in `loadResult(switchTab=true)`
 
 ---
-
-## DB Schema
-
-```sql
-CREATE TABLE IF NOT EXISTS pipeline_settings (
-    id          TEXT PRIMARY KEY,
-    stage       TEXT NOT NULL UNIQUE,   -- 'cleanup' | 'summarization'
-    system_prompt       TEXT,
-    user_prompt_template TEXT,
-    model               TEXT,
-    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/settings` | All stage settings (cleanup + summarization) |
-| PUT | `/api/settings/cleanup` | Save cleanup stage settings |
-| PUT | `/api/settings/summarization` | Save summarization stage settings |
-| DELETE | `/api/settings/{stage}` | Reset stage to defaults |
-| GET | `/api/models` | Available Ollama models (live) |
 
 ## Dependencies
 
-- Epic 6 (cleanup pipeline exists)
-- US-604 (Ollama health check)
-- Phase 2 Epic 12 (summarization stage — settings page prepares for it)
+- Epic 6 (cleanup endpoint + polling)
+- US-604 (health check for Ollama status)
 
 ## Status
 

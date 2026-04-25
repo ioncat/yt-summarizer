@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Vision**: Reduce cognitive load by allowing users to scan video content before deciding whether to watch in detail.
 
-**Current Phase**: Phase 1.5 — LLM Text Cleanup (Phase 1 complete, Phase 2 summarization next)
+**Current Phase**: Phase 1.5 — LLM Text Cleanup (Epic 6 ✅, Epic 7 ✅, Epic 8 next)
 
 ---
 
@@ -36,13 +36,21 @@ All 5 epics done. Full stack running:
 
 ### 🔄 Phase 1.5: LLM Text Cleanup — IN PROGRESS
 
-Optional cleanup step via Ollama (local, no API key). Runs after `text_formatter`, before saving to DB.
+#### Epic 6 ✅ — Manual AI Cleanup
 - `text_cleaner.py` sends each paragraph to Ollama `/api/chat` with editing instructions
-- Model: `cas/aya-expanse-8b` (configurable via `OLLAMA_MODEL` in `.env`)
-- If Ollama is unreachable — pipeline continues, `cleaned_text = null`
-- DB: `subtitles_formatted.cleaned_text` (nullable Text column, auto-migrated)
-- API: `POST /api/process` accepts `enable_cleanup: bool`
-- Frontend: checkbox on submit + toggle Original/Cleaned on result page
+- Model configurable via `config.py` (`ollama_model`), overridable per-stage via Settings
+- If Ollama unreachable — `cleaned_text = null`, `cleanup_status = null`
+- DB: `subtitles_formatted.cleaned_text` + `cleanup_status` (null | processing | done | failed)
+- API: `POST /api/result/{video_id}/cleanup` — triggers background cleanup
+- API: `GET /api/health` — returns `{backend, ollama}` status
+- Frontend: "✦ Clean with AI" button → polling → Cleaned tab; StatusBar in nav (two dots)
+
+#### Epic 7 ✅ — Settings Page
+- `pipeline_settings` DB table: per-stage system_prompt, user_prompt_template, model
+- Service layer: `get_all_settings`, `save_stage_settings`, `reset_stage_settings`
+- API: `GET /api/settings`, `PUT /api/settings/{stage}`, `DELETE /api/settings/{stage}`, `GET /api/models`
+- Frontend: `/settings` page — Cleanup (editable) + Summarization (locked, Phase 2)
+- `text_cleaner.py` reads prompts/model from DB via `_run_cleanup`; falls back to `DEFAULT_*` constants
 
 ### 🔮 Phase 2: LLM Summarization
 Map-reduce summarization pipeline. See `docs/phase2-architecture.md`. Uses same Ollama infra as Phase 1.5.
@@ -90,18 +98,19 @@ yt-summarizer/
 │   ├── models/
 │   │   ├── database.py              # Async engine, session factory, init_db()
 │   │   └── models.py                # ORM: Video, SubtitleRaw, SubtitleFormatted, ProcessingTask
-│   ├── routers/api.py               # 5 REST endpoints
+│   ├── routers/api.py               # 11 REST endpoints
 │   └── services/
 │       ├── subtitle_extractor.py    # yt-dlp wrapper, VTT parser, error classification
 │       ├── text_formatter.py        # Overlap dedup + time-gap paragraph splitting
-│       ├── text_cleaner.py          # Ollama HTTP client, paragraph-by-paragraph LLM cleanup
-│       └── video_service.py         # DB CRUD, task lifecycle
+│       ├── text_cleaner.py          # Ollama HTTP client, paragraph-by-paragraph LLM cleanup; DEFAULT_* prompt constants
+│       └── video_service.py         # DB CRUD, task lifecycle, pipeline settings CRUD
 ├── frontend/
 │   ├── src/
 │   │   ├── api.ts                   # Typed fetch wrappers for all endpoints
 │   │   ├── App.tsx                  # Routes
 │   │   ├── index.css                # All styles
-│   │   └── pages/                   # HomePage, ProcessingPage, ResultPage, HistoryPage
+│   │   ├── components/StatusBar.tsx # Backend + Ollama health dots in nav
+│   │   └── pages/                   # HomePage, ProcessingPage, ResultPage, HistoryPage, SettingsPage
 │   ├── vite.config.ts               # Port 3000, proxy /api → localhost:8000
 │   └── Dockerfile                   # Multi-stage: Node builder → nginx
 ├── data/
@@ -121,11 +130,17 @@ yt-summarizer/
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/process` | Submit URL + language + `enable_cleanup` → returns task_id, video_id |
+| POST | `/api/process` | Submit URL + language → returns task_id, video_id |
 | GET | `/api/status/{task_id}` | Poll status; returns `available_languages` on language error |
-| GET | `/api/result/{video_id}` | Formatted subtitle text + metadata |
+| GET | `/api/result/{video_id}` | Formatted subtitle text + metadata + cleanup_status |
 | GET | `/api/history?page=N` | Paginated history (20 per page) |
 | DELETE | `/api/result/{video_id}` | Delete video + all related data |
+| POST | `/api/result/{video_id}/cleanup` | Trigger background AI cleanup |
+| GET | `/api/health` | `{backend: true, ollama: true/false}` |
+| GET | `/api/settings` | All stage settings (cleanup + summarization) |
+| PUT | `/api/settings/{stage}` | Save settings for a stage |
+| DELETE | `/api/settings/{stage}` | Reset stage to hardcoded defaults |
+| GET | `/api/models` | Available Ollama models (live from Ollama) |
 
 ---
 
@@ -144,6 +159,12 @@ yt-summarizer/
 **DB note**: `scalar_one_or_none()` on SubtitleFormatted/Video queries crashes when a video is reprocessed. Always use `.scalars().first()` with `.order_by(created_at.desc())`.
 
 **DB migrations**: No Alembic. `database.py` has `_migrate_db()` — checks `PRAGMA table_info` and runs `ALTER TABLE ... ADD COLUMN` for any new columns. Add entries there when extending the schema.
+
+**⚠️ DB backup rule**: Before ANY schema change (new column, new table, model change) — back up the database first:
+```bash
+copy data\db\yt_summarizer.sqlite data\db\yt_summarizer.sqlite.bak
+```
+Do this BEFORE restarting the backend with new model/migration code. No exceptions.
 
 **Ollama integration**: `text_cleaner.py` calls `POST {OLLAMA_URL}/api/chat`. First does a lightweight `GET /api/tags` to check availability — returns `None` silently if Ollama is down. Model and URL configured via `OLLAMA_URL` / `OLLAMA_MODEL` in `.env`. Same client reused for Phase 2 summarization.
 

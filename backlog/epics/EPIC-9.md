@@ -1,133 +1,69 @@
-# Epic 9: Auto-Pipeline Toggle
+# Epic 9: Per-Tab Character Count
 
 ## Summary
-A checkbox on the Home page — "Run full pipeline automatically" — that, when checked, automatically triggers AI cleanup immediately after subtitle extraction completes. The user submits the URL once and gets the cleaned result without manually pressing "Clean with AI" on the result page.
-
-**Important constraint**: The Summary stage (Phase 2) is not yet implemented. Auto-pipeline covers only Extract → Format → Cleanup. Summary will be added to the auto-pipeline when Phase 2 is ready.
+Currently the Result page shows a single `Characters:` count for the whole video. With two tabs (Subtitles and Cleaned), each may have different character counts — the cleaned version is typically shorter (filler words removed). Show the count for whichever tab is active.
 
 ## Business Value
-For users who always want the cleaned version, the current two-step flow (submit → wait → go to result → click "Clean with AI" → wait again) is tedious. The checkbox collapses this into a single submit action.
+Character count helps users estimate reading time and content density. Showing the count for the current tab makes it immediately meaningful — e.g. "Cleanup removed 800 characters of filler."
 
 ## Scope
 
 ### Included
-- Checkbox on Home page: "Run full pipeline automatically (Extract + AI Cleanup)"
-- Checkbox state persisted in `localStorage`
-- Processing page shows extended status: "Extracting… → Formatting… → Cleaning with AI…"
-- Auto-cleanup triggered from frontend when extraction completes (Processing page polls, detects completion, fires cleanup POST)
-- Result page opens on Cleaned tab when auto-pipeline was used
+- Character count in the metadata block updates when the user switches tabs
+- Backend returns both `char_count` (formatted text) and `cleaned_char_count` (cleaned text)
+- "Characters" label stays in the same position in the meta row
 
 ### Not Included
-- Auto-summary (Phase 2 not ready)
-- Server-side pipeline chaining (frontend orchestrates for now — simpler, no backend changes)
-- Background processing without the Processing page (requires push notifications)
+- Word count, sentence count, reading time estimate (future US)
+- Diff view showing what was removed (future)
 
 ---
 
 ## User Stories
 
-### US-901: Auto-Pipeline Checkbox on Home Page
+### US-801: Show Character Count for Active Tab
 
-**Title**: User opts into automatic cleanup at submission time
-
-**User Story**:
-```
-As a user
-I want to check a box before submitting
-So that cleanup runs automatically without extra steps
-```
-
-**Acceptance Criteria**:
-
-**Given**: User is on the Home page
-
-**When**: Page loads
-
-**Then**:
-- Checkbox below language selector: "☐ Run AI cleanup automatically"
-- Default: unchecked (current behaviour preserved)
-- State saved in `localStorage` (remembered across sessions)
-- Small hint text: "Runs after extraction. Requires Ollama."
-- Checkbox disabled with tooltip if Ollama is offline (health check)
-
-**Notes for Engineering**:
-- `localStorage` key: `yt_summarizer_auto_pipeline`
-- Pass `autoPipeline: boolean` to ProcessingPage via router state or encode in URL query param
-- Ollama online/offline: read from health check (already available via StatusBar)
-
----
-
-### US-902: Processing Page Shows Extended Pipeline Status
-
-**Title**: Processing page reflects cleanup phase when auto-pipeline is active
+**Title**: Character count reflects the currently visible text
 
 **User Story**:
 ```
 As a user
-I want to see the pipeline progressing through all stages
-So that I know what's happening at each step
+I want to see the character count for the text I'm currently reading
+So that I can compare the length of the original and cleaned versions
 ```
 
 **Acceptance Criteria**:
 
-**Given**: Auto-pipeline was enabled at submission
+**Given**: Result page is open
 
-**When**: Processing page is showing
+**When**: User switches between Subtitles and Cleaned tabs
 
 **Then**:
-- Stage indicators visible: "① Extracting subtitles" → "② Formatting text" → "③ Cleaning with AI…"
-- Active stage highlighted
-- Completed stages shown with ✓
-- If cleanup fails → warning shown, user still redirected to result with Subtitles tab
+- "Characters:" in the metadata row updates to reflect active tab's text length
+- Subtitles tab → count of `formatted_text`
+- Cleaned tab → count of `cleaned_text`
+- If Cleaned text doesn't exist yet → shows Subtitles count regardless of tab
 
 **Edge Cases**:
-1. Ollama goes offline between extraction and cleanup → show warning, open Subtitles tab
-2. User navigates away during cleanup → cleanup continues in background (existing polling mechanism)
+1. Cleanup running → show Subtitles count (Cleaned not ready)
+2. Cleanup failed → show Subtitles count
+3. `cleaned_text` length = 0 → show 0, not Subtitles count
 
 **Notes for Engineering**:
-- Processing page currently polls `/api/status/{task_id}`
-- When status = `completed` AND `autoPipeline = true`:
-  1. POST `/api/result/{video_id}/cleanup`
-  2. Show "③ Cleaning with AI…"
-  3. Poll `/api/result/{video_id}` every 3s until `cleanup_status !== 'processing'`
-  4. Navigate to result page (Cleaned tab if done, Subtitles tab if failed)
-- No backend changes needed
-
----
-
-### US-903: Result Page Opens on Correct Tab After Auto-Pipeline
-
-**Title**: Result page defaults to Cleaned tab when auto-pipeline completed successfully
-
-**User Story**:
-```
-As a user
-I want to land on the Cleaned tab automatically
-So that I immediately see the result I asked for
-```
-
-**Acceptance Criteria**:
-
-**Given**: Auto-pipeline ran and cleanup succeeded
-
-**When**: Result page opens
-
-**Then**:
-- Cleaned tab is active by default (not Subtitles)
-- This already works via existing logic (`cleanup_status === 'done'` → default to Cleaned tab)
-
-**Notes for Engineering**:
-- No additional changes needed — `setActiveTab` logic in ResultPage already handles this
-- Verify: `data.cleanup_status === 'done' ? 'cleaned' : 'subtitles'` in `loadResult(switchTab=true)`
+- Add `cleaned_char_count: number | null` to `ResultResponse` API schema
+- In `get_result()` (video_service.py): add `"cleaned_char_count": len(fmt.cleaned_text) if fmt and fmt.cleaned_text else None`
+- In `ResultPage.tsx`: `const displayCount = activeTab === 'cleaned' && result.cleaned_char_count != null ? result.cleaned_char_count : result.char_count`
+- Replace `{result.char_count.toLocaleString()}` with `{displayCount?.toLocaleString()}`
+- No DB migration needed — count computed on the fly
 
 ---
 
 ## Dependencies
 
-- Epic 6 (cleanup endpoint + polling)
-- US-604 (health check for Ollama status)
+- Epic 6 (Cleaned tab, `cleanup_status`)
+- Epic 5 (Result page meta block)
 
 ## Status
 
-**Status**: 🔵 Planned  
+**Status**: 🟡 Next  
 **Priority**: 🟡 P2

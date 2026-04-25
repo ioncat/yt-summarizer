@@ -14,6 +14,8 @@ Time analysis based on git history (commit timestamps).
 | 2026-04-18 | 13 | Full project bootstrap: discovery docs, repo structure, FastAPI backend, DB models, subtitle extractor (yt-dlp, cookies, 429 fix), text formatter, DB service layer, REST API (5 endpoints), Phase 2 architecture docs | ~1 h 35 min (15:06–16:41) |
 | 2026-04-18 | — | Frontend (React + TypeScript + Vite, 4 pages), language UX feature (available-language buttons on error), multiple backend bug fixes (duplicate video rows, FK cascade on ORM delete, scalar_one_or_none on multi-row results, stale pending cleanup) | ~3 h |
 | 2026-04-25 | 3 | .gitignore cleanup (untrack Claude local config), one-click dev launchers (start.vbs / start.sh), fix .env.example (CORS_ORIGINS JSON format, correct data/ paths) | ~30 min |
+| 2026-04-25 | — | **Epic 6**: AI cleanup refactored to manual button (POST /cleanup, polling, cleanup_status field, Re-run support); StatusBar (health dots for backend + Ollama); tab CSS fix; backlog restructure (Epics 6–11); README/docs cleanup; config cleanup (OLLAMA_MODEL removed from .env) | ~3 h |
+| 2026-04-25 | — | **Epic 7**: Settings Page — PipelineSettings model, service CRUD, API endpoints (GET/PUT/DELETE /settings, GET /models), SettingsPage.tsx with editable Cleanup + locked Summarization panels; text_cleaner.py wired to DB settings; tab switching bug fixed; backup rule added | ~2 h |
 
 *Table updated after each session.*
 
@@ -28,7 +30,9 @@ Time analysis based on git history (commit timestamps).
 | Phase 1 — Docs (Phase 2 architecture) | 3 | ~20 min |
 | Phase 1 — Frontend + Language UX + bug fixes | — | ~3 h |
 | Tooling — launchers, .gitignore, .env fixes | 3 | ~30 min |
-| **Total** | **16+** | **~5 h 5 min** |
+| Phase 1.5 — Epic 6: AI Cleanup (manual, polling, health check) | — | ~3 h |
+| Phase 1.5 — Epic 7: Settings Page (prompts + models per stage) | — | ~2 h |
+| **Total** | **16+** | **~10 h 5 min** |
 
 ---
 
