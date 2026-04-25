@@ -97,6 +97,41 @@ OLLAMA_URL=http://localhost:11434
 OLLAMA_MODEL=cas/aya-expanse-8b
 ```
 
+### Ollama setup (AI text cleanup)
+
+Text cleanup runs locally via [Ollama](https://ollama.com) — no API keys, no data leaves the machine.
+
+**1. Install Ollama**
+Download and run the installer from [ollama.com](https://ollama.com/download).
+
+**2. Pull a model**
+```bash
+ollama pull cas/aya-expanse-8b        # recommended — multilingual, 5 GB
+```
+
+**3. Set the model in `.env`**
+```env
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=cas/aya-expanse-8b
+```
+
+To switch models — change one line and restart the backend:
+```env
+OLLAMA_MODEL=hf.co/CohereLabs/tiny-aya-water-GGUF:F16
+```
+
+**Tested models**
+
+| Model | Size | Languages | Notes |
+|-------|------|-----------|-------|
+| `cas/aya-expanse-8b` | 5 GB | 23 | Recommended. Strong instruction following, good Russian |
+| `hf.co/CohereLabs/tiny-aya-water-GGUF:F16` | 6.7 GB | 67 | Newer Cohere model, experimental |
+| `hf.co/CohereLabs/tiny-aya-water-GGUF:Q8_0` | ~3.5 GB | 67 | Quantized, faster |
+
+**If Ollama is not running** — the pipeline completes normally, the "Cleaned" tab is shown as greyed-out with a tooltip explaining why.
+
+---
+
 ### Cookies setup
 
 YouTube blocks yt-dlp without valid cookies. To export:
