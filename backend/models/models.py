@@ -62,6 +62,7 @@ class SubtitleFormatted(Base):
     language: Mapped[str | None] = mapped_column(String)
     formatted_text: Mapped[str | None] = mapped_column(Text)  # Markdown
     cleaned_text: Mapped[str | None] = mapped_column(Text)    # LLM-cleaned version
+    cleanup_status: Mapped[str | None] = mapped_column(String(20))  # null | processing | done | failed
     text_length: Mapped[int | None] = mapped_column(Integer)
     processing_status: Mapped[str | None] = mapped_column(String)  # success | error | pending
     processing_error: Mapped[str | None] = mapped_column(Text)

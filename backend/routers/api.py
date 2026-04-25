@@ -17,9 +17,11 @@ from services.video_service import (
     complete_task,
     create_pending_task,
     delete_video,
+    finish_cleanup,
     get_history,
     get_result,
     get_task,
+    set_cleanup_processing,
     update_task_failed,
 )
 
@@ -47,8 +49,7 @@ async def _run_processing(task_id: str, url: str, language: str) -> None:
                 )
                 return
             formatted = format_subtitles(extraction.subtitles)
-            cleaned = await clean_text(formatted["formatted_text"])
-            await complete_task(db, task_id, url, extraction, formatted, cleaned_text=cleaned)
+            await complete_task(db, task_id, url, extraction, formatted)
 
     except Exception as e:
         async with AsyncSessionLocal() as db:
@@ -109,6 +110,49 @@ async def list_history(
     page: int = 1,
 ):
     return await get_history(db, page=page)
+
+
+async def _run_cleanup(video_id: str) -> None:
+    """Background task: run LLM cleanup and persist result."""
+    from models.database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        fmt = await get_result(db, video_id)
+        if not fmt or not fmt.get("formatted_text"):
+            return
+        formatted_text = fmt["formatted_text"]
+
+    cleaned = await clean_text(formatted_text)
+
+    async with AsyncSessionLocal() as db:
+        await finish_cleanup(db, video_id, cleaned)
+
+
+@router.post("/result/{video_id}/cleanup")
+async def trigger_cleanup(
+    video_id: str,
+    background_tasks: BackgroundTasks,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    ok = await set_cleanup_processing(db, video_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Result not found")
+    background_tasks.add_task(_run_cleanup, video_id)
+    return {"status": "processing"}
+
+
+@router.get("/health")
+async def health_check():
+    """Returns backend status and Ollama availability."""
+    import httpx
+    ollama_ok = False
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(f"{settings.ollama_url}/api/tags")
+            ollama_ok = resp.status_code == 200
+    except Exception:
+        pass
+    return {"backend": True, "ollama": ollama_ok}
 
 
 @router.delete("/result/{video_id}")

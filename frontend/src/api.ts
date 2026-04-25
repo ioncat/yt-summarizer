@@ -22,7 +22,7 @@ export interface ResultResponse {
   language: string | null
   formatted_text: string | null
   cleaned_text: string | null
-  cleanup_status: 'done' | 'unavailable'
+  cleanup_status: 'processing' | 'done' | 'failed' | null
   char_count: number | null
   created_at: string
 }
@@ -75,4 +75,20 @@ export async function getHistory(page = 1): Promise<HistoryResponse> {
 export async function deleteResult(videoId: string): Promise<void> {
   const res = await fetch(`${BASE}/result/${videoId}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete')
+}
+
+export async function startCleanup(videoId: string): Promise<void> {
+  const res = await fetch(`${BASE}/result/${videoId}/cleanup`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to start cleanup')
+}
+
+export interface HealthResponse {
+  backend: boolean
+  ollama: boolean
+}
+
+export async function getHealth(): Promise<HealthResponse> {
+  const res = await fetch(`${BASE}/health`)
+  if (!res.ok) throw new Error('Backend unreachable')
+  return res.json()
 }

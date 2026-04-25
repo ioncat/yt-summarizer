@@ -56,7 +56,6 @@ async def complete_task(
     url: str,
     extraction_result: ExtractionResult,
     formatted: dict,
-    cleaned_text: str | None = None,
 ) -> None:
     # Find pending task and its placeholder video
     task_stmt = select(ProcessingTask).where(ProcessingTask.id == task_id)
@@ -111,7 +110,6 @@ async def complete_task(
         video_id=video.id,
         language=extraction_result.language,
         formatted_text=formatted["formatted_text"],
-        cleaned_text=cleaned_text,
         text_length=formatted["char_count"],
         processing_status="success",
     ))
@@ -157,7 +155,6 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
     )
     fmt = (await db.execute(fmt_stmt)).scalars().first()
 
-    cleaned = fmt.cleaned_text if fmt else None
     return {
         "video_id": video.video_id,
         "url": video.url,
@@ -166,8 +163,8 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
         "duration": video.duration,
         "language": fmt.language if fmt else None,
         "formatted_text": fmt.formatted_text if fmt else None,
-        "cleaned_text": cleaned,
-        "cleanup_status": "done" if cleaned else "unavailable",
+        "cleaned_text": fmt.cleaned_text if fmt else None,
+        "cleanup_status": fmt.cleanup_status if fmt else None,
         "char_count": fmt.text_length if fmt else None,
         "created_at": video.created_at.isoformat(),
     }
@@ -196,6 +193,48 @@ async def get_history(db: AsyncSession, page: int = 1, page_size: int = 20) -> d
             for v in rows
         ],
     }
+
+
+async def get_formatted_subtitle(db: AsyncSession, video_id: str) -> SubtitleFormatted | None:
+    """Return the latest SubtitleFormatted row for a video_id."""
+    stmt = (
+        select(Video)
+        .where(Video.video_id == video_id, ~Video.url.startswith("__pending__"))
+    )
+    video = (await db.execute(stmt)).scalars().first()
+    if not video:
+        return None
+    fmt_stmt = (
+        select(SubtitleFormatted)
+        .where(SubtitleFormatted.video_id == video.id)
+        .order_by(SubtitleFormatted.created_at.desc())
+    )
+    return (await db.execute(fmt_stmt)).scalars().first()
+
+
+async def set_cleanup_processing(db: AsyncSession, video_id: str) -> bool:
+    """Mark cleanup as in progress. Returns False if record not found."""
+    fmt = await get_formatted_subtitle(db, video_id)
+    if not fmt:
+        return False
+    fmt.cleanup_status = "processing"
+    fmt.cleaned_text = None
+    await db.commit()
+    return True
+
+
+async def finish_cleanup(db: AsyncSession, video_id: str, cleaned_text: str | None) -> None:
+    """Store cleanup result and update status."""
+    fmt = await get_formatted_subtitle(db, video_id)
+    if not fmt:
+        return
+    if cleaned_text:
+        fmt.cleaned_text = cleaned_text
+        fmt.cleanup_status = "done"
+    else:
+        fmt.cleaned_text = None
+        fmt.cleanup_status = "failed"
+    await db.commit()
 
 
 async def delete_video(db: AsyncSession, video_id: str) -> bool:

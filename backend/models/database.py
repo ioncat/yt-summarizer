@@ -26,6 +26,7 @@ async def _migrate_db() -> None:
     from sqlalchemy import text
     migrations = [
         ("subtitles_formatted", "cleaned_text", "ALTER TABLE subtitles_formatted ADD COLUMN cleaned_text TEXT"),
+        ("subtitles_formatted", "cleanup_status", "ALTER TABLE subtitles_formatted ADD COLUMN cleanup_status TEXT"),
     ]
     async with engine.begin() as conn:
         for table, column, sql in migrations:

@@ -11,6 +11,12 @@ RESET='\033[0m'
 
 echo -e "${CYAN}YT Summarizer — starting...${RESET}"
 
+# ── Освобождаем порты ────────────────────────────────────────────────────────
+for port in 8000 3000; do
+    pid=$(lsof -ti:"$port" 2>/dev/null)
+    [ -n "$pid" ] && kill -9 $pid 2>/dev/null && echo "Killed stale process on :$port (pid $pid)"
+done
+
 # ── Backend ──────────────────────────────────────────────────────────────────
 cd "$ROOT/backend"
 

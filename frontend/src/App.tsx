@@ -3,6 +3,7 @@ import HomePage from './pages/HomePage'
 import ProcessingPage from './pages/ProcessingPage'
 import ResultPage from './pages/ResultPage'
 import HistoryPage from './pages/HistoryPage'
+import StatusBar from './components/StatusBar'
 
 export default function App() {
   return (
@@ -11,6 +12,7 @@ export default function App() {
         <NavLink to="/" className="logo">YT Summarizer</NavLink>
         <NavLink to="/">New</NavLink>
         <NavLink to="/history">History</NavLink>
+        <StatusBar />
       </nav>
       <Routes>
         <Route path="/" element={<HomePage />} />
