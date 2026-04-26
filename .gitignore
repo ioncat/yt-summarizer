@@ -3,6 +3,8 @@
 # ========================
 data/db/*.sqlite
 data/db/*.sqlite3
+data/db/*.sqlite.bak
+data/db/*.sqlite.bak*
 data/db/*.db
 *.sqlite
 *.sqlite3
