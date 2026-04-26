@@ -315,21 +315,25 @@ export default function ResultPage() {
               </span></div>
             ) : null
           })()}
-          {result.cleanup_status === 'processing' && cleanupElapsedSeconds != null ? (
-            <div className="meta-item">Cleaning: <span>{formatDuration(cleanupElapsedSeconds)}</span></div>
-          ) : cleanupDuration != null && (
-            <div className="meta-item">
-              Cleaned in: <span>{formatDuration(cleanupDuration)}</span>
-              {result.cleanup_model && <span className="meta-model"> · {result.cleanup_model}</span>}
-            </div>
+          {activeTab === 'cleaned' && (
+            result.cleanup_status === 'processing' && cleanupElapsedSeconds != null ? (
+              <div className="meta-item">Cleaning: <span>{formatDuration(cleanupElapsedSeconds)}</span></div>
+            ) : cleanupDuration != null ? (
+              <div className="meta-item">
+                Cleaned in: <span>{formatDuration(cleanupDuration)}</span>
+                {result.cleanup_model && <span className="meta-model"> · {result.cleanup_model}</span>}
+              </div>
+            ) : null
           )}
-          {result.summary_status === 'processing' && summaryElapsedSeconds != null ? (
-            <div className="meta-item">Summarizing: <span>{formatDuration(summaryElapsedSeconds)}</span></div>
-          ) : summaryDuration != null && (
-            <div className="meta-item">
-              Summarized in: <span>{formatDuration(summaryDuration)}</span>
-              {result.summary_model && <span className="meta-model"> · {result.summary_model}</span>}
-            </div>
+          {activeTab === 'summary' && (
+            result.summary_status === 'processing' && summaryElapsedSeconds != null ? (
+              <div className="meta-item">Summarizing: <span>{formatDuration(summaryElapsedSeconds)}</span></div>
+            ) : summaryDuration != null ? (
+              <div className="meta-item">
+                Summarized in: <span>{formatDuration(summaryDuration)}</span>
+                {result.summary_model && <span className="meta-model"> · {result.summary_model}</span>}
+              </div>
+            ) : null
           )}
           <div className="meta-item">Saved: <span>{formatDate(result.created_at)}</span></div>
         </div>
@@ -338,32 +342,61 @@ export default function ResultPage() {
           <button className="btn btn-secondary" onClick={handleCopy}>
             {copied ? 'Copied!' : 'Copy text'}
           </button>
-          <select
-            className="model-select-inline"
-            value={cleanupModel}
-            onChange={e => handleCleanupModelChange(e.target.value)}
-            disabled={models.length === 0}
-            title={models.length === 0 ? 'Ollama offline — cannot load models' : 'Model for AI cleanup'}
-          >
-            <option value="">— cleanup model —</option>
-            {models.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-          {result.cleanup_status === 'processing' ? (
-            <button className="btn btn-secondary" onClick={handleCancelCleanup}>✕ Stop</button>
-          ) : (
-            <button className="btn btn-ai" onClick={handleCleanup}>
-              {result.cleanup_status === 'done' ? '↺ Re-run AI cleanup' : '✦ Clean with AI'}
-            </button>
-          )}
-          <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
+
+          {activeTab === 'cleaned' && (<>
+            <select
+              className="model-select-inline"
+              value={cleanupModel}
+              onChange={e => handleCleanupModelChange(e.target.value)}
+              disabled={models.length === 0}
+              title={models.length === 0 ? 'Ollama offline — cannot load models' : 'Model for AI cleanup'}
+            >
+              <option value="">— cleanup model —</option>
+              {models.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+            {result.cleanup_status === 'processing' ? (
+              <button className="btn btn-secondary" onClick={handleCancelCleanup}>✕ Stop</button>
+            ) : (
+              <button className="btn btn-ai" onClick={handleCleanup}>
+                {result.cleanup_status === 'done' ? '↺ Re-run AI cleanup' : '✦ Clean with AI'}
+              </button>
+            )}
+          </>)}
+
+          {activeTab === 'summary' && (<>
+            <select
+              className="model-select-inline"
+              value={summaryModel}
+              onChange={e => handleSummaryModelChange(e.target.value)}
+              disabled={models.length === 0}
+              title={models.length === 0 ? 'Ollama offline — cannot load models' : 'Model for summarization'}
+            >
+              <option value="">— summary model —</option>
+              {models.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+            {result.summary_status === 'processing' ? (
+              <button className="btn btn-secondary" onClick={handleCancelSummary}>✕ Stop</button>
+            ) : (
+              <button className="btn btn-ai" onClick={handleSummarize}>
+                {result.summary_status === 'done' ? '↺ Re-run summary' : '✦ Summarize'}
+              </button>
+            )}
+          </>)}
+
           <a className="btn btn-secondary" href={result.url} target="_blank" rel="noreferrer">
             Open video
           </a>
+          <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
         </div>
 
-        {(result.cleanup_status === 'failed' || cleanupError) && (
+        {activeTab === 'cleaned' && (result.cleanup_status === 'failed' || cleanupError) && (
           <div className="cleanup-error">
             {cleanupError || 'Cleanup failed — make sure Ollama is running and a model is selected.'}
+          </div>
+        )}
+        {activeTab === 'summary' && (result.summary_status === 'failed' || summaryError) && (
+          <div className="cleanup-error">
+            {summaryError || 'Summarization failed — make sure Ollama is running and a model is selected.'}
           </div>
         )}
 
@@ -394,30 +427,6 @@ export default function ResultPage() {
 
         {activeTab === 'summary' ? (
           <>
-            <div className="summary-actions">
-              <select
-                className="model-select-inline"
-                value={summaryModel}
-                onChange={e => handleSummaryModelChange(e.target.value)}
-                disabled={models.length === 0}
-                title={models.length === 0 ? 'Ollama offline — cannot load models' : 'Model for summarization'}
-              >
-                <option value="">— summary model —</option>
-                {models.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-              {result.summary_status === 'processing' ? (
-                <button className="btn btn-secondary" onClick={handleCancelSummary}>✕ Stop</button>
-              ) : (
-                <button className="btn btn-ai" onClick={handleSummarize}>
-                  {result.summary_status === 'done' ? '↺ Re-run summary' : '✦ Summarize'}
-                </button>
-              )}
-            </div>
-            {(result.summary_status === 'failed' || summaryError) && (
-              <div className="cleanup-error">
-                {summaryError || 'Summarization failed — make sure Ollama is running and a model is selected.'}
-              </div>
-            )}
             {!result.summary_text ? (
               <div className="empty">
                 {result.summary_status === 'processing'
