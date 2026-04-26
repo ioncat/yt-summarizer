@@ -328,6 +328,5 @@ So that the interface works in my preferred language
 
 ## Status
 
-**Status**: 🟡 Ready for Implementation  
-**Owner**: TBD  
+**Status**: ✅ Done  
 **Priority**: 🔴 P0 (Critical)

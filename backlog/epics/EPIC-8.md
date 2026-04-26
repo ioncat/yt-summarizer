@@ -92,6 +92,6 @@ So that the content is easy to read
 
 ## Status
 
-**Status**: 🔵 Planned — depends on Epic 10  
+**Status**: ❌ Dropped  
 **Priority**: 🟠 P1  
-**Note**: US-701 (prompt update) is replaced by the default prompt set in Epic 10 Settings page. Only US-702 (react-markdown renderer) remains as a code task.
+**Note**: Tested react-markdown + Markdown prompt rule — LLM output inconsistent. Plain text rendering retained.

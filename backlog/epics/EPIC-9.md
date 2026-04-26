@@ -65,5 +65,6 @@ So that I can compare the length of the original and cleaned versions
 
 ## Status
 
-**Status**: 🟡 Next  
+**Status**: ✅ Done  
+**Completed**: 2026-04-26  
 **Priority**: 🟡 P2
