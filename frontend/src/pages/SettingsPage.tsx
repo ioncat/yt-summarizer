@@ -357,7 +357,6 @@ export default function SettingsPage() {
               initial={summarization}
               models={models}
               modelsOnline={modelsOnline}
-              locked
             />
           )}
         </div>

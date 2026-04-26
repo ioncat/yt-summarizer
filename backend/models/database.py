@@ -29,6 +29,12 @@ async def _migrate_db() -> None:
         ("subtitles_formatted", "cleanup_status", "ALTER TABLE subtitles_formatted ADD COLUMN cleanup_status TEXT"),
         ("subtitles_formatted", "cleanup_started_at", "ALTER TABLE subtitles_formatted ADD COLUMN cleanup_started_at DATETIME"),
         ("subtitles_formatted", "cleanup_finished_at", "ALTER TABLE subtitles_formatted ADD COLUMN cleanup_finished_at DATETIME"),
+        ("subtitles_formatted", "cleanup_model", "ALTER TABLE subtitles_formatted ADD COLUMN cleanup_model TEXT"),
+        ("subtitles_formatted", "summary_text", "ALTER TABLE subtitles_formatted ADD COLUMN summary_text TEXT"),
+        ("subtitles_formatted", "summary_status", "ALTER TABLE subtitles_formatted ADD COLUMN summary_status TEXT"),
+        ("subtitles_formatted", "summary_started_at", "ALTER TABLE subtitles_formatted ADD COLUMN summary_started_at DATETIME"),
+        ("subtitles_formatted", "summary_finished_at", "ALTER TABLE subtitles_formatted ADD COLUMN summary_finished_at DATETIME"),
+        ("subtitles_formatted", "summary_model", "ALTER TABLE subtitles_formatted ADD COLUMN summary_model TEXT"),
     ]
     async with engine.begin() as conn:
         for table, column, sql in migrations:

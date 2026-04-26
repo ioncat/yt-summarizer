@@ -164,6 +164,8 @@ input[type="text"]:focus, select:focus { border-color: #e00; }
 }
 
 .cleanup-error { color: #b91c1c; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px; padding: 0.6rem 1rem; font-size: 0.85rem; margin-bottom: 1rem; }
+.meta-model { color: #888; font-size: 0.85em; }
+.summary-actions { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
 
 .result-tabs { display: flex; gap: 0; border-bottom: 2px solid #e0e0e0; margin-bottom: 1.2rem; }
 .result-tab { padding: 0.5rem 1.4rem; background: transparent; border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; color: #888; cursor: pointer; font-size: 0.9rem; font-weight: 500; transition: color 0.15s, border-color 0.15s; display: inline-flex; align-items: center; gap: 0.4rem; }

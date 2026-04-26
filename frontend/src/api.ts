@@ -23,7 +23,12 @@ export interface ResultResponse {
   formatted_text: string | null
   cleaned_text: string | null
   cleanup_status: 'processing' | 'done' | 'failed' | null
+  cleanup_model: string | null
   cleanup_duration_seconds: number | null
+  summary_text: string | null
+  summary_status: 'processing' | 'done' | 'failed' | null
+  summary_model: string | null
+  summary_duration_seconds: number | null
   char_count: number | null
   created_at: string
 }
@@ -81,6 +86,18 @@ export async function deleteResult(videoId: string): Promise<void> {
 
 export async function cancelCleanup(videoId: string): Promise<void> {
   await fetch(`${BASE}/result/${videoId}/cleanup`, { method: 'DELETE' })
+}
+
+export async function startSummary(videoId: string): Promise<void> {
+  const res = await fetch(`${BASE}/result/${videoId}/summary`, { method: 'POST' })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || 'Failed to start summarization')
+  }
+}
+
+export async function cancelSummary(videoId: string): Promise<void> {
+  await fetch(`${BASE}/result/${videoId}/summary`, { method: 'DELETE' })
 }
 
 export async function startCleanup(videoId: string): Promise<void> {

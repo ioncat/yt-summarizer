@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
-import { getStatus, getResult, processVideo, startCleanup } from '../api'
+import { getStatus, getResult, processVideo, startCleanup, startSummary } from '../api'
 
 const LANG_LABELS: Record<string, string> = {
   ru: 'Russian', en: 'English', uk: 'Ukrainian',
 }
 
-type Stage = 'extracting' | 'cleaning'
+type Stage = 'extracting' | 'cleaning' | 'summarizing'
 
 export default function ProcessingPage() {
   const { taskId, videoId } = useParams<{ taskId: string; videoId: string }>()
@@ -45,7 +45,29 @@ export default function ProcessingPage() {
                 if (result.cleanup_status !== 'processing') {
                   clearInterval(cleanupIntervalRef.current!)
                   cleanupIntervalRef.current = null
-                  navigate(`/result/${videoId}`)
+                  // Stage ③: try summarization (fails gracefully if model not configured)
+                  setStage('summarizing')
+                  try {
+                    await startSummary(videoId)
+                    cleanupIntervalRef.current = setInterval(async () => {
+                      try {
+                        const r = await getResult(videoId)
+                        if (r.summary_status !== 'processing') {
+                          clearInterval(cleanupIntervalRef.current!)
+                          cleanupIntervalRef.current = null
+                          navigate(`/result/${videoId}`)
+                        }
+                      } catch (err) {
+                        console.error('[Processing] summary poll failed:', err)
+                        clearInterval(cleanupIntervalRef.current!)
+                        cleanupIntervalRef.current = null
+                        navigate(`/result/${videoId}`)
+                      }
+                    }, 3000)
+                  } catch (err) {
+                    console.error('[Processing] startSummary failed:', err)
+                    setError(err instanceof Error ? err.message : 'Summarization failed to start')
+                  }
                 }
               } catch (err) {
                 console.error('[Processing] cleanup poll failed:', err)
@@ -104,7 +126,10 @@ export default function ProcessingPage() {
                     <span className="stage-icon">{stage === 'cleaning' ? <span className="tab-spinner" /> : stage === 'extracting' ? '②' : '✓'}</span>
                     <span>Cleaning with AI</span>
                   </div>
-                  {/* TODO Phase 2: add stage 'summarizing' here when Epic 15 (LLM Summarization) ships */}
+                  <div className={`pipeline-stage ${stage === 'summarizing' ? 'active' : stage !== 'summarizing' ? 'pending' : 'done'}`}>
+                    <span className="stage-icon">{stage === 'summarizing' ? <span className="tab-spinner" /> : '③'}</span>
+                    <span>Summarizing</span>
+                  </div>
                 </div>
               ) : (
                 <>

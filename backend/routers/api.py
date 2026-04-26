@@ -28,14 +28,19 @@ from services.video_service import (
     get_task,
     reset_cleanup_status,
     reset_stage_settings,
+    reset_summary_status,
     save_app_settings,
     save_stage_settings,
     set_cleanup_processing,
+    set_summary_processing,
+    finish_summary,
     update_task_failed,
 )
+from services.text_summarizer import summarize_text
 
-# In-memory cancel flags — cleared when cleanup finishes or is cancelled
+# In-memory cancel flags — cleared when cleanup/summary finishes or is cancelled
 _CANCEL_SET: set[str] = set()
+_SUMMARY_CANCEL_SET: set[str] = set()
 
 router = APIRouter(prefix="/api")
 
@@ -187,7 +192,7 @@ async def trigger_cleanup(
             status_code=400,
             detail="Ollama URL not configured. Please set it in Settings → General."
         )
-    ok = await set_cleanup_processing(db, video_id)
+    ok = await set_cleanup_processing(db, video_id, model=stage.get("model"))
     if not ok:
         raise HTTPException(status_code=404, detail="Result not found")
     _CANCEL_SET.discard(video_id)  # clear any stale cancel flag before starting
@@ -199,6 +204,71 @@ async def trigger_cleanup(
 async def cancel_cleanup(video_id: str):
     """Signal a running cleanup to stop. Status resets to null after current paragraph."""
     _CANCEL_SET.add(video_id)
+    return {"status": "cancelling"}
+
+
+async def _run_summary(video_id: str) -> None:
+    """Background task: run LLM summarization and persist result."""
+    from models.database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        fmt = await get_result(db, video_id)
+        if not fmt:
+            return
+        # Prefer cleaned text, fall back to formatted
+        source_text = fmt.get("cleaned_text") or fmt.get("formatted_text")
+        if not source_text:
+            return
+        stage = await get_stage_settings(db, "summarization")
+        ollama_url = await get_app_setting(db, "ollama_url")
+
+    summary = await summarize_text(
+        source_text,
+        system_prompt=stage.get("system_prompt"),
+        user_prompt_template=stage.get("user_prompt_template"),
+        model=stage.get("model"),
+        ollama_url=ollama_url,
+        is_cancelled=lambda: video_id in _SUMMARY_CANCEL_SET,
+    )
+
+    async with AsyncSessionLocal() as db:
+        if video_id in _SUMMARY_CANCEL_SET:
+            _SUMMARY_CANCEL_SET.discard(video_id)
+            await reset_summary_status(db, video_id)
+        else:
+            await finish_summary(db, video_id, summary)
+
+
+@router.post("/result/{video_id}/summary")
+async def trigger_summary(
+    video_id: str,
+    background_tasks: BackgroundTasks,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    stage = await get_stage_settings(db, "summarization")
+    if not stage.get("model"):
+        raise HTTPException(
+            status_code=400,
+            detail="No summarization model configured. Please select one in Settings → Summarization."
+        )
+    ollama_url = await get_app_setting(db, "ollama_url")
+    if not ollama_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Ollama URL not configured. Please set it in Settings → General."
+        )
+    ok = await set_summary_processing(db, video_id, model=stage.get("model"))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Result not found")
+    _SUMMARY_CANCEL_SET.discard(video_id)
+    background_tasks.add_task(_run_summary, video_id)
+    return {"status": "processing"}
+
+
+@router.delete("/result/{video_id}/summary")
+async def cancel_summary(video_id: str):
+    """Signal a running summarization to stop."""
+    _SUMMARY_CANCEL_SET.add(video_id)
     return {"status": "cancelling"}
 
 

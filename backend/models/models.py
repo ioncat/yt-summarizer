@@ -65,6 +65,12 @@ class SubtitleFormatted(Base):
     cleanup_status: Mapped[str | None] = mapped_column(String(20))  # null | processing | done | failed
     cleanup_started_at: Mapped[datetime | None] = mapped_column(DateTime)
     cleanup_finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    cleanup_model: Mapped[str | None] = mapped_column(String)
+    summary_text: Mapped[str | None] = mapped_column(Text)
+    summary_status: Mapped[str | None] = mapped_column(String(20))
+    summary_started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    summary_finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    summary_model: Mapped[str | None] = mapped_column(String)
     text_length: Mapped[int | None] = mapped_column(Integer)
     processing_status: Mapped[str | None] = mapped_column(String)  # success | error | pending
     processing_error: Mapped[str | None] = mapped_column(Text)

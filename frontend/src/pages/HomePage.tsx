@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { processVideo, getSettings, getHealth } from '../api'
+import { processVideo, getSettings, getHealth, AllSettings } from '../api'
 
 const LANGUAGES = [
   { value: 'ru', label: 'Russian' },
@@ -14,6 +14,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [missingConfig, setMissingConfig] = useState<string[]>([])
+  const [allSettings, setAllSettings] = useState<AllSettings | null>(null)
   const [autoPipeline, setAutoPipeline] = useState(
     () => localStorage.getItem('yt_summarizer_auto_pipeline') === 'true'
   )
@@ -27,6 +28,7 @@ export default function HomePage() {
         if (!s.app.ytdlp_path) missing.push('yt-dlp path')
         if (!s.app.cookies_path) missing.push('Cookies')
         setMissingConfig(missing)
+        setAllSettings(s)
         setOllamaOnline(health.ollama)
       })
       .catch(err => { console.error('[Home] getSettings failed:', err) })
@@ -35,6 +37,18 @@ export default function HomePage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError('')
+
+    if (autoPipeline && allSettings) {
+      const issues: string[] = []
+      if (!allSettings.app.ollama_url) issues.push('Ollama URL not configured (Settings → General)')
+      if (!allSettings.cleanup.model) issues.push('AI Cleanup model not selected (Settings → AI Cleanup)')
+      if (!allSettings.summarization.model) issues.push('Summarization model not selected (Settings → Summarization)')
+      if (issues.length) {
+        setError('Auto-pipeline is not ready:\n• ' + issues.join('\n• '))
+        return
+      }
+    }
+
     setLoading(true)
     try {
       const res = await processVideo(url.trim(), language)
@@ -100,7 +114,7 @@ export default function HomePage() {
               {ollamaOnline ? 'Runs after extraction. Requires Ollama.' : 'Ollama offline — unavailable.'}
             </p>
           </div>
-          {error && <div className="error-box" style={{ marginBottom: '1rem' }}>{error}</div>}
+          {error && <div className="error-box" style={{ marginBottom: '1rem', whiteSpace: 'pre-line' }}>{error}</div>}
           <button className="btn btn-primary" type="submit" disabled={loading || !url.trim()}>
             {loading ? 'Submitting…' : 'Extract subtitles'}
           </button>

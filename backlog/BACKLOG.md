@@ -101,6 +101,23 @@ Local LLM cleanup via Ollama. Runs on demand. No data leaves the machine.
 
 ---
 
+### Epic 15: LLM Summarization (Single-pass)
+**Description**: Summary tab on Result page. Sends cleaned_text (or formatted_text) to Ollama in a single request. Cancel button, model selector per-tab, "Summarized in X:XX · model" in meta. Settings → Summarization unlocked.
+
+**Status**: ✅ Done | **Priority**: 🟠 P1
+
+---
+
+### Epic 16: Cancel for Auto-Pipeline
+**Description**: "✕ Stop pipeline" button on ProcessingPage when auto-pipeline is running (stage ② Cleaning or ③ Summarizing). Should cancel the active background job and navigate to result page with whatever is available.
+- Cleanup cancel: `DELETE /api/result/{video_id}/cleanup` (already exists)
+- Summary cancel: `DELETE /api/result/{video_id}/summary` (already exists)
+- ProcessingPage needs to track which stage is active and call the right cancel endpoint on Stop
+
+**Status**: 🔵 Planned | **Priority**: 🟡 P2
+
+---
+
 ## Phase 2: LLM Summarization 🔵
 
 Map-reduce summarization: paragraph summaries → document summary. See `docs/phase2-architecture.md`.
@@ -130,7 +147,7 @@ Whisper fallback when no subtitles are available. Language param from Phase 1 re
 | Phase | Epics | Status |
 |-------|-------|--------|
 | Phase 1 — MVP | 1–5 | ✅ Done |
-| Phase 1.5 — LLM Cleanup & UX | 6–14 | 🔄 In Progress (6–7, 9, 11, 12–14 done; 8 dropped; 10 planned) |
+| Phase 1.5 — LLM Cleanup & UX | 6–16 | 🔄 In Progress (6–7, 9–15 done; 8 dropped; 16 planned) |
 | Phase 2 — Summarization | 15–17 | 🔵 Planned |
 | Phase 3 — STT Fallback | 18–20 | 🔵 Planned |
 

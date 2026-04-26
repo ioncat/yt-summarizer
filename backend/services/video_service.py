@@ -9,9 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.models import Video, SubtitleRaw, SubtitleFormatted, ProcessingTask, PipelineSettings, AppSetting
 from models.models import generate_id
 from services.text_cleaner import DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE
+from services.text_summarizer import (
+    DEFAULT_SYSTEM_PROMPT as DEFAULT_SUMMARY_SYSTEM_PROMPT,
+    DEFAULT_USER_PROMPT_TEMPLATE as DEFAULT_SUMMARY_USER_PROMPT_TEMPLATE,
+)
 
 # ---------------------------------------------------------------------------
-# Pipeline settings — defaults (source of truth is text_cleaner.py constants)
+# Pipeline settings — defaults (source of truth is text_cleaner/text_summarizer constants)
 # Model has no default: user must select one via the web Settings page.
 # ---------------------------------------------------------------------------
 
@@ -22,8 +26,8 @@ STAGE_DEFAULTS: dict[str, dict] = {
         "model": None,
     },
     "summarization": {
-        "system_prompt": None,
-        "user_prompt_template": None,
+        "system_prompt": DEFAULT_SUMMARY_SYSTEM_PROMPT,
+        "user_prompt_template": DEFAULT_SUMMARY_USER_PROMPT_TEMPLATE,
         "model": None,
     },
 }
@@ -174,6 +178,11 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
     )
     fmt = (await db.execute(fmt_stmt)).scalars().first()
 
+    def _duration(finished, started):
+        if finished and started:
+            return int((finished - started).total_seconds())
+        return None
+
     return {
         "video_id": video.video_id,
         "url": video.url,
@@ -184,10 +193,17 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
         "formatted_text": fmt.formatted_text if fmt else None,
         "cleaned_text": fmt.cleaned_text if fmt else None,
         "cleanup_status": fmt.cleanup_status if fmt else None,
-        "cleanup_duration_seconds": (
-            int((fmt.cleanup_finished_at - fmt.cleanup_started_at).total_seconds())
-            if fmt and fmt.cleanup_finished_at and fmt.cleanup_started_at
-            else None
+        "cleanup_model": fmt.cleanup_model if fmt else None,
+        "cleanup_duration_seconds": _duration(
+            fmt.cleanup_finished_at if fmt else None,
+            fmt.cleanup_started_at if fmt else None,
+        ),
+        "summary_text": fmt.summary_text if fmt else None,
+        "summary_status": fmt.summary_status if fmt else None,
+        "summary_model": fmt.summary_model if fmt else None,
+        "summary_duration_seconds": _duration(
+            fmt.summary_finished_at if fmt else None,
+            fmt.summary_started_at if fmt else None,
         ),
         "char_count": fmt.text_length if fmt else None,
         "created_at": video.created_at.isoformat(),
@@ -244,7 +260,6 @@ async def get_formatted_subtitle(db: AsyncSession, video_id: str) -> SubtitleFor
 
 async def _get_fmt_id(db: AsyncSession, video_id: str) -> str | None:
     """Return the subtitles_formatted.id for a video_id, or None."""
-    import logging; logging.getLogger("video_service").warning(f"[DEBUG] _get_fmt_id called for {video_id}")
     result = await db.execute(
         text("""
             SELECT sf.id FROM subtitles_formatted sf
@@ -258,7 +273,7 @@ async def _get_fmt_id(db: AsyncSession, video_id: str) -> str | None:
     return row[0] if row else None
 
 
-async def set_cleanup_processing(db: AsyncSession, video_id: str) -> bool:
+async def set_cleanup_processing(db: AsyncSession, video_id: str, model: str | None = None) -> bool:
     """Mark cleanup as in progress. Returns False if record not found."""
     fmt_id = await _get_fmt_id(db, video_id)
     if not fmt_id:
@@ -268,11 +283,12 @@ async def set_cleanup_processing(db: AsyncSession, video_id: str) -> bool:
             UPDATE subtitles_formatted
             SET cleanup_status = 'processing',
                 cleaned_text = NULL,
+                cleanup_model = :model,
                 cleanup_started_at = :ts,
                 cleanup_finished_at = NULL
             WHERE id = :id
         """),
-        {"ts": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f"), "id": fmt_id},
+        {"model": model, "ts": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f"), "id": fmt_id},
     )
     await db.commit()
     return True
@@ -309,6 +325,66 @@ async def reset_cleanup_status(db: AsyncSession, video_id: str) -> None:
                 cleaned_text = NULL,
                 cleanup_started_at = NULL,
                 cleanup_finished_at = NULL
+            WHERE id = :id
+        """),
+        {"id": fmt_id},
+    )
+    await db.commit()
+
+
+async def set_summary_processing(db: AsyncSession, video_id: str, model: str | None = None) -> bool:
+    """Mark summarization as in progress. Returns False if record not found."""
+    fmt_id = await _get_fmt_id(db, video_id)
+    if not fmt_id:
+        return False
+    await db.execute(
+        text("""
+            UPDATE subtitles_formatted
+            SET summary_status = 'processing',
+                summary_text = NULL,
+                summary_model = :model,
+                summary_started_at = :ts,
+                summary_finished_at = NULL
+            WHERE id = :id
+        """),
+        {"model": model, "ts": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f"), "id": fmt_id},
+    )
+    await db.commit()
+    return True
+
+
+async def finish_summary(db: AsyncSession, video_id: str, summary_text: str | None) -> None:
+    """Store summarization result and update status."""
+    fmt_id = await _get_fmt_id(db, video_id)
+    if not fmt_id:
+        return
+    status = "done" if summary_text else "failed"
+    await db.execute(
+        text("""
+            UPDATE subtitles_formatted
+            SET summary_status = :status,
+                summary_text = :summary,
+                summary_finished_at = :ts
+            WHERE id = :id
+        """),
+        {"status": status, "summary": summary_text, "ts": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f"), "id": fmt_id},
+    )
+    await db.commit()
+
+
+async def reset_summary_status(db: AsyncSession, video_id: str) -> None:
+    """Reset summary status to null (used after cancellation)."""
+    fmt_id = await _get_fmt_id(db, video_id)
+    if not fmt_id:
+        return
+    await db.execute(
+        text("""
+            UPDATE subtitles_formatted
+            SET summary_status = NULL,
+                summary_text = NULL,
+                summary_model = NULL,
+                summary_started_at = NULL,
+                summary_finished_at = NULL
             WHERE id = :id
         """),
         {"id": fmt_id},
