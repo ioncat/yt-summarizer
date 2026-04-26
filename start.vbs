@@ -6,6 +6,8 @@ root = fso.GetParentFolderName(WScript.ScriptFullName)
 backendBat = fso.GetSpecialFolder(2) & "\yts_backend.bat"
 Set f = fso.OpenTextFile(backendBat, 2, True)
 f.WriteLine "@echo off"
+f.WriteLine ":: Kill stale backend processes first (uvicorn reload can leave parent/child processes behind)"
+f.WriteLine "powershell -NoProfile -ExecutionPolicy Bypass -Command ""Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'uvicorn|main:app|yt-summarizer\\backend' } | ForEach-Object { taskkill /F /T /PID $_.ProcessId > $null 2>&1 }"" >nul 2>&1"
 f.WriteLine "title YT Summarizer — Backend :8000"
 f.WriteLine ":: Освобождаем порт 8000 если занят"
 f.WriteLine "for /f ""tokens=5"" %%a in ('netstat -aon ^| findstr "":8000 "" ^| findstr ""LISTENING"" 2^>nul') do taskkill /f /pid %%a >nul 2>&1"

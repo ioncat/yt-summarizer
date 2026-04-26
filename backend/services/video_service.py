@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.models import Video, SubtitleRaw, SubtitleFormatted, ProcessingTask, PipelineSettings, AppSetting
@@ -184,6 +184,11 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
         "formatted_text": fmt.formatted_text if fmt else None,
         "cleaned_text": fmt.cleaned_text if fmt else None,
         "cleanup_status": fmt.cleanup_status if fmt else None,
+        "cleanup_duration_seconds": (
+            int((fmt.cleanup_finished_at - fmt.cleanup_started_at).total_seconds())
+            if fmt and fmt.cleanup_finished_at and fmt.cleanup_started_at
+            else None
+        ),
         "char_count": fmt.text_length if fmt else None,
         "created_at": video.created_at.isoformat(),
     }
@@ -237,28 +242,77 @@ async def get_formatted_subtitle(db: AsyncSession, video_id: str) -> SubtitleFor
     return (await db.execute(fmt_stmt)).scalars().first()
 
 
+async def _get_fmt_id(db: AsyncSession, video_id: str) -> str | None:
+    """Return the subtitles_formatted.id for a video_id, or None."""
+    import logging; logging.getLogger("video_service").warning(f"[DEBUG] _get_fmt_id called for {video_id}")
+    result = await db.execute(
+        text("""
+            SELECT sf.id FROM subtitles_formatted sf
+            JOIN videos v ON sf.video_id = v.id
+            WHERE v.video_id = :vid AND v.url NOT LIKE '__pending__%'
+            ORDER BY sf.created_at DESC LIMIT 1
+        """),
+        {"vid": video_id},
+    )
+    row = result.first()
+    return row[0] if row else None
+
+
 async def set_cleanup_processing(db: AsyncSession, video_id: str) -> bool:
     """Mark cleanup as in progress. Returns False if record not found."""
-    fmt = await get_formatted_subtitle(db, video_id)
-    if not fmt:
+    fmt_id = await _get_fmt_id(db, video_id)
+    if not fmt_id:
         return False
-    fmt.cleanup_status = "processing"
-    fmt.cleaned_text = None
+    await db.execute(
+        text("""
+            UPDATE subtitles_formatted
+            SET cleanup_status = 'processing',
+                cleaned_text = NULL,
+                cleanup_started_at = :ts,
+                cleanup_finished_at = NULL
+            WHERE id = :id
+        """),
+        {"ts": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f"), "id": fmt_id},
+    )
     await db.commit()
     return True
 
 
 async def finish_cleanup(db: AsyncSession, video_id: str, cleaned_text: str | None) -> None:
     """Store cleanup result and update status."""
-    fmt = await get_formatted_subtitle(db, video_id)
-    if not fmt:
+    fmt_id = await _get_fmt_id(db, video_id)
+    if not fmt_id:
         return
-    if cleaned_text:
-        fmt.cleaned_text = cleaned_text
-        fmt.cleanup_status = "done"
-    else:
-        fmt.cleaned_text = None
-        fmt.cleanup_status = "failed"
+    status = "done" if cleaned_text else "failed"
+    await db.execute(
+        text("""
+            UPDATE subtitles_formatted
+            SET cleanup_status = :status,
+                cleaned_text = :cleaned,
+                cleanup_finished_at = :ts
+            WHERE id = :id
+        """),
+        {"status": status, "cleaned": cleaned_text, "ts": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f"), "id": fmt_id},
+    )
+    await db.commit()
+
+
+async def reset_cleanup_status(db: AsyncSession, video_id: str) -> None:
+    """Reset cleanup status to null (used after cancellation)."""
+    fmt_id = await _get_fmt_id(db, video_id)
+    if not fmt_id:
+        return
+    await db.execute(
+        text("""
+            UPDATE subtitles_formatted
+            SET cleanup_status = NULL,
+                cleaned_text = NULL,
+                cleanup_started_at = NULL,
+                cleanup_finished_at = NULL
+            WHERE id = :id
+        """),
+        {"id": fmt_id},
+    )
     await db.commit()
 
 

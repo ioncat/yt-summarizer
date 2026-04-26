@@ -23,6 +23,7 @@ export interface ResultResponse {
   formatted_text: string | null
   cleaned_text: string | null
   cleanup_status: 'processing' | 'done' | 'failed' | null
+  cleanup_duration_seconds: number | null
   char_count: number | null
   created_at: string
 }
@@ -76,6 +77,10 @@ export async function getHistory(page = 1): Promise<HistoryResponse> {
 export async function deleteResult(videoId: string): Promise<void> {
   const res = await fetch(`${BASE}/result/${videoId}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete')
+}
+
+export async function cancelCleanup(videoId: string): Promise<void> {
+  await fetch(`${BASE}/result/${videoId}/cleanup`, { method: 'DELETE' })
 }
 
 export async function startCleanup(videoId: string): Promise<void> {

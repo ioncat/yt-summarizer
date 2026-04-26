@@ -42,7 +42,8 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
       })
       onSaved(saved)
       showToast('Saved')
-    } catch {
+    } catch (err) {
+      console.error('[Settings/General] saveAppSettings failed:', err)
       showToast('Failed to save')
     } finally {
       setSaving(false)
@@ -57,11 +58,12 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
     formData.append('file', new Blob([text], { type: 'text/plain' }), file.name)
     try {
       const res = await fetch('/api/settings/upload-cookies', { method: 'POST', body: formData })
-      if (!res.ok) throw new Error()
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setCookiesPath(data.path)
       showToast('Cookies uploaded')
-    } catch {
+    } catch (err) {
+      console.error('[Settings/General] upload-cookies failed:', err)
       showToast('Upload failed')
     }
     if (fileRef.current) fileRef.current.value = ''
@@ -172,7 +174,8 @@ function StagePanel({ stage, initial, models, modelsOnline, locked }: StagePanel
         model: model || null,
       })
       showToast('Saved')
-    } catch {
+    } catch (err) {
+      console.error(`[Settings/${stage}] saveSettings failed:`, err)
       showToast('Failed to save')
     } finally {
       setSaving(false)
@@ -187,7 +190,8 @@ function StagePanel({ stage, initial, models, modelsOnline, locked }: StagePanel
       setUserPrompt(defaults.user_prompt_template ?? '')
       setModel(defaults.model ?? '')
       showToast('Reset to defaults')
-    } catch {
+    } catch (err) {
+      console.error(`[Settings/${stage}] resetSettings failed:`, err)
       showToast('Failed to reset')
     } finally {
       setSaving(false)
@@ -298,11 +302,11 @@ export default function SettingsPage() {
         setCleanup(s.cleanup)
         setSummarization(s.summarization)
       })
-      .catch(() => setError('Could not load settings'))
+      .catch(err => { console.error('[Settings] getSettings failed:', err); setError('Could not load settings') })
 
     getModels()
       .then(list => { setModels(list); setModelsOnline(true) })
-      .catch(() => setModelsOnline(false))
+      .catch(err => { console.error('[Settings] getModels failed:', err); setModelsOnline(false) })
   }, [])
 
   if (error) return (

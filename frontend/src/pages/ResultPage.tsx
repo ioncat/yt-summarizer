@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getResult, deleteResult, startCleanup, ResultResponse } from '../api'
+import { getResult, deleteResult, startCleanup, cancelCleanup, getSettings, getModels, saveSettings, ResultResponse } from '../api'
 
 type Tab = 'subtitles' | 'cleaned'
 
 function formatDuration(seconds: number | null): string {
+  if (seconds === 0) return '0:00'
   if (!seconds) return '—'
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
   return `${m}:${s.toString().padStart(2, '0')}`
 }
+
 
 function formatDate(iso: string): string {
   const d = new Date(iso)
@@ -27,11 +29,37 @@ export default function ResultPage() {
   const [cleanupError, setCleanupError] = useState('')
   const [copied, setCopied] = useState(false)
   const [activeTab, setActiveTab] = useState<Tab>('subtitles')
+  const [model, setModel] = useState('')
+  const [models, setModels] = useState<string[]>([])
+  const [cleanupElapsedSeconds, setCleanupElapsedSeconds] = useState<number | null>(null)
+  const [localCleanupDurationSeconds, setLocalCleanupDurationSeconds] = useState<number | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const cleanupElapsedRef = useRef<number | null>(null)
   const prevCleanupStatusRef = useRef<string | null | undefined>(undefined)
+  // Preserve existing prompts so model-only save doesn't overwrite them
+  const cleanupPromptsRef = useRef<{ system_prompt: string | null; user_prompt_template: string | null }>({
+    system_prompt: null, user_prompt_template: null,
+  })
 
   function stopPolling() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+  }
+
+  function stopCleanupTimer() {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+  }
+
+  function startCleanupTimer() {
+    stopCleanupTimer()
+    const startedAt = Date.now()
+    setCleanupElapsedSeconds(0)
+    cleanupElapsedRef.current = 0
+    timerRef.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000)
+      cleanupElapsedRef.current = elapsed
+      setCleanupElapsedSeconds(elapsed)
+    }, 1000)
   }
 
   function loadResult(switchTab = false) {
@@ -47,16 +75,44 @@ export default function ResultPage() {
           // Auto-switch only on transition processing → done
           setActiveTab('cleaned')
         }
-        if (data.cleanup_status !== 'processing') stopPolling()
+        if (data.cleanup_status !== 'processing') {
+          if (prevStatus === 'processing' && data.cleanup_status === 'done' && data.cleanup_duration_seconds == null) {
+            setLocalCleanupDurationSeconds(cleanupElapsedRef.current)
+          } else if (data.cleanup_duration_seconds != null) {
+            setLocalCleanupDurationSeconds(null)
+          }
+          stopPolling()
+          stopCleanupTimer()
+          setCleanupElapsedSeconds(null)
+        } else if (!timerRef.current) {
+          startCleanupTimer()
+        }
       })
-      .catch(() => setError('Could not load result'))
+      .catch(err => { console.error('[Result] getResult failed:', err); setError('Could not load result') })
   }
 
   // Initial load
   useEffect(() => {
     loadResult(true)
-    return stopPolling
+    return () => {
+      stopPolling()
+      stopCleanupTimer()
+    }
   }, [videoId])
+
+  // Load model list and current model once
+  useEffect(() => {
+    Promise.all([getSettings(), getModels()])
+      .then(([s, list]) => {
+        setModel(s.cleanup.model ?? '')
+        setModels(list)
+        cleanupPromptsRef.current = {
+          system_prompt: s.cleanup.system_prompt ?? null,
+          user_prompt_template: s.cleanup.user_prompt_template ?? null,
+        }
+      })
+      .catch(err => console.error('[Result] failed to load model settings:', err))
+  }, [])
 
   // Start polling if we land on a page already being cleaned
   useEffect(() => {
@@ -76,10 +132,43 @@ export default function ResultPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  async function handleCancel() {
+    if (!videoId) return
+    stopPolling()
+    stopCleanupTimer()
+    try {
+      await cancelCleanup(videoId)
+    } catch (err) {
+      console.error('[Result] cancelCleanup failed:', err)
+    }
+    setCleanupElapsedSeconds(null)
+    cleanupElapsedRef.current = null
+    setLocalCleanupDurationSeconds(null)
+    setResult(prev => prev ? { ...prev, cleanup_status: null, cleaned_text: null, cleanup_duration_seconds: null } : prev)
+  }
+
   async function handleDelete() {
     if (!videoId) return
-    await deleteResult(videoId)
-    navigate('/history')
+    if (!window.confirm('Delete this video and all its data? This cannot be undone.')) return
+    try {
+      await deleteResult(videoId)
+      navigate('/history')
+    } catch (err) {
+      console.error('[Result] deleteResult failed:', err)
+    }
+  }
+
+  async function handleModelChange(newModel: string) {
+    setModel(newModel)
+    try {
+      await saveSettings('cleanup', {
+        system_prompt: cleanupPromptsRef.current.system_prompt,
+        user_prompt_template: cleanupPromptsRef.current.user_prompt_template,
+        model: newModel || null,
+      })
+    } catch (err) {
+      console.error('[Result] saveSettings model failed:', err)
+    }
   }
 
   async function handleCleanup() {
@@ -87,8 +176,11 @@ export default function ResultPage() {
     try {
       setCleanupError('')
       await startCleanup(videoId)
-      setResult({ ...result, cleanup_status: 'processing', cleaned_text: null })
-      if (pollRef.current) clearInterval(pollRef.current)
+      setLocalCleanupDurationSeconds(null)
+      prevCleanupStatusRef.current = 'processing'
+      startCleanupTimer()
+      setResult({ ...result, cleanup_status: 'processing', cleaned_text: null, cleanup_duration_seconds: null })
+      stopPolling()
       pollRef.current = setInterval(() => loadResult(false), 3000)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
@@ -117,24 +209,46 @@ export default function ResultPage() {
           {result.author && <div className="meta-item">Channel: <span>{result.author}</span></div>}
           <div className="meta-item">Duration: <span>{formatDuration(result.duration)}</span></div>
           {result.language && <div className="meta-item">Language: <span>{result.language.toUpperCase()}</span></div>}
-          {result.char_count && <div className="meta-item">Characters: <span>{result.char_count.toLocaleString()}</span></div>}
+          {(() => {
+            const subtitlesCount = result.char_count ?? result.formatted_text?.length ?? null
+            const cleanedCount = result.cleaned_text?.length ?? null
+            const displayCount = activeTab === 'cleaned' ? cleanedCount : subtitlesCount
+            return (subtitlesCount != null || cleanedCount != null) ? (
+              <div className="meta-item">Characters: <span>
+                {displayCount != null ? displayCount.toLocaleString() : '—'}
+              </span></div>
+            ) : null
+          })()}
+          {result.cleanup_status === 'processing' && cleanupElapsedSeconds != null ? (
+            <div className="meta-item">Cleaning: <span>{formatDuration(cleanupElapsedSeconds)}</span></div>
+          ) : (result.cleanup_duration_seconds ?? localCleanupDurationSeconds) != null && (
+            <div className="meta-item">Cleaned in: <span>{formatDuration(result.cleanup_duration_seconds ?? localCleanupDurationSeconds)}</span></div>
+          )}
           <div className="meta-item">Saved: <span>{formatDate(result.created_at)}</span></div>
         </div>
         <div className="actions">
           <button className="btn btn-secondary" onClick={handleCopy}>
             {copied ? 'Copied!' : 'Copy text'}
           </button>
-          <button
-            className="btn btn-ai"
-            onClick={handleCleanup}
-            disabled={result.cleanup_status === 'processing'}
+          <select
+            className="model-select-inline"
+            value={model}
+            onChange={e => handleModelChange(e.target.value)}
+            disabled={models.length === 0}
+            title={models.length === 0 ? 'Ollama offline — cannot load models' : 'AI model for cleanup'}
           >
-            {result.cleanup_status === 'processing'
-              ? <><span className="btn-spinner" /> Cleaning…</>
-              : result.cleanup_status === 'done'
-                ? '↺ Re-run AI cleanup'
-                : '✦ Clean with AI'}
-          </button>
+            <option value="">— model —</option>
+            {models.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+          {result.cleanup_status === 'processing' ? (
+            <button className="btn btn-secondary" onClick={handleCancel}>
+              ✕ Stop
+            </button>
+          ) : (
+            <button className="btn btn-ai" onClick={handleCleanup}>
+              {result.cleanup_status === 'done' ? '↺ Re-run AI cleanup' : '✦ Clean with AI'}
+            </button>
+          )}
           <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
           <a className="btn btn-secondary" href={result.url} target="_blank" rel="noreferrer">
             Open video

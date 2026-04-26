@@ -38,7 +38,8 @@ export default function ProcessingPage() {
           setError(res.error_message || 'Processing failed')
           setAvailableLangs(res.available_languages ?? [])
         }
-      } catch {
+      } catch (err) {
+        console.error('[Processing] getStatus failed:', err)
         clearInterval(interval)
         setError('Could not reach the server')
       }
@@ -52,6 +53,8 @@ export default function ProcessingPage() {
     try {
       const res = await processVideo(originalUrl, lang)
       navigate(`/processing/${res.task_id}/${res.video_id}?url=${encodeURIComponent(originalUrl)}`)
+    } catch (err) {
+      console.error('[Processing] retryWithLang failed:', err)
     } finally {
       setRetrying(false)
     }

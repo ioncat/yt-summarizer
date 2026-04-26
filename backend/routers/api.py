@@ -26,12 +26,16 @@ from services.video_service import (
     get_result,
     get_stage_settings,
     get_task,
+    reset_cleanup_status,
     reset_stage_settings,
     save_app_settings,
     save_stage_settings,
     set_cleanup_processing,
     update_task_failed,
 )
+
+# In-memory cancel flags — cleared when cleanup finishes or is cancelled
+_CANCEL_SET: set[str] = set()
 
 router = APIRouter(prefix="/api")
 
@@ -154,10 +158,15 @@ async def _run_cleanup(video_id: str) -> None:
         user_prompt_template=stage.get("user_prompt_template"),
         model=stage.get("model"),
         ollama_url=ollama_url,
+        is_cancelled=lambda: video_id in _CANCEL_SET,
     )
 
     async with AsyncSessionLocal() as db:
-        await finish_cleanup(db, video_id, cleaned)
+        if video_id in _CANCEL_SET:
+            _CANCEL_SET.discard(video_id)
+            await reset_cleanup_status(db, video_id)
+        else:
+            await finish_cleanup(db, video_id, cleaned)
 
 
 @router.post("/result/{video_id}/cleanup")
@@ -181,8 +190,16 @@ async def trigger_cleanup(
     ok = await set_cleanup_processing(db, video_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Result not found")
+    _CANCEL_SET.discard(video_id)  # clear any stale cancel flag before starting
     background_tasks.add_task(_run_cleanup, video_id)
     return {"status": "processing"}
+
+
+@router.delete("/result/{video_id}/cleanup")
+async def cancel_cleanup(video_id: str):
+    """Signal a running cleanup to stop. Status resets to null after current paragraph."""
+    _CANCEL_SET.add(video_id)
+    return {"status": "cancelling"}
 
 
 @router.get("/health")

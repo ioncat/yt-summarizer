@@ -15,7 +15,8 @@ export default function HistoryPage() {
       setItems(prev => p === 1 ? res.items : [...prev, ...res.items])
       setHasMore(res.items.length === 20)
       setPage(p)
-    } catch {
+    } catch (err) {
+      console.error('[History] getHistory failed:', err)
       setError('Failed to load history')
     }
   }
@@ -23,8 +24,13 @@ export default function HistoryPage() {
   useEffect(() => { load(1) }, [])
 
   async function handleDelete(videoId: string) {
-    await deleteResult(videoId)
-    setItems(prev => prev.filter(i => i.video_id !== videoId))
+    if (!window.confirm('Delete this video and all its data? This cannot be undone.')) return
+    try {
+      await deleteResult(videoId)
+      setItems(prev => prev.filter(i => i.video_id !== videoId))
+    } catch (err) {
+      console.error('[History] deleteResult failed:', err)
+    }
   }
 
   if (error) return (

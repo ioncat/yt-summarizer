@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Vision**: Reduce cognitive load by allowing users to scan video content before deciding whether to watch in detail.
 
-**Current Phase**: Phase 1.5 — LLM Text Cleanup (Epics 6 ✅, 7 ✅, 8 ❌ dropped, 13 ✅)
+**Current Phase**: Phase 1.5 — LLM Text Cleanup (Epics 6 ✅, 7 ✅, 8 ❌ dropped, 9 ✅, 11 ✅, 12 ✅, 13 ✅, 14 ✅)
 
 ---
 
@@ -55,6 +55,25 @@ All 5 epics done. Full stack running:
 #### Epic 8 ❌ — Markdown Rendering (Dropped)
 - Tested react-markdown + Markdown prompt rule — LLM output inconsistent. Reverted to plain text.
 
+#### Epic 9 ✅ — Per-Tab Character Count
+- Result page shows separate character counts per tab
+- Subtitles tab: `result.char_count` (from DB) with fallback to `result.formatted_text?.length`
+- Cleaned tab: computed from `result.cleaned_text?.length` on the frontend
+- Shows `—` on Cleaned tab when no cleaned text available
+
+#### Epic 11 ✅ — Inline Model Selector on Result Page
+- Dropdown next to cleanup button on `/result/:videoId` — auto-saves on change, no Save button
+- Preserves existing prompts via `cleanupPromptsRef` (only model changes)
+- Disabled with tooltip when Ollama is offline
+- Style: `.model-select-inline` in `index.css`
+
+#### Epic 12 ✅ — Cancel Cleanup
+- In-memory `_CANCEL_SET` in `api.py` tracks active cancel signals
+- `is_cancelled` lambda passed to `clean_text()` — checked before each paragraph
+- API: `DELETE /api/result/{video_id}/cleanup` — adds video_id to cancel set
+- On cleanup finish: if cancelled → `reset_cleanup_status`; else → `finish_cleanup`
+- `_CANCEL_SET.discard(video_id)` called in `trigger_cleanup` to clear stale flags on re-run
+
 #### Epic 13 ✅ — Settings 2.0 (All Config via Web UI)
 - `app_settings` DB table: key-value store (`ollama_url`, `ytdlp_path`, `cookies_path`)
 - Seeded from config.py defaults on first launch (`_seed_app_settings`)
@@ -68,6 +87,12 @@ All 5 epics done. Full stack running:
 - Notifications: warning banners for missing required fields on Settings, Home, Result pages
 - Cookie upload via web (multipart, saved to `data/www.youtube.com_cookies.txt`)
 - History page: char_count added to each item
+
+#### Epic 14 ✅ — Cleanup Timer
+- `cleanup_started_at` and `cleanup_finished_at` columns on `subtitles_formatted` (added via `_migrate_db`)
+- Written via raw SQL (`strftime("%Y-%m-%d %H:%M:%S.%f")` — space separator required for SQLAlchemy DateTime parsing)
+- `get_result()` computes `cleanup_duration_seconds` from ORM datetime subtraction
+- Frontend: "Cleaned in X:XX" shown in meta section when `cleanup_duration_seconds != null`
 
 ### 🔮 Phase 2: LLM Summarization
 Map-reduce summarization pipeline. See `docs/phase2-architecture.md`. Uses same Ollama infra as Phase 1.5.
@@ -190,6 +215,12 @@ Do this BEFORE restarting the backend with new model/migration code. No exceptio
 **App settings (single source of truth)**: `app_settings` table stores `ollama_url`, `ytdlp_path`, `cookies_path`. Seeded from `config.py` on first launch. After that, managed exclusively via web UI (Settings → General). `config.py` is infrastructure-only.
 
 **No model default**: `text_cleaner.py` has no fallback model. If model is null → cleanup returns None → status `failed`. User must select a model in Settings → AI Cleanup.
+
+---
+
+## Pre-release Checklist
+
+Before shipping to production, remove all debug `console.error` calls added across the frontend pages. They were added intentionally during development to surface API errors in the browser console. Search for `console.error` in `frontend/src/pages/` and `frontend/src/api.ts` and remove or replace with proper error reporting.
 
 ---
 

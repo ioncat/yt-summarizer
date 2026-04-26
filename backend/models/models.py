@@ -63,6 +63,8 @@ class SubtitleFormatted(Base):
     formatted_text: Mapped[str | None] = mapped_column(Text)  # Markdown
     cleaned_text: Mapped[str | None] = mapped_column(Text)    # LLM-cleaned version
     cleanup_status: Mapped[str | None] = mapped_column(String(20))  # null | processing | done | failed
+    cleanup_started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    cleanup_finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     text_length: Mapped[int | None] = mapped_column(Integer)
     processing_status: Mapped[str | None] = mapped_column(String)  # success | error | pending
     processing_error: Mapped[str | None] = mapped_column(Text)

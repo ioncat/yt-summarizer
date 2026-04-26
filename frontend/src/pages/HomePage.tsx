@@ -22,7 +22,7 @@ export default function HomePage() {
       if (!s.app.ytdlp_path) missing.push('yt-dlp path')
       if (!s.app.cookies_path) missing.push('Cookies')
       setMissingConfig(missing)
-    }).catch(() => {})
+    }).catch(err => { console.error('[Home] getSettings failed:', err) })
   }, [])
 
   async function handleSubmit(e: FormEvent) {
@@ -33,6 +33,7 @@ export default function HomePage() {
       const res = await processVideo(url.trim(), language)
       navigate(`/processing/${res.task_id}/${res.video_id}?url=${encodeURIComponent(url.trim())}`)
     } catch (err) {
+      console.error('[Home] processVideo failed:', err)
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setLoading(false)
