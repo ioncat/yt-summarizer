@@ -1,9 +1,7 @@
 # Epic 10: Auto-Pipeline Toggle
 
 ## Summary
-A checkbox on the Home page — "Run full pipeline automatically" — that, when checked, automatically triggers AI cleanup immediately after subtitle extraction completes. The user submits the URL once and gets the cleaned result without manually pressing "Clean with AI" on the result page.
-
-**Important constraint**: The Summary stage (Phase 2) is not yet implemented. Auto-pipeline covers only Extract → Format → Cleanup. Summary will be added to the auto-pipeline when Phase 2 is ready.
+A checkbox on the Home page — "Run full pipeline automatically" — that, when checked, automatically runs all three AI stages after subtitle extraction: AI Cleanup → Summarization. The user submits the URL once and lands on the Summary tab with everything done.
 
 ## Business Value
 For users who always want the cleaned version, the current two-step flow (submit → wait → go to result → click "Clean with AI" → wait again) is tedious. The checkbox collapses this into a single submit action.
@@ -11,16 +9,17 @@ For users who always want the cleaned version, the current two-step flow (submit
 ## Scope
 
 ### Included
-- Checkbox on Home page: "Run full pipeline automatically (Extract + AI Cleanup)"
+- Checkbox on Home page: "Run AI cleanup automatically"
 - Checkbox state persisted in `localStorage`
-- Processing page shows extended status: "Extracting… → Formatting… → Cleaning with AI…"
-- Auto-cleanup triggered from frontend when extraction completes (Processing page polls, detects completion, fires cleanup POST)
-- Result page opens on Cleaned tab when auto-pipeline was used
+- Pre-flight validation before submit: checks Ollama URL, cleanup model, summary model — shows bullet list of issues if anything missing
+- Processing page shows three-stage status: ① Extracting → ② Cleaning with AI → ③ Summarizing
+- Active stage highlighted with spinner; completed stages show ✓
+- Result page opens on Summary tab when all stages complete
 
 ### Not Included
-- Auto-summary (Phase 2 not ready)
-- Server-side pipeline chaining (frontend orchestrates for now — simpler, no backend changes)
+- Server-side pipeline chaining (frontend orchestrates — simpler, no backend changes)
 - Background processing without the Processing page (requires push notifications)
+- Cancel button during auto-pipeline (Epic 16)
 
 ---
 
@@ -127,16 +126,8 @@ So that I immediately see the result I asked for
 - Epic 6 (cleanup endpoint + polling)
 - US-604 (health check for Ollama status)
 
-## What's Not Done (Phase 2 hook)
-
-Stage ③ "Summarizing…" is intentionally omitted — summarization (Epic 15) is not yet implemented.
-When Phase 2 ships, add the third stage to `ProcessingPage.tsx`:
-- Extend `Stage` type: `'extracting' | 'cleaning' | 'summarizing'`
-- After cleanup polling completes → POST `/api/result/{video_id}/summary`, poll until done
-- Add `③ Summarizing…` indicator to `pipeline-stages` UI
-
 ## Status
 
-**Status**: ✅ Done (Extract + Cleanup stages only)  
+**Status**: ✅ Done (all three stages: Extract → Cleanup → Summarize)  
 **Completed**: 2026-04-26  
 **Priority**: 🟡 P2

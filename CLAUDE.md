@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Vision**: Reduce cognitive load by allowing users to scan video content before deciding whether to watch in detail.
 
-**Current Phase**: Phase 1.5 — LLM Text Cleanup (Epics 6 ✅, 7 ✅, 8 ❌ dropped, 9 ✅, 11 ✅, 12 ✅, 13 ✅, 14 ✅)
+**Current Phase**: Phase 1.5 — Complete ✅ (Epics 6–16 done; 8 dropped)
 
 ---
 
@@ -21,7 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Video Processing | yt-dlp (no API keys required) + Node.js (JS runtime for yt-dlp) |
 | Database | SQLite (aiosqlite + SQLAlchemy async) |
 | Text Format | Markdown (stored in DB) |
-| LLM (local) | Ollama — `cas/aya-expanse-8b` (text cleanup + future summarization) |
+| LLM (local) | Ollama — `cas/aya-expanse-8b` (text cleanup + summarization) |
 
 ---
 
@@ -94,8 +94,28 @@ All 5 epics done. Full stack running:
 - `get_result()` computes `cleanup_duration_seconds` from ORM datetime subtraction
 - Frontend: "Cleaned in X:XX" shown in meta section when `cleanup_duration_seconds != null`
 
-### 🔮 Phase 2: LLM Summarization
-Map-reduce summarization pipeline. See `docs/phase2-architecture.md`. Uses same Ollama infra as Phase 1.5.
+#### Epic 10 ✅ — Auto-Pipeline Toggle
+- Checkbox "Run AI cleanup automatically" on Home page (localStorage, persisted)
+- Pre-flight validation in `handleSubmit`: checks `ollama_url`, `cleanup.model`, `summarization.model` — shows bullet list of issues, blocks submit
+- ProcessingPage: three stages ① Extracting → ② Cleaning → ③ Summarizing; spinner on active, ✓ on done
+- After all stages → navigate to `/result/{videoId}`
+
+#### Epic 15 ✅ — LLM Summarization (Single-pass)
+- `text_summarizer.py`: single Ollama request, 180s timeout, temperature 0.2, cancel support
+- DB columns: `summary_text`, `summary_status`, `summary_model`, `summary_started_at`, `summary_finished_at` on `subtitles_formatted`
+- `_SUMMARY_CANCEL_SET` in `api.py` — same pattern as `_CANCEL_SET`
+- API: `POST /api/result/{video_id}/summary`, `DELETE /api/result/{video_id}/summary`
+- Result page: Summary tab, tab-aware actions bar (controls change with active tab), "Summarized in X:XX · model" in meta
+- Input: `cleaned_text` if available, else `formatted_text`
+
+#### Epic 16 ✅ — Cancel for Auto-Pipeline
+- "✕ Stop pipeline" button on ProcessingPage during stages ② and ③
+- Stage ②: calls `cancelCleanup(videoId)`; Stage ③: calls `cancelSummary(videoId)`
+- Clears `cleanupIntervalRef`, navigates to `/result/{videoId}` immediately
+- Button not shown during stage ① (no cancel endpoint for task extraction)
+
+### 🔮 Phase 2: Summarization Quality
+Map-reduce / chunked summarization for long texts. See `docs/phase2-architecture.md`.
 
 ### 🔮 Phase 3: Speech-to-Text Fallback
 Whisper fallback. Language parameter from Phase 1 carries over directly — no extra user input.
@@ -145,6 +165,7 @@ yt-summarizer/
 │       ├── subtitle_extractor.py    # yt-dlp wrapper, VTT parser, error classification
 │       ├── text_formatter.py        # Overlap dedup + time-gap paragraph splitting
 │       ├── text_cleaner.py          # Ollama HTTP client, paragraph-by-paragraph LLM cleanup; DEFAULT_* prompt constants
+│       ├── text_summarizer.py       # Ollama HTTP client, single-pass LLM summarization; DEFAULT_* prompt constants
 │       └── video_service.py         # DB CRUD, task lifecycle, pipeline settings CRUD
 ├── frontend/
 │   ├── src/
@@ -178,6 +199,9 @@ yt-summarizer/
 | GET | `/api/history?page=N` | Paginated history (20 per page) |
 | DELETE | `/api/result/{video_id}` | Delete video + all related data |
 | POST | `/api/result/{video_id}/cleanup` | Trigger background AI cleanup |
+| DELETE | `/api/result/{video_id}/cleanup` | Cancel running cleanup |
+| POST | `/api/result/{video_id}/summary` | Trigger background summarization |
+| DELETE | `/api/result/{video_id}/summary` | Cancel running summarization |
 | GET | `/api/health` | `{backend: true, ollama: true/false}` |
 | GET | `/api/settings` | All settings: `{app, cleanup, summarization}` |
 | PUT | `/api/settings/app` | Save app settings (ollama_url, ytdlp_path, cookies_path) |

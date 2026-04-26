@@ -10,11 +10,17 @@ export default function App() {
   return (
     <>
       <nav>
-        <NavLink to="/" className="logo">YT Summarizer</NavLink>
-        <NavLink to="/">New</NavLink>
-        <NavLink to="/history">History</NavLink>
-        <NavLink to="/settings">Settings</NavLink>
-        <StatusBar />
+        <div className="nav-left">
+          <NavLink to="/" className="logo">YT Summarizer</NavLink>
+          <NavLink to="/">+ New</NavLink>
+          <NavLink to="/history">◷ History</NavLink>
+        </div>
+        <div className="nav-center">
+          <StatusBar />
+        </div>
+        <div className="nav-right">
+          <NavLink to="/settings">Settings ⚙</NavLink>
+        </div>
       </nav>
       <Routes>
         <Route path="/" element={<HomePage />} />

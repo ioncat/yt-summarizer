@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
-import { getStatus, getResult, processVideo, startCleanup, startSummary } from '../api'
+import { getStatus, getResult, processVideo, startCleanup, startSummary, cancelCleanup, cancelSummary } from '../api'
 
 const LANG_LABELS: Record<string, string> = {
   ru: 'Russian', en: 'English', uk: 'Ukrainian',
@@ -97,6 +97,21 @@ export default function ProcessingPage() {
     }
   }, [taskId, videoId, navigate, autoPipeline])
 
+  async function handleStopPipeline() {
+    if (!videoId) return
+    if (cleanupIntervalRef.current) {
+      clearInterval(cleanupIntervalRef.current)
+      cleanupIntervalRef.current = null
+    }
+    try {
+      if (stage === 'cleaning') await cancelCleanup(videoId)
+      if (stage === 'summarizing') await cancelSummary(videoId)
+    } catch (err) {
+      console.error('[Processing] stopPipeline cancel failed:', err)
+    }
+    navigate(`/result/${videoId}`)
+  }
+
   async function retryWithLang(lang: string) {
     if (!originalUrl) return
     setRetrying(true)
@@ -130,6 +145,15 @@ export default function ProcessingPage() {
                     <span className="stage-icon">{stage === 'summarizing' ? <span className="tab-spinner" /> : '③'}</span>
                     <span>Summarizing</span>
                   </div>
+                  {(stage === 'cleaning' || stage === 'summarizing') && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={handleStopPipeline}
+                      style={{ marginTop: '1.5rem' }}
+                    >
+                      ✕ Stop pipeline
+                    </button>
+                  )}
                 </div>
               ) : (
                 <>
@@ -138,7 +162,7 @@ export default function ProcessingPage() {
                 </>
               )}
               <p style={{ color: '#888', marginTop: '1rem', fontSize: '0.9rem' }}>
-                {stage === 'cleaning' ? 'AI cleanup running…' : 'This usually takes 15–30 seconds'}
+                {stage === 'cleaning' ? 'AI cleanup running…' : stage === 'summarizing' ? 'Summarizing…' : 'This usually takes 15–30 seconds'}
               </p>
             </>
           ) : (

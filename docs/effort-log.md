@@ -17,6 +17,10 @@ Time analysis based on git history (commit timestamps).
 | 2026-04-25 | — | **Epic 6**: AI cleanup refactored to manual button (POST /cleanup, polling, cleanup_status field, Re-run support); StatusBar (health dots for backend + Ollama); tab CSS fix; backlog restructure (Epics 6–11); README/docs cleanup; config cleanup (OLLAMA_MODEL removed from .env) | ~3 h |
 | 2026-04-25 | — | **Epic 7**: Settings Page — PipelineSettings model, service CRUD, API endpoints (GET/PUT/DELETE /settings, GET /models), SettingsPage.tsx with editable Cleanup + locked Summarization panels; text_cleaner.py wired to DB settings; tab switching bug fixed; backup rule added | ~2 h |
 | 2026-04-26 | — | **Epic 8 (dropped)**: react-markdown + Markdown prompt rule tested — LLM output inconsistent, reverted to plain text. **Cleanup bug fix**: default model was qwen3:8b (not installed) → silently returned original text; fixed by removing hardcoded model default (user must pick via Settings). **History**: char_count added. **Epic 13**: Settings 2.0 — AppSetting model + app_settings table, seed on first launch, config.py infrastructure-only; ytdlp_path/cookies_path/ollama_url moved to DB; Settings page redesigned with tabs (General/AI Cleanup/Summarization); warning banners for missing required fields on Home + Settings; cookie upload via web; PUT /api/settings/app + POST /api/settings/upload-cookies | ~3 h |
+| 2026-04-26 | — | **Codex review + bug fixes**: reviewed Codex-generated Epic 14 (cleanup timer) — fixed `_CANCEL_SET` not cleared on re-run, fixed timestamp format (isoformat T→space for SQLAlchemy). Deleted junk .js files Codex generated. Synced all epic files (EPIC-1..5 status, EPIC-8 dropped, EPIC-9/11 done, created EPIC-12/13/14). **Epics 9, 11, 12, 14** confirmed working. | ~30 min |
+| 2026-04-26 | — | **Epic 10**: Auto-pipeline toggle — checkbox on Home page, localStorage persistence, ProcessingPage three-stage UI (① Extracting → ② Cleaning → ③ Summarizing), pre-flight validation (checks ollama_url + cleanup model + summary model before submit, shows bullet list of issues). | ~1 h |
+| 2026-04-26 | — | **Epic 15**: LLM Summarization (single-pass) — `text_summarizer.py`, 6 new DB columns + migrations, `set_summary_processing`/`finish_summary`/`reset_summary_status` in video_service, POST/DELETE `/api/result/{video_id}/summary`, `_SUMMARY_CANCEL_SET`, full ResultPage rewrite (Summary tab, per-tab model selectors, timers, "Cleaned/Summarized in X:XX · model" in meta). SettingsPage: Summarization tab unlocked. ProcessingPage: stage ③ Summarizing wired. Epic 16 added to backlog. | ~2 h |
+| 2026-04-26 | — | **UI polish**: Tab-aware actions bar and meta on Result page (controls + AI-specific meta change with active tab). Nav redesign: three-section flex layout (left: logo+links, center: Systems Health, right: Settings ⚙); "Systems Health ♥" label with SVG EKG icon; "+ New", "◷ History" nav icons. | ~30 min |
 
 *Table updated after each session.*
 
@@ -34,7 +38,11 @@ Time analysis based on git history (commit timestamps).
 | Phase 1.5 — Epic 6: AI Cleanup (manual, polling, health check) | — | ~3 h |
 | Phase 1.5 — Epic 7: Settings Page (prompts + models per stage) | — | ~2 h |
 | Phase 1.5 — Epic 8 (dropped) + cleanup fix + Epic 13: Settings 2.0 | — | ~3 h |
-| **Total** | **16+** | **~13 h 5 min** |
+| Phase 1.5 — Codex review + bug fixes + epic sync | — | ~30 min |
+| Phase 1.5 — Epic 10: Auto-pipeline toggle + pre-flight validation | — | ~1 h |
+| Phase 1.5 — Epic 15: LLM Summarization (single-pass) | — | ~2 h |
+| Phase 1.5 — UI polish: tab-aware actions, nav redesign | — | ~30 min |
+| **Total** | **16+** | **~17 h 5 min** |
 
 ---
 

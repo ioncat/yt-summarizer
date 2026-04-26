@@ -50,16 +50,15 @@ flowchart TD
         LLM --> DB2[("SQLite\ncleaned_text")]
     end
 
-    subgraph step4 ["④ Summarize · Phase 2 🔵"]
-        DB2 --> MAP["MAP — LLM summarizes each paragraph"]
-        MAP --> RED["REDUCE — LLM combines into document summary"]
-        RED --> DB3[("SQLite\nsummary")]
+    subgraph step4 ["④ Summarize · Phase 1.5"]
+        DB2 --> SUM["Ollama · configurable model\nsingle-pass: full text → summary"]
+        SUM --> DB3[("SQLite\nsummary_text")]
     end
 
     subgraph ui ["Frontend tabs"]
         DB1 --> T1["Subtitles"]
         DB2 --> T2["Cleaned"]
-        DB3 --> T3["Summary 🔵"]
+        DB3 --> T3["Summary"]
     end
 
     EXT -. "no subtitles" .-> STT
@@ -85,6 +84,7 @@ yt-summarizer/
 │       ├── subtitle_extractor.py   # yt-dlp wrapper
 │       ├── text_formatter.py       # VTT → clean text
 │       ├── text_cleaner.py         # Ollama LLM cleanup (paragraph-by-paragraph)
+│       ├── text_summarizer.py      # Ollama LLM summarization (single-pass)
 │       └── video_service.py        # DB CRUD
 ├── frontend/                # React + TypeScript + Vite
 │   └── src/
@@ -107,6 +107,9 @@ yt-summarizer/
 | GET | `/api/status/{task_id}` | Poll processing status |
 | GET | `/api/result/{video_id}` | Get subtitle text + metadata |
 | POST | `/api/result/{video_id}/cleanup` | Trigger AI cleanup |
+| DELETE | `/api/result/{video_id}/cleanup` | Cancel running cleanup |
+| POST | `/api/result/{video_id}/summary` | Trigger AI summarization |
+| DELETE | `/api/result/{video_id}/summary` | Cancel running summarization |
 | GET | `/api/health` | Backend + Ollama status |
 | GET | `/api/history` | Paginated processing history |
 | DELETE | `/api/result/{video_id}` | Delete video and all its data |
@@ -124,8 +127,8 @@ yt-summarizer/
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Phase 1 — Subtitle Extraction | ✅ Done | Extract, format, store, display subtitles |
-| Phase 1.5 — LLM Text Cleanup | 🔄 In Progress | Local Ollama cleanup, Settings UI, all config via web (Epics 9, 10, 12 remaining) |
-| Phase 2 — LLM Summarization | 🔵 Planned | Map-reduce summarization (paragraph → document summary) |
+| Phase 1.5 — LLM Cleanup & Summarization | 🔄 In Progress | Cleanup, summarization, Settings UI, auto-pipeline (Epic 16 remaining) |
+| Phase 2 — Summarization Quality | 🔵 Planned | Map-reduce / chunked approach for long texts |
 | Phase 3 — Speech-to-Text | 🔵 Planned | Whisper fallback when subtitles unavailable |
 
 See [backlog/BACKLOG.md](backlog/BACKLOG.md) for detailed epic breakdown.

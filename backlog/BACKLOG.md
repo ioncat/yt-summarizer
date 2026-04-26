@@ -65,9 +65,9 @@ Local LLM cleanup via Ollama. Runs on demand. No data leaves the machine.
 ---
 
 ### Epic 10: Auto-Pipeline Toggle
-**Description**: Checkbox on Home page to automatically run cleanup after extraction (Summary skipped — not ready)
+**Description**: Checkbox on Home page to automatically run all three stages (Extract → Cleanup → Summarize) in sequence. Pre-flight validation checks all stages are configured before starting.
 
-**Status**: 🔵 Planned | **Priority**: 🟡 P2  
+**Status**: ✅ Done | **Priority**: 🟡 P2  
 [View Epic →](./epics/EPIC-10.md)
 
 ---
@@ -114,19 +114,19 @@ Local LLM cleanup via Ollama. Runs on demand. No data leaves the machine.
 - Summary cancel: `DELETE /api/result/{video_id}/summary` (already exists)
 - ProcessingPage needs to track which stage is active and call the right cancel endpoint on Stop
 
-**Status**: 🔵 Planned | **Priority**: 🟡 P2
+**Status**: ✅ Done | **Priority**: 🟡 P2
 
 ---
 
-## Phase 2: LLM Summarization 🔵
+## Phase 2: LLM Summarization Quality 🔵
 
-Map-reduce summarization: paragraph summaries → document summary. See `docs/phase2-architecture.md`.
+Improve summarization quality beyond single-pass. Map-reduce or chunked approach for long texts. See `docs/phase2-architecture.md`.
 
 | Epic | Description | Status |
 |------|-------------|--------|
-| Epic 15: LLM Summarization Pipeline | Map-reduce: paragraph → paragraph_summary → document_summary | 🔵 Planned |
-| Epic 16: Prompt Management | Prompts per stage, language-aware (covered partly by Epic 10) | 🔵 Planned |
-| Epic 17: Summary Display | Summary tab in UI alongside Subtitles and Cleaned | 🔵 Planned |
+| Epic 17: Map-Reduce Summarization | paragraph → paragraph_summary → document_summary | 🔵 Planned |
+| Epic 18: Prompt Management v2 | Language-aware prompts, per-stage templates | 🔵 Planned |
+| Epic 19: Summary Quality Metrics | Show compression ratio, word count diff | 🔵 Planned |
 
 ---
 
@@ -136,9 +136,9 @@ Whisper fallback when no subtitles are available. Language param from Phase 1 re
 
 | Epic | Description | Status |
 |------|-------------|--------|
-| Epic 18: Audio Extraction | Extract audio via yt-dlp | 🔵 Planned |
-| Epic 19: Whisper Transcription | Local Whisper model | 🔵 Planned |
-| Epic 20: Fallback UX | One-click fallback offer when subtitles missing | 🔵 Planned |
+| Epic 20: Audio Extraction | Extract audio via yt-dlp | 🔵 Planned |
+| Epic 21: Whisper Transcription | Local Whisper model | 🔵 Planned |
+| Epic 22: Fallback UX | One-click fallback offer when subtitles missing | 🔵 Planned |
 
 ---
 
@@ -147,9 +147,9 @@ Whisper fallback when no subtitles are available. Language param from Phase 1 re
 | Phase | Epics | Status |
 |-------|-------|--------|
 | Phase 1 — MVP | 1–5 | ✅ Done |
-| Phase 1.5 — LLM Cleanup & UX | 6–16 | 🔄 In Progress (6–7, 9–15 done; 8 dropped; 16 planned) |
-| Phase 2 — Summarization | 15–17 | 🔵 Planned |
-| Phase 3 — STT Fallback | 18–20 | 🔵 Planned |
+| Phase 1.5 — LLM Cleanup & UX | 6–16 | ✅ Done (6–7, 9–16 done; 8 dropped) |
+| Phase 2 — Summarization | 17–19 | 🔵 Planned |
+| Phase 3 — STT Fallback | 20–22 | 🔵 Planned |
 
 ---
 

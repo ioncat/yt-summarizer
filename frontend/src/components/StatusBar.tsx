@@ -41,6 +41,12 @@ export default function StatusBar() {
 
   return (
     <div className="status-bar">
+      <span className="status-label">
+        Systems Health
+        <svg width="16" height="10" viewBox="0 0 24 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle', marginLeft: '0.3rem' }}>
+          <polyline points="0,6 4,6 6,4 8,6 10,6 12,0 14,12 16,6 18,6 20,4 22,6 24,6" />
+        </svg>
+      </span>
       <Dot status={backend} label="API" />
       <Dot status={ollama} label="Ollama" />
     </div>
