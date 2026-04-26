@@ -1,38 +1,62 @@
-import { useEffect, useState } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { getStatus, processVideo } from '../api'
-
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Starting…',
-  processing: 'Extracting subtitles…',
-  completed: 'Done!',
-  failed: 'Failed',
-}
+import { useEffect, useRef, useState } from 'react'
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
+import { getStatus, getResult, processVideo, startCleanup } from '../api'
 
 const LANG_LABELS: Record<string, string> = {
   ru: 'Russian', en: 'English', uk: 'Ukrainian',
 }
 
+type Stage = 'extracting' | 'cleaning'
+
 export default function ProcessingPage() {
   const { taskId, videoId } = useParams<{ taskId: string; videoId: string }>()
   const [searchParams] = useSearchParams()
+  const location = useLocation()
   const navigate = useNavigate()
-  const [status, setStatus] = useState('pending')
+  const [stage, setStage] = useState<Stage>('extracting')
   const [error, setError] = useState('')
   const [availableLangs, setAvailableLangs] = useState<string[]>([])
   const [retrying, setRetrying] = useState(false)
+  const cleanupIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  const autoPipeline = (location.state as { autoPipeline?: boolean } | null)?.autoPipeline ?? false
   const originalUrl = searchParams.get('url') ?? ''
 
   useEffect(() => {
     if (!taskId) return
+
     const interval = setInterval(async () => {
       try {
         const res = await getStatus(taskId)
-        setStatus(res.status)
         if (res.status === 'completed') {
           clearInterval(interval)
-          navigate(`/result/${videoId}`)
+          if (autoPipeline && videoId) {
+            setStage('cleaning')
+            try {
+              await startCleanup(videoId)
+            } catch (err) {
+              console.error('[Processing] startCleanup failed:', err)
+              navigate(`/result/${videoId}`)
+              return
+            }
+            cleanupIntervalRef.current = setInterval(async () => {
+              try {
+                const result = await getResult(videoId)
+                if (result.cleanup_status !== 'processing') {
+                  clearInterval(cleanupIntervalRef.current!)
+                  cleanupIntervalRef.current = null
+                  navigate(`/result/${videoId}`)
+                }
+              } catch (err) {
+                console.error('[Processing] cleanup poll failed:', err)
+                clearInterval(cleanupIntervalRef.current!)
+                cleanupIntervalRef.current = null
+                navigate(`/result/${videoId}`)
+              }
+            }, 3000)
+          } else {
+            navigate(`/result/${videoId}`)
+          }
         } else if (res.status === 'failed') {
           clearInterval(interval)
           setError(res.error_message || 'Processing failed')
@@ -44,8 +68,12 @@ export default function ProcessingPage() {
         setError('Could not reach the server')
       }
     }, 2000)
-    return () => clearInterval(interval)
-  }, [taskId, videoId, navigate])
+
+    return () => {
+      clearInterval(interval)
+      if (cleanupIntervalRef.current) clearInterval(cleanupIntervalRef.current)
+    }
+  }, [taskId, videoId, navigate, autoPipeline])
 
   async function retryWithLang(lang: string) {
     if (!originalUrl) return
@@ -64,17 +92,33 @@ export default function ProcessingPage() {
     <div className="container">
       <div className="card">
         <div className="status-box">
-          {status !== 'failed' ? (
+          {!error ? (
             <>
-              <div className="spinner" />
-              <p style={{ fontSize: '1.1rem', fontWeight: 600 }}>{STATUS_LABELS[status] ?? status}</p>
-              <p style={{ color: '#888', marginTop: '0.5rem', fontSize: '0.9rem' }}>
-                This usually takes 15–30 seconds
+              {autoPipeline ? (
+                <div className="pipeline-stages">
+                  <div className={`pipeline-stage ${stage === 'extracting' ? 'active' : 'done'}`}>
+                    <span className="stage-icon">{stage === 'extracting' ? <span className="tab-spinner" /> : '✓'}</span>
+                    <span>Extracting subtitles</span>
+                  </div>
+                  <div className={`pipeline-stage ${stage === 'cleaning' ? 'active' : stage === 'extracting' ? 'pending' : 'done'}`}>
+                    <span className="stage-icon">{stage === 'cleaning' ? <span className="tab-spinner" /> : stage === 'extracting' ? '②' : '✓'}</span>
+                    <span>Cleaning with AI</span>
+                  </div>
+                  {/* TODO Phase 2: add stage 'summarizing' here when Epic 15 (LLM Summarization) ships */}
+                </div>
+              ) : (
+                <>
+                  <div className="spinner" />
+                  <p style={{ fontSize: '1.1rem', fontWeight: 600 }}>Extracting subtitles…</p>
+                </>
+              )}
+              <p style={{ color: '#888', marginTop: '1rem', fontSize: '0.9rem' }}>
+                {stage === 'cleaning' ? 'AI cleanup running…' : 'This usually takes 15–30 seconds'}
               </p>
             </>
           ) : (
             <>
-              <div className="error-box">{error}</div>
+              <div className="error-box" style={{ marginBottom: '1rem' }}>{error}</div>
               {availableLangs.length > 0 && (
                 <div style={{ marginTop: '1rem' }}>
                   <p style={{ fontSize: '0.9rem', color: '#555', marginBottom: '0.75rem' }}>

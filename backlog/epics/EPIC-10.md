@@ -127,7 +127,16 @@ So that I immediately see the result I asked for
 - Epic 6 (cleanup endpoint + polling)
 - US-604 (health check for Ollama status)
 
+## What's Not Done (Phase 2 hook)
+
+Stage ③ "Summarizing…" is intentionally omitted — summarization (Epic 15) is not yet implemented.
+When Phase 2 ships, add the third stage to `ProcessingPage.tsx`:
+- Extend `Stage` type: `'extracting' | 'cleaning' | 'summarizing'`
+- After cleanup polling completes → POST `/api/result/{video_id}/summary`, poll until done
+- Add `③ Summarizing…` indicator to `pipeline-stages` UI
+
 ## Status
 
-**Status**: 🔵 Planned  
+**Status**: ✅ Done (Extract + Cleanup stages only)  
+**Completed**: 2026-04-26  
 **Priority**: 🟡 P2

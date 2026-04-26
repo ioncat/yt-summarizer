@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { processVideo, getSettings } from '../api'
+import { processVideo, getSettings, getHealth } from '../api'
 
 const LANGUAGES = [
   { value: 'ru', label: 'Russian' },
@@ -14,15 +14,22 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [missingConfig, setMissingConfig] = useState<string[]>([])
+  const [autoPipeline, setAutoPipeline] = useState(
+    () => localStorage.getItem('yt_summarizer_auto_pipeline') === 'true'
+  )
+  const [ollamaOnline, setOllamaOnline] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
-    getSettings().then(s => {
-      const missing: string[] = []
-      if (!s.app.ytdlp_path) missing.push('yt-dlp path')
-      if (!s.app.cookies_path) missing.push('Cookies')
-      setMissingConfig(missing)
-    }).catch(err => { console.error('[Home] getSettings failed:', err) })
+    Promise.all([getSettings(), getHealth()])
+      .then(([s, health]) => {
+        const missing: string[] = []
+        if (!s.app.ytdlp_path) missing.push('yt-dlp path')
+        if (!s.app.cookies_path) missing.push('Cookies')
+        setMissingConfig(missing)
+        setOllamaOnline(health.ollama)
+      })
+      .catch(err => { console.error('[Home] getSettings failed:', err) })
   }, [])
 
   async function handleSubmit(e: FormEvent) {
@@ -31,7 +38,10 @@ export default function HomePage() {
     setLoading(true)
     try {
       const res = await processVideo(url.trim(), language)
-      navigate(`/processing/${res.task_id}/${res.video_id}?url=${encodeURIComponent(url.trim())}`)
+      navigate(
+        `/processing/${res.task_id}/${res.video_id}?url=${encodeURIComponent(url.trim())}`,
+        { state: { autoPipeline } }
+      )
     } catch (err) {
       console.error('[Home] processVideo failed:', err)
       setError(err instanceof Error ? err.message : 'Unknown error')
@@ -72,6 +82,23 @@ export default function HomePage() {
               ))}
             </select>
             <p className="field-hint">Select the language of the video's subtitles. If unavailable, we'll show which languages are.</p>
+          </div>
+          <div className="form-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={autoPipeline}
+                disabled={!ollamaOnline}
+                onChange={e => {
+                  setAutoPipeline(e.target.checked)
+                  localStorage.setItem('yt_summarizer_auto_pipeline', String(e.target.checked))
+                }}
+              />
+              Run AI cleanup automatically
+            </label>
+            <p className="field-hint">
+              {ollamaOnline ? 'Runs after extraction. Requires Ollama.' : 'Ollama offline — unavailable.'}
+            </p>
           </div>
           {error && <div className="error-box" style={{ marginBottom: '1rem' }}>{error}</div>}
           <button className="btn btn-primary" type="submit" disabled={loading || !url.trim()}>
