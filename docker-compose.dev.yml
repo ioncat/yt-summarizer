@@ -1,13 +1,13 @@
 services:
   backend:
     build:
-      context: ./backend
+      context: ./app/backend
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app          # hot reload
-      - ./data:/app/data
+      - ./app/backend:/app          # hot reload
+      - ./app/data:/app/data
     env_file:
       - .env
     environment:
@@ -17,12 +17,12 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ./app/frontend
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
     volumes:
-      - ./frontend/src:/app/src  # hot reload
+      - ./app/frontend/src:/app/src  # hot reload
     depends_on:
       - backend
     env_file:

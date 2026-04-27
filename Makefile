@@ -1,3 +1,12 @@
+# Detect OS
+ifeq ($(OS),Windows_NT)
+    PYTHON = .venv/Scripts/python
+    PIP    = .venv/Scripts/pip
+else
+    PYTHON = .venv/bin/python
+    PIP    = .venv/bin/pip
+endif
+
 .PHONY: dev backend frontend install clean help
 
 # Default target
@@ -21,19 +30,19 @@ dev:
 # Backend: FastAPI
 backend:
 	@echo "Starting backend on http://localhost:8000"
-	cd backend && .venv/Scripts/python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+	cd app/backend && $(PYTHON) -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 # Frontend: React
 frontend:
 	@echo "Starting frontend on http://localhost:3000"
-	cd frontend && npm run dev
+	cd app/frontend && npm run dev
 
 # Install all dependencies
 install:
 	@echo "Installing backend dependencies..."
-	cd backend && python -m venv .venv && .venv/Scripts/pip install -r requirements.txt
+	cd app/backend && python -m venv .venv && $(PIP) install -r requirements.txt
 	@echo "Installing frontend dependencies..."
-	cd frontend && npm install
+	cd app/frontend && npm install
 
 # Docker
 docker-up:

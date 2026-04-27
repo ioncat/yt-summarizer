@@ -1,19 +1,19 @@
 services:
   backend:
     build:
-      context: ./backend
+      context: ./app/backend
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
     volumes:
-      - ./data:/app/data
+      - ./app/data:/app/data
     env_file:
       - .env
     restart: unless-stopped
 
   frontend:
     build:
-      context: ./frontend
+      context: ./app/frontend
       dockerfile: Dockerfile
     ports:
       - "3000:3000"

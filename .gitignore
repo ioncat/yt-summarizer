@@ -1,19 +1,19 @@
 # ========================
 # Data & Database
 # ========================
-data/db/*.sqlite
-data/db/*.sqlite3
-data/db/*.sqlite.bak
-data/db/*.sqlite.bak*
-data/db/*.db
+app/data/db/*.sqlite
+app/data/db/*.sqlite3
+app/data/db/*.sqlite.bak
+app/data/db/*.sqlite.bak*
+app/data/db/*.db
 *.sqlite
 *.sqlite3
 *.db
 
 # Cookies (never commit!)
-data/cookies.txt
-data/*.cookies.txt
-data/www.youtube.com_cookies.txt
+app/data/cookies.txt
+app/data/*.cookies.txt
+app/data/www.youtube.com_cookies.txt
 
 # ========================
 # Environment & Secrets
@@ -47,9 +47,9 @@ htmlcov/
 # Node / Frontend
 # ========================
 node_modules/
-frontend/dist/
-frontend/build/
-frontend/.next/
+app/frontend/dist/
+app/frontend/build/
+app/frontend/.next/
 *.tsbuildinfo
 
 # ========================
@@ -73,7 +73,17 @@ Thumbs.db
 .claude/
 frontend/.claude/
 docs/project-bootstrap-guide.md
+docs/DISCOVERY.md
+docs/PROJECT_PLAN.md
 AGENTS.md
+
+# ========================
+# Local launchers
+# ========================
+start.vbs
+start.sh
+kill-backend.bat
+kill-backend.*
 
 # ========================
 # Logs

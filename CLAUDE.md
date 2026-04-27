@@ -126,14 +126,14 @@ Whisper fallback. Language parameter from Phase 1 carries over directly — no e
 
 ### Backend
 ```bash
-cd backend
+cd app/backend
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
 ### Frontend
 ```bash
-cd frontend
+cd app/frontend
 npm install
 npm run dev        # → http://localhost:3000
 ```
@@ -145,7 +145,7 @@ docker compose up --build
 ```
 
 ### Required: YouTube cookies
-Export from Chrome via "Get cookies.txt LOCALLY" extension → save to `data/www.youtube.com_cookies.txt`.
+Export from Chrome via "Get cookies.txt LOCALLY" extension → save to `app/data/www.youtube.com_cookies.txt`.
 Set `COOKIES_PATH` in `.env`. Re-export if you get 429 or sign-in errors.
 
 ---
@@ -154,37 +154,46 @@ Set `COOKIES_PATH` in `.env`. Re-export if you get 429 or sign-in errors.
 
 ```
 yt-summarizer/
-├── backend/
-│   ├── main.py                      # App entry, DB init, router registration
-│   ├── config.py                    # Settings via pydantic-settings (.env)
-│   ├── models/
-│   │   ├── database.py              # Async engine, session factory, init_db()
-│   │   └── models.py                # ORM: Video, SubtitleRaw, SubtitleFormatted, PipelineSettings, AppSetting, ProcessingTask
-│   ├── routers/api.py               # 13 REST endpoints
-│   └── services/
-│       ├── subtitle_extractor.py    # yt-dlp wrapper, VTT parser, error classification
-│       ├── text_formatter.py        # Overlap dedup + time-gap paragraph splitting
-│       ├── text_cleaner.py          # Ollama HTTP client, paragraph-by-paragraph LLM cleanup; DEFAULT_* prompt constants
-│       ├── text_summarizer.py       # Ollama HTTP client, single-pass LLM summarization; DEFAULT_* prompt constants
-│       └── video_service.py         # DB CRUD, task lifecycle, pipeline settings CRUD
-├── frontend/
-│   ├── src/
-│   │   ├── api.ts                   # Typed fetch wrappers for all endpoints
-│   │   ├── App.tsx                  # Routes
-│   │   ├── index.css                # All styles
-│   │   ├── components/StatusBar.tsx # Backend + Ollama health dots in nav
-│   │   └── pages/                   # HomePage, ProcessingPage, ResultPage, HistoryPage, SettingsPage
-│   ├── vite.config.ts               # Port 3000, proxy /api → localhost:8000
-│   └── Dockerfile                   # Multi-stage: Node builder → nginx
-├── data/
-│   ├── db/yt_summarizer.sqlite      # SQLite DB (auto-created)
-│   └── www.youtube.com_cookies.txt  # YouTube cookies (gitignored)
+├── app/
+│   ├── backend/
+│   │   ├── main.py                      # App entry, DB init, router registration
+│   │   ├── config.py                    # Settings via pydantic-settings (.env)
+│   │   ├── models/
+│   │   │   ├── database.py              # Async engine, session factory, init_db()
+│   │   │   └── models.py                # ORM: Video, SubtitleRaw, SubtitleFormatted, PipelineSettings, AppSetting, ProcessingTask
+│   │   ├── routers/api.py               # REST endpoints
+│   │   └── services/
+│   │       ├── subtitle_extractor.py    # yt-dlp wrapper, VTT parser, error classification
+│   │       ├── text_formatter.py        # Overlap dedup + time-gap paragraph splitting
+│   │       ├── text_cleaner.py          # Ollama HTTP client, paragraph-by-paragraph LLM cleanup
+│   │       ├── text_summarizer.py       # Ollama HTTP client, single-pass LLM summarization
+│   │       └── video_service.py         # DB CRUD, task lifecycle, pipeline settings CRUD
+│   ├── frontend/
+│   │   ├── src/
+│   │   │   ├── api.ts                   # Typed fetch wrappers for all endpoints
+│   │   │   ├── App.tsx                  # Routes
+│   │   │   ├── index.css                # All styles
+│   │   │   ├── components/StatusBar.tsx # Backend + Ollama health dots in nav
+│   │   │   └── pages/                   # HomePage, ProcessingPage, ResultPage, HistoryPage, SettingsPage
+│   │   ├── vite.config.ts               # Port 3000, proxy /api → localhost:8000
+│   │   └── Dockerfile                   # Multi-stage: Node builder → nginx
+│   └── data/
+│       ├── db/yt_summarizer.sqlite      # SQLite DB (auto-created, gitignored)
+│       └── www.youtube.com_cookies.txt  # YouTube cookies (gitignored)
 ├── docs/
-│   ├── requirements.md              # Functional requirements (all phases)
-│   └── phase2-architecture.md       # LLM map-reduce design
-└── backlog/
-    ├── BACKLOG.md                   # Epic overview + phase roadmap
-    └── epics/EPIC-1..5.md           # User stories per epic
+│   ├── backlog/                         # Epics and user stories
+│   │   ├── BACKLOG.md
+│   │   └── epics/
+│   ├── requirements.md                  # Functional requirements (all phases)
+│   ├── effort-log.md                    # Session time log
+│   └── phase2-architecture.md           # LLM map-reduce design
+├── .env.example
+├── .gitignore
+├── CLAUDE.md
+├── docker-compose.yml
+├── docker-compose.dev.yml
+├── Makefile
+└── README.md
 ```
 
 ---

@@ -75,28 +75,32 @@ flowchart TD
 
 ```
 yt-summarizer/
-├── backend/                 # FastAPI + Python
-│   ├── main.py              # App entry point, DB init
-│   ├── config.py            # Settings (pydantic-settings)
-│   ├── models/              # SQLAlchemy ORM + async engine
-│   ├── routers/api.py       # REST endpoints
-│   └── services/
-│       ├── subtitle_extractor.py   # yt-dlp wrapper
-│       ├── text_formatter.py       # VTT → clean text
-│       ├── text_cleaner.py         # Ollama LLM cleanup (paragraph-by-paragraph)
-│       ├── text_summarizer.py      # Ollama LLM summarization (single-pass)
-│       └── video_service.py        # DB CRUD
-├── frontend/                # React + TypeScript + Vite
-│   └── src/
-│       ├── api.ts           # Typed fetch wrappers
-│       └── pages/           # Home, Processing, Result, History, Settings
-├── data/
-│   ├── db/                  # SQLite database
-│   └── www.youtube.com_cookies.txt  # YouTube cookies (gitignored)
-└── docs/
-    ├── quick-start-guide.md    # Setup and launch instructions
-    ├── requirements.md         # Functional requirements
-    └── phase2-architecture.md  # LLM summarization design
+├── app/
+│   ├── backend/             # FastAPI + Python
+│   │   ├── main.py          # App entry point, DB init
+│   │   ├── config.py        # Settings (pydantic-settings)
+│   │   ├── models/          # SQLAlchemy ORM + async engine
+│   │   ├── routers/api.py   # REST endpoints
+│   │   └── services/
+│   │       ├── subtitle_extractor.py   # yt-dlp wrapper
+│   │       ├── text_formatter.py       # VTT → clean text
+│   │       ├── text_cleaner.py         # Ollama LLM cleanup
+│   │       ├── text_summarizer.py      # Ollama LLM summarization
+│   │       └── video_service.py        # DB CRUD
+│   ├── frontend/            # React + TypeScript + Vite
+│   │   └── src/
+│   │       ├── api.ts       # Typed fetch wrappers
+│   │       └── pages/       # Home, Processing, Result, History, Settings
+│   └── data/
+│       ├── db/              # SQLite database (gitignored)
+│       └── www.youtube.com_cookies.txt  # YouTube cookies (gitignored)
+├── docs/
+│   ├── backlog/             # Epics and user stories
+│   ├── requirements.md      # Functional requirements
+│   └── phase2-architecture.md  # LLM summarization design
+├── Makefile
+├── docker-compose.yml
+└── README.md
 ```
 
 ### API
