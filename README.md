@@ -10,7 +10,7 @@ Video is expensive to evaluate:
 - Titles and thumbnails rarely show the real substance.
 - Intros, delivery, pacing, filler, and repetition add cognitive load.
 
-YT Summarizer extracts subtitles, cleans them into readable text, and helps you:
+YT Summarizer gives you a short AI summary of any YouTube video, so you can:
 
 - understand the core idea quickly;
 - decide whether the full video deserves your attention;
