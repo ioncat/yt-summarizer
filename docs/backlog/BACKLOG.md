@@ -127,7 +127,8 @@ Improve summarization quality beyond single-pass. Map-reduce or chunked approach
 | Epic 17: Map-Reduce Summarization | Auto-select single-pass vs map-reduce by text length; MAP (extract per chunk) + REDUCE (combine); live chunk counter in UI; force_map_reduce toggle for testing | 🔄 In Progress (implemented, prompt tuning ongoing) |
 | Epic 18: Hierarchical Map-Reduce | 3-level pipeline for texts > 50K chars: MAP → intermediate REDUCE per batch → final REDUCE. Fixes REDUCE overload on large inputs | 🔵 Planned |
 | Epic 19: Prompt Management v2 | Language-aware prompts, per-stage templates | 🔵 Planned |
-| Epic 20: Summary Quality Metrics | Show compression ratio, char count diff input/output | 🔵 Planned |
+| Epic 20: Summary Quality Metrics | Show compression ratio, char count diff input/output | ✅ Done — "86% compressed" shown in Summary meta |
+| Epic 21: Multi-Version Summaries | Store one summary per (video, model); view and switch between saved versions for model comparison | 🔵 Planned |
 
 ---
 

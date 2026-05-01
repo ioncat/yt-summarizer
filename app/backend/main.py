@@ -32,6 +32,11 @@ for _name in ("services.text_summarizer", "services.text_cleaner", "services.sub
     _lg.addHandler(_console_handler)
     _lg.addHandler(_file_handler)
 
+# Suppress SQLAlchemy SQL statement spam — only show warnings and above
+for _name in ("sqlalchemy.engine", "sqlalchemy.engine.Engine", "sqlalchemy.pool",
+               "sqlalchemy.dialects", "sqlalchemy.orm"):
+    logging.getLogger(_name).setLevel(logging.WARNING)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

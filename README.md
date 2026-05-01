@@ -71,6 +71,38 @@ flowchart TD
 
 ---
 
+## How It Works
+
+### AI Cleanup
+
+The formatted subtitle text is sent to a local Ollama model **paragraph by paragraph**. Each paragraph is independently cleaned — punctuation fixed, filler words removed, sentence fragments merged. If Ollama is unavailable or the request fails, the original paragraph is kept as-is. Progress is shown live in the UI: `Cleaning: 1:23 · paragraph 12 / 87`.
+
+### AI Summarization
+
+Two modes, selected automatically based on text length:
+
+**Single-pass** (texts under ~24 000 chars): the full text is sent to the model in one request. Fast, works well for short videos.
+
+**Map-Reduce** (longer texts): the text is split into overlapping ~3 000-char chunks. Each chunk is summarized independently (MAP step), then all chunk summaries are combined into a final structured document (REDUCE step). Progress is shown live: `Summarizing: 4:12 · chunk 18 / 28`.
+
+### What the model actually receives
+
+The prompt sent to Ollama is assembled from several sources — not just what you see in Settings:
+
+```
+[Language instruction]  ← injected automatically from video metadata
+[User prompt template]  ← from Settings (editable)
+[Input text]            ← from database (cleaned_text or formatted_text)
+```
+
+**Language instruction** is added automatically based on the video's detected language — e.g. `Respond in Russian.` This ensures the model replies in the correct language even if it tends to default to English. It is not shown in Settings because it's data-driven: the same prompt template works for any language.
+
+**System prompt** (also from Settings) is sent as a separate system message alongside the user message.
+
+You can customize both system and user prompts per stage in **Settings → AI Cleanup / Summarization**.
+
+---
+
 ## Architecture
 
 ```
@@ -131,8 +163,8 @@ yt-summarizer/
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Phase 1 — Subtitle Extraction | ✅ Done | Extract, format, store, display subtitles |
-| Phase 1.5 — LLM Cleanup & Summarization | 🔄 In Progress | Cleanup, summarization, Settings UI, auto-pipeline (Epic 16 remaining) |
-| Phase 2 — Summarization Quality | 🔵 Planned | Map-reduce / chunked approach for long texts |
+| Phase 1.5 — LLM Cleanup & Summarization | ✅ Done | Cleanup, summarization, Settings UI, auto-pipeline, cancel |
+| Phase 2 — Summarization Quality | 🔄 In Progress | Map-Reduce implemented; prompt tuning and hierarchical reduce ongoing |
 | Phase 3 — Speech-to-Text | 🔵 Planned | Whisper fallback when subtitles unavailable |
 
 See [backlog/BACKLOG.md](backlog/BACKLOG.md) for detailed epic breakdown.

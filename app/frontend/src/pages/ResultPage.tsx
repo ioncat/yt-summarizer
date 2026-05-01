@@ -154,7 +154,7 @@ export default function ResultPage() {
     }
   }, [videoId])
 
-  useEffect(() => {
+  function loadSettings() {
     Promise.all([getSettings(), getModels()])
       .then(([s, list]) => {
         setCleanupModel(s.cleanup.model ?? '')
@@ -170,6 +170,13 @@ export default function ResultPage() {
         }
       })
       .catch(err => console.error('[Result] failed to load model settings:', err))
+  }
+
+  useEffect(() => {
+    loadSettings()
+    const onVisible = () => { if (document.visibilityState === 'visible') loadSettings() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
 
   useEffect(() => {
@@ -345,6 +352,13 @@ export default function ResultPage() {
                 {result.summary_mode === 'map_reduce' && result.summary_chunks_count != null && (
                   <span className="meta-model"> · {result.summary_chunks_count} chunks</span>
                 )}
+                {(() => {
+                  const inputLen = result.cleaned_text?.length ?? result.formatted_text?.length ?? null
+                  const outputLen = result.summary_text?.length ?? null
+                  if (!inputLen || !outputLen || outputLen >= inputLen) return null
+                  const pct = Math.round((1 - outputLen / inputLen) * 100)
+                  return <span className="meta-model"> · {pct}% compressed</span>
+                })()}
               </div>
             ) : null
           )}

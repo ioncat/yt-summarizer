@@ -5,7 +5,7 @@ from config import settings
 
 DATABASE_URL = f"sqlite+aiosqlite:///{settings.database_path}"
 
-engine = create_async_engine(DATABASE_URL, echo=settings.debug)
+engine = create_async_engine(DATABASE_URL, echo=False)
 
 AsyncSessionLocal = sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False

@@ -103,6 +103,91 @@ RAG and cross-video search are out of scope — the task is inherently single-us
 
 ---
 
+## How the Model Context Is Assembled
+
+Every call to Ollama sends two messages: `system` and `user`. Neither is sent as-is from
+Settings — the final prompt is assembled in code from several sources.
+
+### What you see in Settings vs. what the model receives
+
+| Layer | Source | Visible in Settings? | Example |
+|---|---|---|---|
+| System prompt | Settings → stage | ✅ Yes | "You are a helpful assistant..." |
+| Language instruction | Video metadata (`language` field) | ❌ No — injected by code | `"Respond in Russian.\n"` |
+| User prompt template | Settings → stage | ✅ Yes | `"Write a detailed paragraph... Section:\n{text}"` |
+| Input text | DB (`cleaned_text` or `formatted_text`) | ❌ No | actual subtitle content |
+
+### Assembly order (user message sent to model)
+
+```
+[language instruction] + [user prompt template with {text} filled in]
+```
+
+Example for a Russian video, MAP step:
+```
+Respond in Russian.
+Write a detailed paragraph summarizing all key information from this section.
+Include all important facts, numbers, names, examples, and arguments.
+Do not skip any significant point. Do not compress aggressively.
+Keep the SAME language as the input text.
+Return ONLY the paragraph — no bullet points, no intro, no comments.
+
+Section:
+[3000 chars of subtitle text]
+```
+
+### Where language instruction comes from
+
+`language` is stored in the `videos` table — set at extraction time by yt-dlp
+(e.g. `"ru"`, `"en"`, `"uk"`). At summarization time, `_run_summary` reads it from
+`get_result()` and passes it to `summarize_text()`. The function `_language_instruction()`
+converts the code to a full name (`"ru"` → `"Russian"`) and prepends it to every
+Ollama call — MAP, REDUCE, and single-pass alike.
+
+```python
+# text_summarizer.py
+_LANGUAGE_NAMES = {"ru": "Russian", "en": "English", "uk": "Ukrainian", ...}
+
+def _language_instruction(language: str | None) -> str:
+    if not language:
+        return ""
+    name = _LANGUAGE_NAMES.get(language.lower(), language)
+    return f"Respond in {name}.\n"
+```
+
+If `language` is `null` in DB (e.g. old records before language detection was added),
+the instruction is silently omitted — the model falls back to its own judgment.
+
+### Why prepend, not embed
+
+Placing `Respond in Russian.` at the very **start** of the user message — before the
+task instructions — makes it the highest-priority directive in the prompt. Models tend
+to follow instructions that appear early more reliably than those buried mid-prompt.
+
+In practice, `"Keep the SAME language as the input text."` inside the prompt template
+was consistently ignored by `qwen3:8b` and `cas/aya-expanse-8b:latest` when processing
+Russian input — both defaulted to English output regardless. This is not necessarily
+a function of model size; larger models may exhibit the same behaviour depending on
+their instruction-following training. Prepending an explicit `Respond in Russian.`
+solved this completely — the model treats it as a hard constraint rather than a soft
+suggestion.
+
+### Why this is not in the Settings prompt
+
+The language instruction is **data-driven**, not prompt-driven. The same prompt template
+works for any language — the correct language is injected automatically per video.
+Putting it in the Settings prompt would require the user to update it manually every time
+they process a video in a different language, which defeats the purpose.
+
+### Future context injections (not yet implemented)
+
+The same pattern can be extended to inject other per-video data:
+- Video title → "The video is titled: {title}"
+- Duration → context about expected density
+- Domain/channel → hints about terminology
+
+---
+
 ## Observed Scaling Behaviour (empirical, 2026-04-30)
 
 Current implementation: `CHUNK_SIZE = 3 000`, `MAP_REDUCE_THRESHOLD = 24 000`.
