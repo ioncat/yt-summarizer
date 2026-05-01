@@ -35,6 +35,8 @@ async def _migrate_db() -> None:
         ("subtitles_formatted", "summary_started_at", "ALTER TABLE subtitles_formatted ADD COLUMN summary_started_at DATETIME"),
         ("subtitles_formatted", "summary_finished_at", "ALTER TABLE subtitles_formatted ADD COLUMN summary_finished_at DATETIME"),
         ("subtitles_formatted", "summary_model", "ALTER TABLE subtitles_formatted ADD COLUMN summary_model TEXT"),
+        ("subtitles_formatted", "summary_mode", "ALTER TABLE subtitles_formatted ADD COLUMN summary_mode TEXT"),
+        ("subtitles_formatted", "summary_chunks_count", "ALTER TABLE subtitles_formatted ADD COLUMN summary_chunks_count INTEGER"),
     ]
     async with engine.begin() as conn:
         for table, column, sql in migrations:
@@ -52,6 +54,7 @@ async def _seed_app_settings() -> None:
         "ollama_url": cfg.ollama_url,
         "ytdlp_path": cfg.ytdlp_path,
         "cookies_path": cfg.cookies_path,
+        "force_map_reduce": "false",
     }
     async with AsyncSessionLocal() as session:
         for key, value in defaults.items():

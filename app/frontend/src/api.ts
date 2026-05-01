@@ -25,9 +25,15 @@ export interface ResultResponse {
   cleanup_status: 'processing' | 'done' | 'failed' | null
   cleanup_model: string | null
   cleanup_duration_seconds: number | null
+  cleanup_paragraphs_done: number | null
+  cleanup_paragraphs_total: number | null
   summary_text: string | null
   summary_status: 'processing' | 'done' | 'failed' | null
   summary_model: string | null
+  summary_mode: 'single' | 'map_reduce' | null
+  summary_chunks_count: number | null
+  summary_chunks_done: number | null
+  summary_chunks_total: number | null
   summary_duration_seconds: number | null
   char_count: number | null
   created_at: string
@@ -123,6 +129,7 @@ export interface AppSettings {
   ollama_url: string | null
   ytdlp_path: string | null
   cookies_path: string | null
+  force_map_reduce: string | null
 }
 
 export interface StageSettings {
@@ -137,6 +144,8 @@ export interface AllSettings {
   app: AppSettings
   cleanup: StageSettings
   summarization: StageSettings
+  summarization_extract: StageSettings
+  summarization_combine: StageSettings
 }
 
 export async function getSettings(): Promise<AllSettings> {

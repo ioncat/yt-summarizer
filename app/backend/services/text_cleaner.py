@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Callable, Optional
 
 import httpx
 
@@ -69,7 +69,8 @@ async def clean_text(
     user_prompt_template: str | None = None,
     model: str | None = None,
     ollama_url: str | None = None,
-    is_cancelled: "Callable[[], bool] | None" = None,
+    is_cancelled: Callable[[], bool] | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> Optional[str]:
     """
     Clean each paragraph via Ollama.
@@ -96,13 +97,16 @@ async def clean_text(
             await client.get(f"{ollama_url}/api/tags", timeout=3.0)
 
             cleaned = []
-            for p in paragraphs:
+            total = len(paragraphs)
+            for i, p in enumerate(paragraphs):
                 if is_cancelled and is_cancelled():
                     logger.info("Cleanup cancelled mid-run.")
                     return None
                 cleaned.append(
                     await _clean_paragraph(client, p, effective_system, effective_user, model, ollama_url)
                 )
+                if on_progress:
+                    on_progress(i + 1, total)
             return "\n\n".join(cleaned)
 
     except httpx.ConnectError:

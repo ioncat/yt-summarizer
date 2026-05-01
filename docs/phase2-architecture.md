@@ -100,3 +100,34 @@ to make a reliable watch/skip call. Word count is the lever to tune that balance
 
 History in DB is incidental (avoid reprocessing same video), not a feature.
 RAG and cross-video search are out of scope — the task is inherently single-use.
+
+---
+
+## Observed Scaling Behaviour (empirical, 2026-04-30)
+
+Current implementation: `CHUNK_SIZE = 3 000`, `MAP_REDUCE_THRESHOLD = 24 000`.
+Model tested: Qwen2.5-Coder-14B.
+
+| Input size | Chunks | Output size | Compression | Quality |
+|---|---|---|---|---|
+| ~26 000 chars | ~9 | ~10 600 chars | ~40% | ✅ Good |
+| ~75 000 chars | ~25 | ~1 500 chars | ~2% | ❌ Too compressed |
+
+**Root cause of degradation at large scale:**
+The REDUCE step receives all MAP outputs concatenated. With ~9 chunks this is
+manageable; with ~25 chunks the combined input approaches or exceeds the model's
+context window, causing aggressive over-compression.
+
+**MAP step** performs consistently — produces a detailed paragraph per chunk regardless
+of total text size. The bottleneck is exclusively in REDUCE.
+
+**Potential fix for large texts: hierarchical (3-level) Map-Reduce**
+```
+chunks → MAP → partial summaries
+         ↓
+    group into batches of ~8 → intermediate REDUCE
+         ↓
+    combine batch results → final REDUCE
+```
+This keeps every REDUCE call within a safe input size regardless of total text length.
+Not yet implemented — tracked as a future improvement.

@@ -251,7 +251,7 @@ export default function ResultPage() {
       setLocalCleanupDuration(null)
       prevCleanupStatusRef.current = 'processing'
       startCleanupTimer()
-      setResult({ ...result, cleanup_status: 'processing', cleaned_text: null, cleanup_duration_seconds: null })
+      setResult({ ...result, cleanup_status: 'processing', cleanup_duration_seconds: null })
       stopPolling()
       pollRef.current = setInterval(() => loadResult(false), 3000)
     } catch (err: unknown) {
@@ -269,7 +269,7 @@ export default function ResultPage() {
       setLocalSummaryDuration(null)
       prevSummaryStatusRef.current = 'processing'
       startSummaryTimer()
-      setResult({ ...result, summary_status: 'processing', summary_text: null, summary_duration_seconds: null })
+      setResult({ ...result, summary_status: 'processing', summary_duration_seconds: null })
       stopSummaryPolling()
       summaryPollRef.current = setInterval(() => loadResult(false), 3000)
     } catch (err: unknown) {
@@ -317,7 +317,12 @@ export default function ResultPage() {
           })()}
           {activeTab === 'cleaned' && (
             result.cleanup_status === 'processing' && cleanupElapsedSeconds != null ? (
-              <div className="meta-item">Cleaning: <span>{formatDuration(cleanupElapsedSeconds)}</span></div>
+              <div className="meta-item">
+                Cleaning: <span>{formatDuration(cleanupElapsedSeconds)}</span>
+                {result.cleanup_paragraphs_done != null && result.cleanup_paragraphs_total != null && (
+                  <span className="meta-model"> · paragraph {result.cleanup_paragraphs_done} / {result.cleanup_paragraphs_total}</span>
+                )}
+              </div>
             ) : cleanupDuration != null ? (
               <div className="meta-item">
                 Cleaned in: <span>{formatDuration(cleanupDuration)}</span>
@@ -327,11 +332,19 @@ export default function ResultPage() {
           )}
           {activeTab === 'summary' && (
             result.summary_status === 'processing' && summaryElapsedSeconds != null ? (
-              <div className="meta-item">Summarizing: <span>{formatDuration(summaryElapsedSeconds)}</span></div>
+              <div className="meta-item">
+                Summarizing: <span>{formatDuration(summaryElapsedSeconds)}</span>
+                {result.summary_chunks_done != null && result.summary_chunks_total != null && (
+                  <span className="meta-model"> · chunk {result.summary_chunks_done} / {result.summary_chunks_total}</span>
+                )}
+              </div>
             ) : summaryDuration != null ? (
               <div className="meta-item">
                 Summarized in: <span>{formatDuration(summaryDuration)}</span>
                 {result.summary_model && <span className="meta-model"> · {result.summary_model}</span>}
+                {result.summary_mode === 'map_reduce' && result.summary_chunks_count != null && (
+                  <span className="meta-model"> · {result.summary_chunks_count} chunks</span>
+                )}
               </div>
             ) : null
           )}

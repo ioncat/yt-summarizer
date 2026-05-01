@@ -12,14 +12,14 @@ export default function App() {
       <nav>
         <div className="nav-left">
           <NavLink to="/" className="logo">YT Summarizer</NavLink>
-          <NavLink to="/">+ New</NavLink>
-          <NavLink to="/history">◷ History</NavLink>
         </div>
         <div className="nav-center">
-          <StatusBar />
+          <NavLink to="/">+ New</NavLink>
+          <NavLink to="/history">◷ History</NavLink>
+          <NavLink to="/settings">Settings ⚙</NavLink>
         </div>
         <div className="nav-right">
-          <NavLink to="/settings">Settings ⚙</NavLink>
+          <StatusBar />
         </div>
       </nav>
       <Routes>

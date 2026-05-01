@@ -118,15 +118,16 @@ Local LLM cleanup via Ollama. Runs on demand. No data leaves the machine.
 
 ---
 
-## Phase 2: LLM Summarization Quality 🔵
+## Phase 2: LLM Summarization Quality 🔄
 
 Improve summarization quality beyond single-pass. Map-reduce or chunked approach for long texts. See `docs/phase2-architecture.md`.
 
 | Epic | Description | Status |
 |------|-------------|--------|
-| Epic 17: Map-Reduce Summarization | paragraph → paragraph_summary → document_summary | 🔵 Planned |
-| Epic 18: Prompt Management v2 | Language-aware prompts, per-stage templates | 🔵 Planned |
-| Epic 19: Summary Quality Metrics | Show compression ratio, word count diff | 🔵 Planned |
+| Epic 17: Map-Reduce Summarization | Auto-select single-pass vs map-reduce by text length; MAP (extract per chunk) + REDUCE (combine); live chunk counter in UI; force_map_reduce toggle for testing | 🔄 In Progress (implemented, prompt tuning ongoing) |
+| Epic 18: Hierarchical Map-Reduce | 3-level pipeline for texts > 50K chars: MAP → intermediate REDUCE per batch → final REDUCE. Fixes REDUCE overload on large inputs | 🔵 Planned |
+| Epic 19: Prompt Management v2 | Language-aware prompts, per-stage templates | 🔵 Planned |
+| Epic 20: Summary Quality Metrics | Show compression ratio, char count diff input/output | 🔵 Planned |
 
 ---
 
@@ -148,13 +149,13 @@ Whisper fallback when no subtitles are available. Language param from Phase 1 re
 |-------|-------|--------|
 | Phase 1 — MVP | 1–5 | ✅ Done |
 | Phase 1.5 — LLM Cleanup & UX | 6–16 | ✅ Done (6–7, 9–16 done; 8 dropped) |
-| Phase 2 — Summarization | 17–19 | 🔵 Planned |
-| Phase 3 — STT Fallback | 20–22 | 🔵 Planned |
+| Phase 2 — Summarization Quality | 17–20 | 🔄 In Progress (Epic 17 implemented) |
+| Phase 3 — STT Fallback | 21–23 | 🔵 Planned |
 
 ---
 
 ## Document Control
 
 - **Version**: 1.5
-- **Last Updated**: 2026-04-26
+- **Last Updated**: 2026-04-30
 - **Status**: 🔄 Active Development

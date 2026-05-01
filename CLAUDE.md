@@ -2,6 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ Backlog & Epics Convention
+
+**Every epic and user story MUST follow `docs/product-delivery-conventions.md`.**  
+Read it before creating or editing any epic file.
+
+Key requirements:
+- Acceptance Criteria in **Given / When / Then** format (not bullet points)
+- **Edge Cases** as a separate section per user story
+- **Out of Scope** explicit in each user story
+- **Notes for Engineering** (not "Implementation Notes")
+- Definition of Ready must be met before starting implementation
+
+---
+
 ## Project Overview
 
 **YT Summarizer** - Extract, format, and store YouTube video subtitles for quick content review.

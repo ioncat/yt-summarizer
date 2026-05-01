@@ -34,6 +34,7 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
 
   async function handleSave() {
     setSaving(true)
+    const start = Date.now()
     try {
       const saved = await saveAppSettings({
         ollama_url: ollamaUrl || null,
@@ -46,6 +47,9 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
       console.error('[Settings/General] saveAppSettings failed:', err)
       showToast('Failed to save')
     } finally {
+      const elapsed = Date.now() - start
+      const remaining = 500 - elapsed
+      if (remaining > 0) await new Promise(r => setTimeout(r, remaining))
       setSaving(false)
     }
   }
@@ -136,6 +140,51 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Force Map-Reduce toggle (Summarization tab only)
+// ---------------------------------------------------------------------------
+
+interface ForceMapReduceProps {
+  value: boolean
+  onSaved: (s: AppSettings) => void
+}
+
+function ForceMapReduceToggle({ value, onSaved }: ForceMapReduceProps) {
+  const [checked, setChecked] = useState(value)
+  const [toast, setToast] = useState('')
+
+  function showToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(''), 2500)
+  }
+
+  async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const next = e.target.checked
+    setChecked(next)
+    try {
+      const saved = await saveAppSettings({ force_map_reduce: String(next) })
+      onSaved(saved)
+      showToast('Saved')
+    } catch {
+      setChecked(!next)
+      showToast('Failed to save')
+    }
+  }
+
+  return (
+    <div className="settings-section" style={{ paddingBottom: '0.5rem', borderBottom: '1px solid #eee', marginBottom: '1rem' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer' }}>
+        <input type="checkbox" checked={checked} onChange={handleChange} />
+        <span>Force Map-Reduce mode</span>
+        {toast && <span className="settings-toast" style={{ marginLeft: '0.5rem' }}>{toast}</span>}
+      </label>
+      <div className="field-hint" style={{ marginTop: '0.3rem' }}>
+        Overrides auto-detection — always use Map-Reduce regardless of text length. For testing only.
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // AI stage tab (cleanup / summarization)
 // ---------------------------------------------------------------------------
 
@@ -145,9 +194,61 @@ interface StagePanelProps {
   models: string[]
   modelsOnline: boolean
   locked?: boolean
+  hideModel?: boolean
+  label?: string
 }
 
-function StagePanel({ stage, initial, models, modelsOnline, locked }: StagePanelProps) {
+// Model-only selector that saves just the model field for a stage
+function ModelOnlyPanel({ stage, initial, models, modelsOnline, onSaved }: {
+  stage: string
+  initial: StageSettings
+  models: string[]
+  modelsOnline: boolean
+  onSaved: (s: StageSettings) => void
+}) {
+  const [model, setModel] = useState(initial.model ?? '')
+  const [toast, setToast] = useState('')
+
+  useEffect(() => { setModel(initial.model ?? '') }, [initial])
+
+  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 2500) }
+
+  async function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const next = e.target.value
+    setModel(next)
+    try {
+      const saved = await saveSettings(stage, {
+        system_prompt: initial.system_prompt,
+        user_prompt_template: initial.user_prompt_template,
+        model: next || null,
+      })
+      onSaved(saved)
+      showToast('Saved')
+    } catch {
+      setModel(initial.model ?? '')
+      showToast('Failed to save')
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+      <select
+        value={model}
+        onChange={handleChange}
+        disabled={!modelsOnline}
+        className={!model ? 'input-missing' : ''}
+        title={!modelsOnline ? 'Ollama offline — cannot load models' : undefined}
+        style={{ flex: 1 }}
+      >
+        <option value="">— Select your model —</option>
+        {models.map(m => <option key={m} value={m}>{m}</option>)}
+      </select>
+      {toast && <span className="settings-toast">{toast}</span>}
+    </div>
+  )
+}
+
+function StagePanel({ stage, initial, models, modelsOnline, locked, hideModel, label }: StagePanelProps) {
   const [systemPrompt, setSystemPrompt] = useState(initial.system_prompt ?? '')
   const [userPrompt, setUserPrompt] = useState(initial.user_prompt_template ?? '')
   const [model, setModel] = useState(initial.model ?? '')
@@ -167,6 +268,7 @@ function StagePanel({ stage, initial, models, modelsOnline, locked }: StagePanel
 
   async function handleSave() {
     setSaving(true)
+    const start = Date.now()
     try {
       await saveSettings(stage, {
         system_prompt: systemPrompt || null,
@@ -178,6 +280,9 @@ function StagePanel({ stage, initial, models, modelsOnline, locked }: StagePanel
       console.error(`[Settings/${stage}] saveSettings failed:`, err)
       showToast('Failed to save')
     } finally {
+      const elapsed = Date.now() - start
+      const remaining = 500 - elapsed
+      if (remaining > 0) await new Promise(r => setTimeout(r, remaining))
       setSaving(false)
     }
   }
@@ -198,10 +303,11 @@ function StagePanel({ stage, initial, models, modelsOnline, locked }: StagePanel
     }
   }
 
-  const missingModel = !locked && !model
+  const missingModel = !locked && !hideModel && !model
 
   return (
     <div className="settings-section">
+      {label && <h3 style={{ margin: '0 0 1rem', fontSize: '0.95rem', color: '#555' }}>{label}</h3>}
       {locked && (
         <div className="settings-warning settings-warning-info">
           Phase 2 — coming soon. Settings locked.
@@ -213,24 +319,26 @@ function StagePanel({ stage, initial, models, modelsOnline, locked }: StagePanel
         </div>
       )}
 
-      <div className="form-group">
-        <label>Model {!locked && <span className="required-mark">*</span>}</label>
-        <select
-          value={model}
-          onChange={e => setModel(e.target.value)}
-          disabled={locked || !modelsOnline}
-          className={missingModel ? 'input-missing' : ''}
-          title={!modelsOnline ? 'Ollama offline — cannot load models' : undefined}
-        >
-          <option value="">— Select your model —</option>
-          {models.map(m => (
-            <option key={m} value={m}>{m}</option>
-          ))}
-        </select>
-        {!modelsOnline && (
-          <div className="field-hint">Ollama offline — model list unavailable</div>
-        )}
-      </div>
+      {!hideModel && (
+        <div className="form-group">
+          <label>Model {!locked && <span className="required-mark">*</span>}</label>
+          <select
+            value={model}
+            onChange={e => setModel(e.target.value)}
+            disabled={locked || !modelsOnline}
+            className={missingModel ? 'input-missing' : ''}
+            title={!modelsOnline ? 'Ollama offline — cannot load models' : undefined}
+          >
+            <option value="">— Select your model —</option>
+            {models.map(m => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+          {!modelsOnline && (
+            <div className="field-hint">Ollama offline — model list unavailable</div>
+          )}
+        </div>
+      )}
 
       <div className="form-group">
         <label>System prompt</label>
@@ -279,6 +387,7 @@ function StagePanel({ stage, initial, models, modelsOnline, locked }: StagePanel
 // ---------------------------------------------------------------------------
 
 type TabId = 'general' | 'cleanup' | 'summarization'
+type SummSubTab = 'single_pass' | 'map_reduce'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'general', label: 'General' },
@@ -288,9 +397,12 @@ const TABS: { id: TabId; label: string }[] = [
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>('general')
+  const [summSubTab, setSummSubTab] = useState<SummSubTab>('single_pass')
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null)
   const [cleanup, setCleanup] = useState<StageSettings | null>(null)
   const [summarization, setSummarization] = useState<StageSettings | null>(null)
+  const [summExtract, setSummExtract] = useState<StageSettings | null>(null)
+  const [summCombine, setSummCombine] = useState<StageSettings | null>(null)
   const [models, setModels] = useState<string[]>([])
   const [modelsOnline, setModelsOnline] = useState(true)
   const [error, setError] = useState('')
@@ -301,6 +413,8 @@ export default function SettingsPage() {
         setAppSettings(s.app)
         setCleanup(s.cleanup)
         setSummarization(s.summarization)
+        setSummExtract(s.summarization_extract)
+        setSummCombine(s.summarization_combine)
       })
       .catch(err => { console.error('[Settings] getSettings failed:', err); setError('Could not load settings') })
 
@@ -315,7 +429,7 @@ export default function SettingsPage() {
     </div>
   )
 
-  if (!appSettings || !cleanup || !summarization) return (
+  if (!appSettings || !cleanup || !summarization || !summExtract || !summCombine) return (
     <div className="container">
       <div className="card"><div className="status-box"><div className="spinner" /></div></div>
     </div>
@@ -343,7 +457,7 @@ export default function SettingsPage() {
           {activeTab === 'general' && (
             <GeneralPanel initial={appSettings} onSaved={setAppSettings} />
           )}
-          {activeTab === 'cleanup' && cleanup && (
+          {activeTab === 'cleanup' && (
             <StagePanel
               stage="cleanup"
               initial={cleanup}
@@ -351,13 +465,74 @@ export default function SettingsPage() {
               modelsOnline={modelsOnline}
             />
           )}
-          {activeTab === 'summarization' && summarization && (
-            <StagePanel
-              stage="summarization"
-              initial={summarization}
-              models={models}
-              modelsOnline={modelsOnline}
-            />
+          {activeTab === 'summarization' && (
+            <>
+              {/* Force Map-Reduce toggle */}
+              <ForceMapReduceToggle
+                value={appSettings.force_map_reduce === 'true'}
+                onSaved={setAppSettings}
+              />
+
+              {/* Model selector — shared across both modes */}
+              <div className="settings-section" style={{ paddingBottom: '0.75rem', borderBottom: '1px solid #eee', marginBottom: '1rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>Model <span className="required-mark">*</span></label>
+                  <ModelOnlyPanel
+                    stage="summarization"
+                    initial={summarization}
+                    models={models}
+                    modelsOnline={modelsOnline}
+                    onSaved={setSummarization}
+                  />
+                </div>
+              </div>
+
+              {/* Sub-tabs for prompts */}
+              <div className="result-tabs" style={{ marginBottom: '1rem' }}>
+                <button
+                  className={`result-tab ${summSubTab === 'single_pass' ? 'active' : ''}`}
+                  onClick={() => setSummSubTab('single_pass')}
+                >
+                  Single Pass
+                </button>
+                <button
+                  className={`result-tab ${summSubTab === 'map_reduce' ? 'active' : ''}`}
+                  onClick={() => setSummSubTab('map_reduce')}
+                >
+                  Map-Reduce
+                </button>
+              </div>
+
+              {summSubTab === 'single_pass' && (
+                <StagePanel
+                  stage="summarization"
+                  initial={summarization}
+                  models={models}
+                  modelsOnline={modelsOnline}
+                  hideModel
+                />
+              )}
+              {summSubTab === 'map_reduce' && (
+                <>
+                  <StagePanel
+                    stage="summarization_extract"
+                    initial={summExtract}
+                    models={models}
+                    modelsOnline={modelsOnline}
+                    hideModel
+                    label="Step 1 — Extract (per chunk)"
+                  />
+                  <StagePanel
+                    stage="summarization_combine"
+                    initial={summCombine}
+                    models={models}
+                    modelsOnline={modelsOnline}
+                    hideModel
+                    label="Step 2 — Combine (all chunks)"
+                  />
+                </>
+              )}
+            </>
           )}
         </div>
       </div>

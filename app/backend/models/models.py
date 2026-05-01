@@ -71,6 +71,8 @@ class SubtitleFormatted(Base):
     summary_started_at: Mapped[datetime | None] = mapped_column(DateTime)
     summary_finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     summary_model: Mapped[str | None] = mapped_column(String)
+    summary_mode: Mapped[str | None] = mapped_column(String(20))   # single | map_reduce
+    summary_chunks_count: Mapped[int | None] = mapped_column(Integer)
     text_length: Mapped[int | None] = mapped_column(Integer)
     processing_status: Mapped[str | None] = mapped_column(String)  # success | error | pending
     processing_error: Mapped[str | None] = mapped_column(Text)

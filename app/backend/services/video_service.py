@@ -12,6 +12,10 @@ from services.text_cleaner import DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEM
 from services.text_summarizer import (
     DEFAULT_SYSTEM_PROMPT as DEFAULT_SUMMARY_SYSTEM_PROMPT,
     DEFAULT_USER_PROMPT_TEMPLATE as DEFAULT_SUMMARY_USER_PROMPT_TEMPLATE,
+    DEFAULT_MAP_SYSTEM_PROMPT,
+    DEFAULT_MAP_USER_PROMPT,
+    DEFAULT_REDUCE_SYSTEM_PROMPT,
+    DEFAULT_REDUCE_USER_PROMPT,
 )
 
 # ---------------------------------------------------------------------------
@@ -28,6 +32,16 @@ STAGE_DEFAULTS: dict[str, dict] = {
     "summarization": {
         "system_prompt": DEFAULT_SUMMARY_SYSTEM_PROMPT,
         "user_prompt_template": DEFAULT_SUMMARY_USER_PROMPT_TEMPLATE,
+        "model": None,
+    },
+    "summarization_extract": {
+        "system_prompt": DEFAULT_MAP_SYSTEM_PROMPT,
+        "user_prompt_template": DEFAULT_MAP_USER_PROMPT,
+        "model": None,
+    },
+    "summarization_combine": {
+        "system_prompt": DEFAULT_REDUCE_SYSTEM_PROMPT,
+        "user_prompt_template": DEFAULT_REDUCE_USER_PROMPT,
         "model": None,
     },
 }
@@ -201,6 +215,8 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
         "summary_text": fmt.summary_text if fmt else None,
         "summary_status": fmt.summary_status if fmt else None,
         "summary_model": fmt.summary_model if fmt else None,
+        "summary_mode": fmt.summary_mode if fmt else None,
+        "summary_chunks_count": fmt.summary_chunks_count if fmt else None,
         "summary_duration_seconds": _duration(
             fmt.summary_finished_at if fmt else None,
             fmt.summary_started_at if fmt else None,
@@ -282,7 +298,6 @@ async def set_cleanup_processing(db: AsyncSession, video_id: str, model: str | N
         text("""
             UPDATE subtitles_formatted
             SET cleanup_status = 'processing',
-                cleaned_text = NULL,
                 cleanup_model = :model,
                 cleanup_started_at = :ts,
                 cleanup_finished_at = NULL
@@ -353,7 +368,13 @@ async def set_summary_processing(db: AsyncSession, video_id: str, model: str | N
     return True
 
 
-async def finish_summary(db: AsyncSession, video_id: str, summary_text: str | None) -> None:
+async def finish_summary(
+    db: AsyncSession,
+    video_id: str,
+    summary_text: str | None,
+    mode: str = "single",
+    chunks_count: int = 1,
+) -> None:
     """Store summarization result and update status."""
     fmt_id = await _get_fmt_id(db, video_id)
     if not fmt_id:
@@ -364,10 +385,19 @@ async def finish_summary(db: AsyncSession, video_id: str, summary_text: str | No
             UPDATE subtitles_formatted
             SET summary_status = :status,
                 summary_text = :summary,
+                summary_mode = :mode,
+                summary_chunks_count = :chunks,
                 summary_finished_at = :ts
             WHERE id = :id
         """),
-        {"status": status, "summary": summary_text, "ts": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f"), "id": fmt_id},
+        {
+            "status": status,
+            "summary": summary_text,
+            "mode": mode,
+            "chunks": chunks_count,
+            "ts": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f"),
+            "id": fmt_id,
+        },
     )
     await db.commit()
 
@@ -383,6 +413,8 @@ async def reset_summary_status(db: AsyncSession, video_id: str) -> None:
             SET summary_status = NULL,
                 summary_text = NULL,
                 summary_model = NULL,
+                summary_mode = NULL,
+                summary_chunks_count = NULL,
                 summary_started_at = NULL,
                 summary_finished_at = NULL
             WHERE id = :id
@@ -438,9 +470,13 @@ async def get_all_settings(db: AsyncSession) -> dict:
     """Return settings for all stages, merged with defaults."""
     cleanup_row = await _get_stage_row(db, "cleanup")
     summ_row = await _get_stage_row(db, "summarization")
+    extract_row = await _get_stage_row(db, "summarization_extract")
+    combine_row = await _get_stage_row(db, "summarization_combine")
     return {
         "cleanup": _stage_to_dict(cleanup_row, "cleanup"),
         "summarization": _stage_to_dict(summ_row, "summarization"),
+        "summarization_extract": _stage_to_dict(extract_row, "summarization_extract"),
+        "summarization_combine": _stage_to_dict(combine_row, "summarization_combine"),
     }
 
 
@@ -483,7 +519,7 @@ async def reset_stage_settings(db: AsyncSession, stage: str) -> dict:
 # App settings CRUD (key-value: ollama_url, ytdlp_path, cookies_path)
 # ---------------------------------------------------------------------------
 
-APP_SETTING_KEYS = ("ollama_url", "ytdlp_path", "cookies_path")
+APP_SETTING_KEYS = ("ollama_url", "ytdlp_path", "cookies_path", "force_map_reduce")
 
 
 async def get_all_app_settings(db: AsyncSession) -> dict:

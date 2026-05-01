@@ -42,6 +42,10 @@ from services.text_summarizer import summarize_text
 _CANCEL_SET: set[str] = set()
 _SUMMARY_CANCEL_SET: set[str] = set()
 
+# In-memory progress: {video_id: {"done": int, "total": int}}
+_CLEANUP_PROGRESS: dict[str, dict] = {}
+_SUMMARY_PROGRESS: dict[str, dict] = {}
+
 router = APIRouter(prefix="/api")
 
 
@@ -60,6 +64,7 @@ class AppSettingsRequest(BaseModel):
     ollama_url: str | None = None
     ytdlp_path: str | None = None
     cookies_path: str | None = None
+    force_map_reduce: bool | None = None
 
 
 async def _run_processing(task_id: str, url: str, language: str) -> None:
@@ -134,6 +139,16 @@ async def get_video_result(video_id: str, db: Annotated[AsyncSession, Depends(ge
     result = await get_result(db, video_id)
     if not result:
         raise HTTPException(status_code=404, detail="Result not found")
+    # Inject live cleanup progress if cleanup is running
+    cleanup_progress = _CLEANUP_PROGRESS.get(video_id)
+    if cleanup_progress:
+        result["cleanup_paragraphs_done"] = cleanup_progress["done"]
+        result["cleanup_paragraphs_total"] = cleanup_progress["total"]
+    # Inject live Map-Reduce progress if summarization is running
+    summary_progress = _SUMMARY_PROGRESS.get(video_id)
+    if summary_progress:
+        result["summary_chunks_done"] = summary_progress["done"]
+        result["summary_chunks_total"] = summary_progress["total"]
     return result
 
 
@@ -157,6 +172,9 @@ async def _run_cleanup(video_id: str) -> None:
         stage = await get_stage_settings(db, "cleanup")
         ollama_url = await get_app_setting(db, "ollama_url")
 
+    def _on_cleanup_progress(done: int, total: int) -> None:
+        _CLEANUP_PROGRESS[video_id] = {"done": done, "total": total}
+
     cleaned = await clean_text(
         formatted_text,
         system_prompt=stage.get("system_prompt"),
@@ -164,7 +182,10 @@ async def _run_cleanup(video_id: str) -> None:
         model=stage.get("model"),
         ollama_url=ollama_url,
         is_cancelled=lambda: video_id in _CANCEL_SET,
+        on_progress=_on_cleanup_progress,
     )
+
+    _CLEANUP_PROGRESS.pop(video_id, None)
 
     async with AsyncSessionLocal() as db:
         if video_id in _CANCEL_SET:
@@ -219,24 +240,38 @@ async def _run_summary(video_id: str) -> None:
         source_text = fmt.get("cleaned_text") or fmt.get("formatted_text")
         if not source_text:
             return
+        language = fmt.get("language")
         stage = await get_stage_settings(db, "summarization")
+        extract_stage = await get_stage_settings(db, "summarization_extract")
+        combine_stage = await get_stage_settings(db, "summarization_combine")
         ollama_url = await get_app_setting(db, "ollama_url")
+        force_map_reduce = (await get_app_setting(db, "force_map_reduce") or "false") == "true"
 
-    summary = await summarize_text(
+    def _on_chunk_progress(done: int, total: int) -> None:
+        _SUMMARY_PROGRESS[video_id] = {"done": done, "total": total}
+
+    summary, mode, chunks_count = await summarize_text(
         source_text,
         system_prompt=stage.get("system_prompt"),
         user_prompt_template=stage.get("user_prompt_template"),
         model=stage.get("model"),
         ollama_url=ollama_url,
         is_cancelled=lambda: video_id in _SUMMARY_CANCEL_SET,
+        force_map_reduce=force_map_reduce,
+        extract_prompt=extract_stage.get("user_prompt_template"),
+        combine_prompt=combine_stage.get("user_prompt_template"),
+        on_progress=_on_chunk_progress,
+        language=language,
     )
+
+    _SUMMARY_PROGRESS.pop(video_id, None)
 
     async with AsyncSessionLocal() as db:
         if video_id in _SUMMARY_CANCEL_SET:
             _SUMMARY_CANCEL_SET.discard(video_id)
             await reset_summary_status(db, video_id)
         else:
-            await finish_summary(db, video_id, summary)
+            await finish_summary(db, video_id, summary, mode=mode, chunks_count=chunks_count)
 
 
 @router.post("/result/{video_id}/summary")
@@ -312,7 +347,12 @@ async def update_app_settings(
     body: AppSettingsRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    raw = body.model_dump()
+    updates: dict = {}
+    for k, v in raw.items():
+        if v is None:
+            continue
+        updates[k] = "true" if v is True else ("false" if v is False else v)
     return await save_app_settings(db, updates)
 
 
@@ -322,7 +362,7 @@ async def update_settings(
     body: StageSettingsRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if stage not in ("cleanup", "summarization"):
+    if stage not in ("cleanup", "summarization", "summarization_extract", "summarization_combine"):
         raise HTTPException(status_code=400, detail="Unknown stage")
     return await save_stage_settings(
         db, stage, body.system_prompt, body.user_prompt_template, body.model
@@ -331,7 +371,7 @@ async def update_settings(
 
 @router.delete("/settings/{stage}")
 async def reset_settings(stage: str, db: Annotated[AsyncSession, Depends(get_db)]):
-    if stage not in ("cleanup", "summarization"):
+    if stage not in ("cleanup", "summarization", "summarization_extract", "summarization_combine"):
         raise HTTPException(status_code=400, detail="Unknown stage")
     return await reset_stage_settings(db, stage)
 
