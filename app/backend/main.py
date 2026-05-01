@@ -65,6 +65,11 @@ app.add_middleware(
 app.include_router(api_router)
 
 
+@app.get("/")
+async def root():
+    return {"status": "operational", "service": "yt-summarizer"}
+
+
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "version": "0.1.0"}
