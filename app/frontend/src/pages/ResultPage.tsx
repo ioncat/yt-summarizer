@@ -43,6 +43,17 @@ export default function ResultPage() {
   const [localCleanupDuration, setLocalCleanupDuration] = useState<number | null>(null)
   const [localSummaryDuration, setLocalSummaryDuration] = useState<number | null>(null)
 
+  // Chat state
+  const [ollamaUrl, setOllamaUrl] = useState('')
+  const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
+  const [chatInput, setChatInput] = useState('')
+  const [isChatting, setIsChatting] = useState(false)
+  const [chatCopied, setChatCopied] = useState(false)
+  const ollamaMessagesRef = useRef<Array<{ role: string; content: string }>>([])
+  const chatEndRef = useRef<HTMLDivElement>(null)
+  const chatInputRef = useRef<HTMLTextAreaElement>(null)
+  const CHAT_WARN_CHARS = 100_000
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const summaryPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const cleanupTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -159,6 +170,7 @@ export default function ResultPage() {
       .then(([s, list]) => {
         setCleanupModel(s.cleanup.model ?? '')
         setSummaryModel(s.summarization.model ?? '')
+        setOllamaUrl(s.app.ollama_url ?? '')
         setModels(list)
         cleanupPromptsRef.current = {
           system_prompt: s.cleanup.system_prompt ?? null,
@@ -190,6 +202,102 @@ export default function ResultPage() {
       summaryPollRef.current = setInterval(() => loadResult(false), 3000)
     }
   }, [result?.summary_status])
+
+  // Reset chat when summary is re-generated
+  useEffect(() => {
+    setChatHistory([])
+    ollamaMessagesRef.current = []
+  }, [result?.summary_text])
+
+  // Auto-scroll to bottom after each chat message
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatHistory])
+
+  async function sendChatMessage() {
+    const question = chatInput.trim()
+    if (!question || isChatting || !ollamaUrl || !summaryModel || !result) return
+
+    // Build initial hidden context on first message
+    if (ollamaMessagesRef.current.length === 0) {
+      const sourceText = result.cleaned_text ?? result.formatted_text ?? ''
+      const systemPrompt = summaryPromptsRef.current.system_prompt
+      ollamaMessagesRef.current = [
+        ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+        { role: 'user', content: sourceText },
+        { role: 'assistant', content: result.summary_text ?? '' },
+      ]
+    }
+
+    ollamaMessagesRef.current = [...ollamaMessagesRef.current, { role: 'user', content: question }]
+    setChatHistory(prev => [...prev, { role: 'user', content: question }, { role: 'assistant', content: '' }])
+    setChatInput('')
+    setIsChatting(true)
+
+    let fullResponse = ''
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: summaryModel, messages: ollamaMessagesRef.current }),
+      })
+      if (!response.ok) throw new Error(`Ollama error ${response.status}`)
+
+      const reader = response.body!.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      const processLine = (line: string) => {
+        if (!line.trim()) return
+        try {
+          const json = JSON.parse(line)
+          const token = json.message?.content ?? json.response ?? ''
+          if (token) {
+            fullResponse += token
+            setChatHistory(prev => {
+              const updated = [...prev]
+              updated[updated.length - 1] = { role: 'assistant', content: fullResponse }
+              return updated
+            })
+          }
+        } catch { /* skip malformed lines */ }
+      }
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) { if (buffer.trim()) processLine(buffer); break }
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop()!
+        lines.forEach(processLine)
+      }
+
+      ollamaMessagesRef.current = [...ollamaMessagesRef.current, { role: 'assistant', content: fullResponse }]
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      setChatHistory(prev => {
+        const updated = [...prev]
+        updated[updated.length - 1] = { role: 'assistant', content: `⚠ ${msg}` }
+        return updated
+      })
+    } finally {
+      setIsChatting(false)
+      chatInputRef.current?.focus()
+    }
+  }
+
+  function copyChat() {
+    if (!result || chatHistory.length === 0) return
+    const lines = [
+      `Video: ${result.title ?? ''}`,
+      `\nSummary:\n${result.summary_text ?? ''}`,
+      ...chatHistory.map(m => `\n${m.role === 'user' ? 'Q' : 'A'}: ${m.content}`),
+    ].join('\n')
+    navigator.clipboard.writeText(lines).then(() => {
+      setChatCopied(true)
+      setTimeout(() => setChatCopied(false), 2000)
+    })
+  }
 
   const displayText =
     activeTab === 'summary' ? result?.summary_text :
@@ -301,6 +409,7 @@ export default function ResultPage() {
   const summaryDuration = result.summary_duration_seconds ?? localSummaryDuration
 
   return (
+    <>
     <div className="container">
       <div className="card">
         <h2>{result.title ?? 'Untitled'}</h2>
@@ -463,7 +572,25 @@ export default function ResultPage() {
                     : 'No summary yet. Click "✦ Summarize" above to generate one.'}
               </div>
             ) : (
-              <div className="formatted-text">{result.summary_text}</div>
+              <>
+                <div className="formatted-text">{result.summary_text}</div>
+
+                {/* Chat thread */}
+                {chatHistory.length > 0 && (
+                  <div className="chat-thread">
+                    {chatHistory.map((msg, i) => (
+                      <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
+                        {msg.content || (msg.role === 'assistant' && isChatting
+                          ? <span className="chat-typing">…</span>
+                          : null)}
+                      </div>
+                    ))}
+                    <div ref={chatEndRef} />
+                  </div>
+                )}
+                {/* Spacer so content isn't hidden behind fixed input bar */}
+                <div style={{ height: '80px' }} />
+              </>
             )}
           </>
         ) : activeTab === 'cleaned' && !result.cleaned_text ? (
@@ -479,5 +606,54 @@ export default function ResultPage() {
         )}
       </div>
     </div>
+
+    {/* Fixed chat input bar — only on Summary tab when done */}
+    {activeTab === 'summary' && result.summary_status === 'done' && result.summary_text && ollamaUrl && summaryModel && (
+      <div className="chat-input-bar">
+        {(() => {
+          const sourceLen = (result.cleaned_text ?? result.formatted_text ?? '').length
+          return sourceLen > CHAT_WARN_CHARS ? (
+            <div className="chat-warn">
+              ⚠ Text is very long ({Math.round(sourceLen / 1000)}K chars) — response quality may vary
+            </div>
+          ) : null
+        })()}
+        {chatHistory.length === 0 && (
+          <div className="chat-hint">Ask a follow-up question about the video</div>
+        )}
+        {chatHistory.length > 0 && (
+          <button className="chat-copy-btn" onClick={copyChat}>
+            {chatCopied ? 'Copied!' : 'Copy dialogue'}
+          </button>
+        )}
+        <div className="chat-input-wrap">
+          <textarea
+            ref={chatInputRef}
+            className="chat-input"
+            rows={1}
+            placeholder="Ask about the video…"
+            value={chatInput}
+            disabled={isChatting}
+            onChange={e => {
+              setChatInput(e.target.value)
+              e.target.style.height = 'auto'
+              e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage() }
+            }}
+          />
+          <button
+            className="chat-send-btn"
+            onClick={sendChatMessage}
+            disabled={isChatting || !chatInput.trim()}
+            title="Send"
+          >
+            {isChatting ? '…' : '➤'}
+          </button>
+        </div>
+      </div>
+    )}
+    </>
   )
 }

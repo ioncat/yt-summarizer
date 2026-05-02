@@ -7,7 +7,9 @@ from typing import Annotated
 import os
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import get_db
@@ -395,7 +397,6 @@ async def upload_cookies(
 @router.get("/models")
 async def list_models(db: Annotated[AsyncSession, Depends(get_db)]):
     """Return available Ollama models."""
-    import httpx
     ollama_url = await get_app_setting(db, "ollama_url")
     if not ollama_url:
         raise HTTPException(status_code=400, detail="Ollama URL not configured")
@@ -407,3 +408,41 @@ async def list_models(db: Annotated[AsyncSession, Depends(get_db)]):
             return {"models": models}
     except Exception:
         raise HTTPException(status_code=503, detail="Ollama unavailable")
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+    model: str
+
+
+@router.post("/chat")
+async def chat_proxy(body: ChatRequest, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Proxy a chat request to Ollama with streaming — avoids browser CORS restrictions."""
+    ollama_url = await get_app_setting(db, "ollama_url")
+    if not ollama_url:
+        raise HTTPException(status_code=400, detail="Ollama URL not configured")
+
+    payload = {
+        "model": body.model,
+        "stream": True,
+        "messages": [{"role": m.role, "content": m.content} for m in body.messages],
+    }
+
+    async def stream_ollama():
+        try:
+            async with httpx.AsyncClient(timeout=None) as client:
+                async with client.stream("POST", f"{ollama_url}/api/chat", json=payload) as resp:
+                    if resp.status_code != 200:
+                        yield json.dumps({"error": f"Ollama error {resp.status_code}"}).encode()
+                        return
+                    async for chunk in resp.aiter_bytes():
+                        yield chunk
+        except Exception as exc:
+            yield json.dumps({"error": str(exc)}).encode()
+
+    return StreamingResponse(stream_ollama(), media_type="application/x-ndjson")
