@@ -129,6 +129,7 @@ Improve summarization quality beyond single-pass. Map-reduce or chunked approach
 | Epic 19: Prompt Management v2 | Language-aware prompts, per-stage templates | 🔵 Planned |
 | Epic 20: Summary Quality Metrics | Show compression ratio, char count diff input/output | ✅ Done — "86% compressed" shown in Summary meta |
 | Epic 21: Multi-Version Summaries | Store one summary per (video, model); view and switch between saved versions for model comparison | 🔵 Planned |
+| Epic 22: Auto Language Detection | Detect original video language from yt-dlp metadata; "Auto (detect)" as default in Home page dropdown; manual override kept during testing | ✅ Done |
 
 ---
 

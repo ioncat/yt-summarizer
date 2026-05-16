@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { processVideo, getSettings, getHealth, AllSettings } from '../api'
 
 const LANGUAGES = [
+  { value: 'auto', label: 'Auto (detect)' },
   { value: 'ru', label: 'Russian' },
   { value: 'en', label: 'English' },
   { value: 'uk', label: 'Ukrainian' },
@@ -10,7 +11,7 @@ const LANGUAGES = [
 
 export default function HomePage() {
   const [url, setUrl] = useState('')
-  const [language, setLanguage] = useState('ru')
+  const [language, setLanguage] = useState('auto')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [missingConfig, setMissingConfig] = useState<string[]>([])
@@ -95,7 +96,7 @@ export default function HomePage() {
                 <option key={l.value} value={l.value}>{l.label}</option>
               ))}
             </select>
-            <p className="field-hint">Select the language of the video's subtitles. If unavailable, we'll show which languages are.</p>
+            <p className="field-hint">Auto detects the video's original language. Override if needed.</p>
           </div>
           <div className="form-group">
             <label className="checkbox-label">

@@ -166,6 +166,51 @@ def _find_subtitle_track(
     return None, None
 
 
+def _detect_language(info: dict) -> str:
+    """Detect original video language from yt-dlp metadata.
+
+    Priority:
+    1. Key ending in '-orig' in automatic_captions → strip suffix (most reliable)
+    2. First key in subtitles (manually uploaded captions)
+    3. First key in automatic_captions
+    4. Top-level 'language' field
+    5. Fallback 'ru'
+    """
+    auto = info.get("automatic_captions", {})
+    manual = info.get("subtitles", {})
+
+    for key in auto:
+        if key.endswith("-orig"):
+            return key[:-5]
+
+    if manual:
+        return next(iter(manual))
+
+    if auto:
+        first = next(iter(auto))
+        return first
+
+    lang = info.get("language")
+    if lang:
+        return lang
+
+    return "ru"
+
+
+def _fetch_metadata(url: str, cookies_path: str | None, ytdlp_path: str) -> tuple[dict | None, str]:
+    """Lightweight metadata-only yt-dlp call (no subtitle download)."""
+    stdout, stderr, code = _run_ytdlp(
+        ["--skip-download", "--print-json", url],
+        cookies_path, ytdlp_path=ytdlp_path, timeout=30,
+    )
+    if not stdout.strip():
+        return None, stderr
+    try:
+        return json.loads(stdout.strip()), stderr
+    except json.JSONDecodeError:
+        return None, stderr
+
+
 def _classify_error(stderr: str) -> ExtractionResult:
     s = stderr.lower()
     if "private" in s:
@@ -182,7 +227,7 @@ def _classify_error(stderr: str) -> ExtractionResult:
 
 
 def extract_subtitles(
-    url: str, language: str = "en", cookies_path: str | None = None, ytdlp_path: str = "yt-dlp"
+    url: str, language: str = "auto", cookies_path: str | None = None, ytdlp_path: str = "yt-dlp"
 ) -> ExtractionResult:
     if not extract_video_id(url):
         return ExtractionResult(
@@ -190,6 +235,13 @@ def extract_subtitles(
             error_type=ExtractionErrorType.INVALID_URL,
             error_message="Invalid YouTube URL.",
         )
+
+    # Auto-detect language: lightweight metadata call first, then full extraction
+    if language == "auto":
+        info, stderr = _fetch_metadata(url, cookies_path, ytdlp_path)
+        if info is None:
+            return _classify_error(stderr)
+        language = _detect_language(info)
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
