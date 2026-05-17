@@ -25,7 +25,9 @@ CHUNK_SIZE = 3_000
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a helpful assistant that creates concise, accurate summaries. "
-    "Preserve the key information and maintain the same language as the input."
+    "Preserve the key information and maintain the same language as the input. "
+    "If the text contains lines starting with '## ', treat them as chapter headings — "
+    "preserve them exactly as-is in your output. Do not translate, rephrase, or remove them."
 )
 
 DEFAULT_USER_PROMPT_TEMPLATE = (
@@ -42,7 +44,9 @@ DEFAULT_USER_PROMPT_TEMPLATE = (
 
 DEFAULT_MAP_SYSTEM_PROMPT = (
     "You are a helpful assistant that extracts key information from text sections. "
-    "Preserve the key information and maintain the same language as the input."
+    "Preserve the key information and maintain the same language as the input. "
+    "If the section starts with a line beginning with '## ', that is a chapter heading — "
+    "begin your summary with that exact heading, then write the summary below it."
 )
 
 DEFAULT_MAP_USER_PROMPT = (
@@ -50,7 +54,8 @@ DEFAULT_MAP_USER_PROMPT = (
     "Include all important facts, numbers, names, examples, and arguments. "
     "Do not skip any significant point. Do not compress aggressively. "
     "Keep the SAME language as the input text. "
-    "Return ONLY the paragraph — no bullet points, no intro, no comments.\n\n"
+    "If the section starts with a '## ' heading, preserve it at the top of your output. "
+    "Return ONLY the result — no bullet points, no intro, no comments.\n\n"
     "Section:\n{text}"
 )
 
@@ -60,7 +65,9 @@ DEFAULT_MAP_USER_PROMPT = (
 
 DEFAULT_REDUCE_SYSTEM_PROMPT = (
     "You are a helpful assistant that synthesizes section summaries into a coherent final summary. "
-    "Maintain the same language as the input."
+    "Maintain the same language as the input. "
+    "If section summaries contain lines starting with '## ', those are chapter headings — "
+    "preserve them exactly as-is in the final output."
 )
 
 DEFAULT_REDUCE_USER_PROMPT = (

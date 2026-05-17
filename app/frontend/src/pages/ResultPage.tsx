@@ -342,6 +342,16 @@ export default function ResultPage() {
     activeTab === 'cleaned' ? (result?.cleaned_text ?? result?.formatted_text) :
     result?.formatted_text
 
+  function renderText(text: string) {
+    const blocks = text.split('\n\n')
+    return blocks.map((block, i) => {
+      if (block.startsWith('## ')) {
+        return <h3 key={i} className="chapter-heading">{block.slice(3)}</h3>
+      }
+      return <p key={i} className="text-paragraph">{block}</p>
+    })
+  }
+
   async function handleCopy() {
     if (!displayText) return
     await navigator.clipboard.writeText(displayText)
@@ -642,7 +652,7 @@ export default function ResultPage() {
                 : 'No cleaned version yet. Click "✦ Clean with AI" above to start.'}
           </div>
         ) : (
-          <div className="formatted-text">{displayText}</div>
+          <div className="formatted-text">{displayText ? renderText(displayText) : null}</div>
         )}
       </div>
     </div>

@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_SYSTEM_PROMPT = (
     "You are a professional text editor specializing in cleaning up "
     "auto-generated subtitle transcripts. "
-    "Your task is to improve readability while preserving ALL original content and meaning."
+    "Your task is to improve readability while preserving ALL original content and meaning. "
+    "If the text contains lines starting with '## ', treat them as chapter headings — "
+    "preserve them exactly as-is. Do not translate, rephrase, or remove them."
 )
 
 DEFAULT_USER_PROMPT_TEMPLATE = (
@@ -102,9 +104,13 @@ async def clean_text(
                 if is_cancelled and is_cancelled():
                     logger.info("Cleanup cancelled mid-run.")
                     return None
-                cleaned.append(
-                    await _clean_paragraph(client, p, effective_system, effective_user, model, ollama_url)
-                )
+                # Chapter headings are immutable — pass through without touching LLM
+                if p.startswith("## "):
+                    cleaned.append(p)
+                else:
+                    cleaned.append(
+                        await _clean_paragraph(client, p, effective_system, effective_user, model, ollama_url)
+                    )
                 if on_progress:
                     on_progress(i + 1, total)
             return "\n\n".join(cleaned)
