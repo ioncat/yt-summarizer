@@ -41,7 +41,7 @@ flowchart TD
     end
 
     subgraph step2 ["② Format"]
-        PARSE --> FMT["Text formatter\nremove overlap · split by time gaps → paragraphs"]
+        PARSE --> FMT["Text formatter\nremove overlap · chapters → sections\nor time gaps → paragraphs"]
         FMT --> DB1[("SQLite\nformatted_text")]
     end
 
@@ -65,9 +65,13 @@ flowchart TD
     STT["Phase 3 — Whisper STT 🔵\nfallback when no subtitles"] --> FMT
 ```
 
-**Language**: if the requested language has no subtitles, the UI shows available languages with one-click retry.
+**Language**: defaults to "Auto (detect)" — the original video language is detected automatically from yt-dlp metadata. Manual override available in the dropdown. If the selected language has no subtitles, the UI shows available languages with one-click retry.
+
+**Chapter-aware formatting**: if the video creator defined chapters, subtitle text is grouped by chapter boundaries and each chapter becomes a `##` heading in the output — preserving the author's original structure. Falls back to time-gap paragraph splitting when no chapters are present.
 
 **AI cleanup**: runs locally via Ollama — no data leaves the machine. If Ollama is offline, "Cleaned" tab is greyed-out with a tooltip.
+
+**Completion notifications**: when cleanup or summarization finishes while you're on another tab, the tab title changes to "✓ Done" and a browser notification fires (if permission granted).
 
 ---
 
@@ -163,7 +167,7 @@ yt-summarizer/
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Phase 1 — Subtitle Extraction | ✅ Done | Extract, format, store, display subtitles |
-| Phase 1.5 — LLM Cleanup & Summarization | ✅ Done | Cleanup, summarization, Settings UI, auto-pipeline, cancel |
+| Phase 1.5 — LLM Cleanup & Summarization | ✅ Done | Cleanup, summarization, Settings UI, auto-pipeline, cancel, auto language detection, chapter-aware formatting, completion notifications |
 | Phase 2 — Summarization Quality | 🔄 In Progress | Map-Reduce implemented; prompt tuning and hierarchical reduce ongoing |
 | Phase 3 — Speech-to-Text | 🔵 Planned | Whisper fallback when subtitles unavailable |
 
