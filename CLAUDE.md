@@ -128,6 +128,29 @@ All 5 epics done. Full stack running:
 - Clears `cleanupIntervalRef`, navigates to `/result/{videoId}` immediately
 - Button not shown during stage ① (no cancel endpoint for task extraction)
 
+#### Epic 22 ✅ — Auto Language Detection
+- `_detect_language(info)` in `subtitle_extractor.py`: checks `-orig` key in `automatic_captions` → manual subs → first auto-caption key → `language` field → fallback `"ru"`
+- `_fetch_metadata()`: lightweight `--skip-download --print-json` call (no subtitle download)
+- `extract_subtitles()`: when `language == "auto"`, calls `_fetch_metadata()` + `_detect_language()`, then proceeds with detected language
+- Two-call yt-dlp flow; first call has no download so 429 risk is low
+- Frontend: `HomePage.tsx` — `"auto"` as first option and default in language selector
+
+#### Epic 23 ✅ — Chapter-Aware Subtitle Formatting
+- `VideoMetadata.chapters: list[dict] | None` — parsed from `info["chapters"]` in `_build_metadata()`
+- `Video.chapters` JSON column in DB (migration in `_migrate_db()`)
+- `text_formatter.py`: two branches — `_format_with_chapters()` groups subtitles by chapter time boundaries; `_format_with_gaps()` is existing 4s gap logic
+- `format_subtitles(entries, chapters=None)` selects branch; returns `has_chapters: bool`
+- Output with chapters: `## Chapter Title\n\nsubtitle text...` per chapter
+- Segments outside chapter boundaries assigned to nearest preceding chapter
+- Empty chapters (no subtitles) skipped — no empty headings
+- Fallback: if `chapters` is None or empty → existing gap-based formatting
+
+#### Epic 24 ✅ — Completion Notifications
+- `notify(title, body?)` in `ResultPage.tsx`: sets `document.title = "✓ {title}"`, reverts after 10s; fires `new Notification()` only when `document.hidden`
+- `requestNotifyPermission()`: calls `Notification.requestPermission()` if `permission === "default"` — called lazily from `handleCleanup()` / `handleSummarize()`
+- Triggers on `processing → done` transition in `loadResult()` (same place tab auto-switching happens)
+- `originalTitleRef` stores original title on mount; restored on unmount and on `visibilitychange`
+
 ### 🔮 Phase 2: Summarization Quality
 Map-reduce / chunked summarization for long texts. See `docs/phase2-architecture.md`.
 
