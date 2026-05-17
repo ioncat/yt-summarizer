@@ -17,8 +17,8 @@ multiple sessions per day (e.g. morning + evening work) with reasonable accuracy
 5. Time spent **before the first commit** (planning, discussion) and **after the last commit**
    (testing, debugging) is NOT counted. The number is therefore a lower bound on real time.
 
-**Why this works:** the developer doesn't use a stopwatch. Cluster-based estimation is
-close enough to reality without manual tracking overhead. Git history is the source of truth.
+**Why this works:** cluster-based estimation reflects actual work cadence without
+manual tracking. Git history is the source of truth.
 
 ---
 
