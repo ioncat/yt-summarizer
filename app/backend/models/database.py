@@ -56,6 +56,7 @@ async def _seed_app_settings() -> None:
         "ytdlp_path": cfg.ytdlp_path,
         "cookies_path": cfg.cookies_path,
         "force_map_reduce": "false",
+        "parallel_workers": "1",
     }
     async with AsyncSessionLocal() as session:
         for key, value in defaults.items():

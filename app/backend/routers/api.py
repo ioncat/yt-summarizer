@@ -67,6 +67,7 @@ class AppSettingsRequest(BaseModel):
     ytdlp_path: str | None = None
     cookies_path: str | None = None
     force_map_reduce: bool | None = None
+    parallel_workers: str | None = None
 
 
 async def _run_processing(task_id: str, url: str, language: str) -> None:
@@ -173,6 +174,7 @@ async def _run_cleanup(video_id: str) -> None:
         formatted_text = fmt["formatted_text"]
         stage = await get_stage_settings(db, "cleanup")
         ollama_url = await get_app_setting(db, "ollama_url")
+        parallel_workers = int(await get_app_setting(db, "parallel_workers") or "1")
 
     def _on_cleanup_progress(done: int, total: int) -> None:
         _CLEANUP_PROGRESS[video_id] = {"done": done, "total": total}
@@ -185,6 +187,7 @@ async def _run_cleanup(video_id: str) -> None:
         ollama_url=ollama_url,
         is_cancelled=lambda: video_id in _CANCEL_SET,
         on_progress=_on_cleanup_progress,
+        parallel_workers=parallel_workers,
     )
 
     _CLEANUP_PROGRESS.pop(video_id, None)
@@ -248,6 +251,7 @@ async def _run_summary(video_id: str) -> None:
         combine_stage = await get_stage_settings(db, "summarization_combine")
         ollama_url = await get_app_setting(db, "ollama_url")
         force_map_reduce = (await get_app_setting(db, "force_map_reduce") or "false") == "true"
+        parallel_workers = int(await get_app_setting(db, "parallel_workers") or "1")
 
     def _on_chunk_progress(done: int, total: int) -> None:
         _SUMMARY_PROGRESS[video_id] = {"done": done, "total": total}
@@ -267,6 +271,7 @@ async def _run_summary(video_id: str) -> None:
             is_cancelled=lambda: video_id in _SUMMARY_CANCEL_SET,
             on_progress=_on_chunk_progress,
             language=language,
+            parallel_workers=parallel_workers,
             # Use extract defaults — not summarization prompts
         )
     else:
@@ -282,6 +287,7 @@ async def _run_summary(video_id: str) -> None:
             combine_prompt=combine_stage.get("user_prompt_template"),
             on_progress=_on_chunk_progress,
             language=language,
+            parallel_workers=parallel_workers,
         )
 
     _SUMMARY_PROGRESS.pop(video_id, None)
