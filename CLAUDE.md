@@ -151,8 +151,38 @@ All 5 epics done. Full stack running:
 - Triggers on `processing → done` transition in `loadResult()` (same place tab auto-switching happens)
 - `originalTitleRef` stores original title on mount; restored on unmount and on `visibilitychange`
 
-### 🔮 Phase 2: Summarization Quality
-Map-reduce / chunked summarization for long texts. See `docs/phase2-architecture.md`.
+#### Epic 25 ✅ — Chapter Heading Preservation & Rendering
+- `text_cleaner.py`: paragraphs starting with `## ` → bypass LLM entirely, pass through unchanged
+- System prompts updated in `text_cleaner.py` + `text_summarizer.py` (single-pass, MAP, REDUCE, extract): instruct model to preserve `## ` headings
+- `renderText()` in `ResultPage.tsx`: splits by `\n\n`, renders `## ` lines as `<h3 class="chapter-heading">`, rest as `<p class="text-paragraph">`
+- Styled: bold, indigo bottom border, top spacing; applied to all three tabs (Subtitles, Cleaned, Summary)
+
+### 🔄 Phase 2: Summarization Quality
+
+#### Processing mode matrix
+
+| Condition | Mode | Status |
+|---|---|---|
+| text < 24K | single-pass | ✅ |
+| text ≥ 24K, no chapters | map-reduce | ✅ |
+| text ≥ 24K, has chapters | full_extract | ✅ Epic 27 |
+| text > 50K, no chapters | hierarchical map-reduce | 🔵 Epic 18 |
+
+Auto-select logic in `api.py _run_summary()`. `force_map_reduce=true` in `app_settings` overrides to map-reduce.
+
+#### Epic 17 ✅ — Map-Reduce Summarization
+- `text_summarizer.py`: `_split_into_chunks()` (3K char chunks with overlap) → MAP per chunk → REDUCE all summaries
+- `MAP_REDUCE_THRESHOLD = 24_000` — texts above this use map-reduce
+- `force_map_reduce` flag in `app_settings` for testing
+- Live chunk progress via `_SUMMARY_PROGRESS[video_id]` dict, injected into `GET /api/result` response
+
+#### Epic 27 ✅ — Full Extract (No-Reduce)
+- `text_summarizer.py`: `_split_by_chapter_headings()` splits text by `## ` markers; `extract_notes()` processes each section independently, no REDUCE step
+- Prompt: "preserve ALL facts, restructure for clarity only, do not compress"
+- Fallback on LLM failure per section: raw content used instead of aborting
+- `api.py`: auto-selected when `has_chapters AND len(text) ≥ 24K AND NOT force_map_reduce`
+- `summary_mode = "full_extract"` stored in DB; frontend shows "Full Extract · N chapters" in meta
+- Progress: "chapter N / M" label (vs "chunk N / M" for map-reduce)
 
 ### 🔮 Phase 3: Speech-to-Text Fallback
 Whisper fallback. Language parameter from Phase 1 carries over directly — no extra user input.
@@ -203,7 +233,7 @@ yt-summarizer/
 │   │       ├── subtitle_extractor.py    # yt-dlp wrapper, VTT parser, error classification
 │   │       ├── text_formatter.py        # Overlap dedup + time-gap paragraph splitting
 │   │       ├── text_cleaner.py          # Ollama HTTP client, paragraph-by-paragraph LLM cleanup
-│   │       ├── text_summarizer.py       # Ollama HTTP client, single-pass LLM summarization
+│   │       ├── text_summarizer.py       # Ollama HTTP client, single-pass + map-reduce + full_extract (extract_notes)
 │   │       └── video_service.py         # DB CRUD, task lifecycle, pipeline settings CRUD
 │   ├── frontend/
 │   │   ├── src/
@@ -285,6 +315,8 @@ Do this BEFORE restarting the backend with new model/migration code. No exceptio
 **App settings (single source of truth)**: `app_settings` table stores `ollama_url`, `ytdlp_path`, `cookies_path`. Seeded from `config.py` on first launch. After that, managed exclusively via web UI (Settings → General). `config.py` is infrastructure-only.
 
 **No model default**: `text_cleaner.py` has no fallback model. If model is null → cleanup returns None → status `failed`. User must select a model in Settings → AI Cleanup.
+
+**Cancel preserves text**: `reset_cleanup_status` / `reset_summary_status` reset only `status`, `started_at`, `finished_at`. `cleaned_text` / `summary_text` are never nulled on cancel — previous result stays visible.
 
 ---
 
