@@ -84,6 +84,29 @@ DEFAULT_REDUCE_USER_PROMPT = (
     "Summaries:\n{text}"
 )
 
+# ---------------------------------------------------------------------------
+# Default prompts — Full Extract (no-reduce, chapter-by-chapter)
+# ---------------------------------------------------------------------------
+
+DEFAULT_EXTRACT_SYSTEM_PROMPT = (
+    "You are a content extraction assistant. "
+    "Your task is to extract and structure all key information from the provided text. "
+    "Preserve ALL facts, examples, definitions, steps, and important points. "
+    "Do NOT summarize or compress — restructure for clarity only. "
+    "Remove only filler words, off-topic digressions, and exact repetitions. "
+    "Maintain the same language as the input. "
+    "If the text starts with a '## ' heading, preserve it exactly at the top of your output."
+)
+
+DEFAULT_EXTRACT_USER_PROMPT = (
+    "Extract and structure all key content from the following section. "
+    "Preserve all important facts, examples, definitions, and points. "
+    "Remove only filler and repetitions. Keep the SAME language as the input. "
+    "If the section starts with a '## ' heading, preserve it at the top of your output. "
+    "Return ONLY the result — no intro, no comments.\n\n"
+    "Section:\n{text}"
+)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -322,3 +345,108 @@ async def _map_reduce(
     )
 
     return final, chunks_count
+
+
+# ---------------------------------------------------------------------------
+# Full Extract — chapter-by-chapter, no REDUCE
+# ---------------------------------------------------------------------------
+
+def _split_by_chapter_headings(text: str) -> list[tuple[str | None, str]]:
+    """
+    Split text into sections by '## ' headings.
+    Returns list of (heading_line | None, full_section_text).
+    The heading is included at the top of section_text for LLM context.
+    """
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    sections: list[tuple[str | None, str]] = []
+    current_heading: str | None = None
+    current_content: list[str] = []
+
+    for para in paragraphs:
+        if para.startswith("## "):
+            if current_heading is not None or current_content:
+                sections.append((current_heading, "\n\n".join(current_content)))
+            current_heading = para
+            current_content = [para]  # heading included for LLM context
+        else:
+            current_content.append(para)
+
+    if current_heading is not None or current_content:
+        sections.append((current_heading, "\n\n".join(current_content)))
+
+    return sections
+
+
+async def extract_notes(
+    text: str,
+    model: str | None = None,
+    ollama_url: str | None = None,
+    is_cancelled: Callable[[], bool] | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+    language: str | None = None,
+    system_prompt: str | None = None,
+    user_prompt_template: str | None = None,
+) -> tuple[Optional[str], str, int]:
+    """
+    Full Extract: process each chapter section independently, no REDUCE step.
+    Splits text by '## ' headings; each section sent to LLM separately.
+    Returns (result_text, 'full_extract', sections_count).
+    """
+    if not model:
+        logger.warning("extract_notes: no model configured. Select one in Settings.")
+        return None, "full_extract", 0
+    if not ollama_url:
+        logger.warning("extract_notes: no ollama_url configured. Set it in Settings.")
+        return None, "full_extract", 0
+    if not text or not text.strip():
+        return None, "full_extract", 0
+
+    if is_cancelled and is_cancelled():
+        return None, "full_extract", 0
+
+    try:
+        async with httpx.AsyncClient() as client:
+            try:
+                await client.get(f"{ollama_url}/api/tags", timeout=3.0)
+            except httpx.ConnectError:
+                logger.info("Ollama not available at %s — skipping extract_notes", ollama_url)
+                return None, "full_extract", 0
+
+            sections = _split_by_chapter_headings(text)
+            sections_count = len(sections)
+            logger.info("extract_notes: %d sections from %d chars", sections_count, len(text))
+
+            effective_system = system_prompt or DEFAULT_EXTRACT_SYSTEM_PROMPT
+            effective_template = user_prompt_template or DEFAULT_EXTRACT_USER_PROMPT
+            lang_instruction = _language_instruction(language)
+
+            results: list[str] = []
+            for i, (_heading, content) in enumerate(sections):
+                if is_cancelled and is_cancelled():
+                    logger.info("extract_notes: cancelled at section %d/%d", i + 1, sections_count)
+                    return None, "full_extract", sections_count
+
+                logger.info(
+                    "extract_notes: section %d/%d (%d chars)", i + 1, sections_count, len(content)
+                )
+                extracted = await _call_ollama(
+                    client, ollama_url, model,
+                    effective_system,
+                    lang_instruction + effective_template.format(text=content),
+                )
+                if extracted is None:
+                    logger.warning(
+                        "extract_notes: section %d failed — using raw content", i + 1
+                    )
+                    results.append(content)  # fallback: keep raw text
+                else:
+                    results.append(extracted)
+
+                if on_progress:
+                    on_progress(i + 1, sections_count)
+
+            return "\n\n".join(results), "full_extract", sections_count
+
+    except Exception as exc:
+        logger.warning("extract_notes failed: %s", exc)
+        return None, "full_extract", 0

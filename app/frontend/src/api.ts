@@ -30,12 +30,13 @@ export interface ResultResponse {
   summary_text: string | null
   summary_status: 'processing' | 'done' | 'failed' | null
   summary_model: string | null
-  summary_mode: 'single' | 'map_reduce' | null
+  summary_mode: 'single' | 'map_reduce' | 'full_extract' | null
   summary_chunks_count: number | null
   summary_chunks_done: number | null
   summary_chunks_total: number | null
   summary_duration_seconds: number | null
   char_count: number | null
+  chapters: Array<{ start_time: number; end_time: number; title: string }> | null
   created_at: string
 }
 

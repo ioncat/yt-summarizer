@@ -501,7 +501,7 @@ export default function ResultPage() {
               <div className="meta-item">
                 Summarizing: <span>{formatDuration(summaryElapsedSeconds)}</span>
                 {result.summary_chunks_done != null && result.summary_chunks_total != null && (
-                  <span className="meta-model"> · chunk {result.summary_chunks_done} / {result.summary_chunks_total}</span>
+                  <span className="meta-model"> · {result.chapters ? 'chapter' : 'chunk'} {result.summary_chunks_done} / {result.summary_chunks_total}</span>
                 )}
               </div>
             ) : summaryDuration != null ? (
@@ -510,6 +510,9 @@ export default function ResultPage() {
                 {result.summary_model && <span className="meta-model"> · {result.summary_model}</span>}
                 {result.summary_mode === 'map_reduce' && result.summary_chunks_count != null && (
                   <span className="meta-model"> · {result.summary_chunks_count} chunks</span>
+                )}
+                {result.summary_mode === 'full_extract' && result.summary_chunks_count != null && (
+                  <span className="meta-model"> · Full Extract · {result.summary_chunks_count} chapters</span>
                 )}
                 {(() => {
                   const inputLen = result.cleaned_text?.length ?? result.formatted_text?.length ?? null

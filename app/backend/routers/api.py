@@ -38,7 +38,7 @@ from services.video_service import (
     finish_summary,
     update_task_failed,
 )
-from services.text_summarizer import summarize_text
+from services.text_summarizer import summarize_text, extract_notes, MAP_REDUCE_THRESHOLD
 
 # In-memory cancel flags — cleared when cleanup/summary finishes or is cancelled
 _CANCEL_SET: set[str] = set()
@@ -252,19 +252,37 @@ async def _run_summary(video_id: str) -> None:
     def _on_chunk_progress(done: int, total: int) -> None:
         _SUMMARY_PROGRESS[video_id] = {"done": done, "total": total}
 
-    summary, mode, chunks_count = await summarize_text(
-        source_text,
-        system_prompt=stage.get("system_prompt"),
-        user_prompt_template=stage.get("user_prompt_template"),
-        model=stage.get("model"),
-        ollama_url=ollama_url,
-        is_cancelled=lambda: video_id in _SUMMARY_CANCEL_SET,
-        force_map_reduce=force_map_reduce,
-        extract_prompt=extract_stage.get("user_prompt_template"),
-        combine_prompt=combine_stage.get("user_prompt_template"),
-        on_progress=_on_chunk_progress,
-        language=language,
+    # Auto-select Full Extract for chapter videos ≥ MAP_REDUCE_THRESHOLD chars
+    use_full_extract = (
+        not force_map_reduce
+        and bool(fmt.get("chapters"))
+        and len(source_text) >= MAP_REDUCE_THRESHOLD
     )
+
+    if use_full_extract:
+        summary, mode, chunks_count = await extract_notes(
+            source_text,
+            model=stage.get("model"),
+            ollama_url=ollama_url,
+            is_cancelled=lambda: video_id in _SUMMARY_CANCEL_SET,
+            on_progress=_on_chunk_progress,
+            language=language,
+            # Use extract defaults — not summarization prompts
+        )
+    else:
+        summary, mode, chunks_count = await summarize_text(
+            source_text,
+            system_prompt=stage.get("system_prompt"),
+            user_prompt_template=stage.get("user_prompt_template"),
+            model=stage.get("model"),
+            ollama_url=ollama_url,
+            is_cancelled=lambda: video_id in _SUMMARY_CANCEL_SET,
+            force_map_reduce=force_map_reduce,
+            extract_prompt=extract_stage.get("user_prompt_template"),
+            combine_prompt=combine_stage.get("user_prompt_template"),
+            on_progress=_on_chunk_progress,
+            language=language,
+        )
 
     _SUMMARY_PROGRESS.pop(video_id, None)
 
