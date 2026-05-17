@@ -42,6 +42,7 @@ class VideoMetadata:
     view_count: int | None
     description: str | None
     thumbnail_url: str | None
+    chapters: list[dict] | None = None  # [{start_time, end_time, title}, ...]
 
 
 @dataclass
@@ -133,6 +134,19 @@ def _build_metadata(info: dict) -> VideoMetadata:
     upload_date = info.get("upload_date")
     if upload_date and len(upload_date) == 8:
         upload_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:]}"
+
+    raw_chapters = info.get("chapters")
+    chapters: list[dict] | None = None
+    if raw_chapters:
+        chapters = [
+            {
+                "start_time": int(ch.get("start_time", 0)),
+                "end_time": int(ch.get("end_time", 0)),
+                "title": ch.get("title", ""),
+            }
+            for ch in raw_chapters
+        ]
+
     return VideoMetadata(
         video_id=info.get("id", ""),
         title=info.get("title"),
@@ -144,6 +158,7 @@ def _build_metadata(info: dict) -> VideoMetadata:
         view_count=info.get("view_count"),
         description=info.get("description"),
         thumbnail_url=info.get("thumbnail"),
+        chapters=chapters,
     )
 
 

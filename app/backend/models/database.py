@@ -37,6 +37,7 @@ async def _migrate_db() -> None:
         ("subtitles_formatted", "summary_model", "ALTER TABLE subtitles_formatted ADD COLUMN summary_model TEXT"),
         ("subtitles_formatted", "summary_mode", "ALTER TABLE subtitles_formatted ADD COLUMN summary_mode TEXT"),
         ("subtitles_formatted", "summary_chunks_count", "ALTER TABLE subtitles_formatted ADD COLUMN summary_chunks_count INTEGER"),
+        ("videos", "chapters", "ALTER TABLE videos ADD COLUMN chapters TEXT"),
     ]
     async with engine.begin() as conn:
         for table, column, sql in migrations:

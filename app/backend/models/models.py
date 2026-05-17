@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.database import Base
@@ -26,6 +26,7 @@ class Video(Base):
     view_count: Mapped[int | None] = mapped_column(Integer)
     description: Mapped[str | None] = mapped_column(Text)
     thumbnail_url: Mapped[str | None] = mapped_column(String)
+    chapters: Mapped[list | None] = mapped_column(JSON)  # [{start_time, end_time, title}, ...]
     language_detected: Mapped[str | None] = mapped_column(String)
     has_subtitles: Mapped[bool | None] = mapped_column(Boolean)
     subtitles_type: Mapped[str | None] = mapped_column(String)

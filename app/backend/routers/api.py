@@ -88,7 +88,7 @@ async def _run_processing(task_id: str, url: str, language: str) -> None:
                     available_languages=extraction.available_languages,
                 )
                 return
-            formatted = format_subtitles(extraction.subtitles)
+            formatted = format_subtitles(extraction.subtitles, chapters=extraction.metadata.chapters)
             await complete_task(db, task_id, url, extraction, formatted)
 
     except Exception as e:

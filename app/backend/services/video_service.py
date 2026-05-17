@@ -133,6 +133,7 @@ async def complete_task(
     video.language_detected = extraction_result.language
     video.has_subtitles = True
     video.subtitles_type = extraction_result.source_type.value if extraction_result.source_type else None
+    video.chapters = extraction_result.metadata.chapters
 
     db.add(SubtitleRaw(
         id=generate_id(),
@@ -222,6 +223,7 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
             fmt.summary_started_at if fmt else None,
         ),
         "char_count": fmt.text_length if fmt else None,
+        "chapters": video.chapters,
         "created_at": video.created_at.isoformat(),
     }
 
