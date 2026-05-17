@@ -28,19 +28,3 @@ Time analysis based on git history (commit timestamps).
 | 17.05.2026 | 12 | **Bug fix**: cancel was nulling `cleaned_text`/`summary_text` → fixed. **Epic 27**: Full Extract (no-reduce) — `extract_notes()`, `_split_by_chapter_headings()`, auto-select, frontend meta + progress label. **Epic 26 impl** on `feature/epic-26-benchmark`: `BenchmarkRun` model, `benchmark_service.py`, API endpoints, `BenchmarkPage.tsx` (N-column grid, sync scroll, HTML export), `renderText()` shared util. **Epic 29 impl** on `feature/epic-29-parallel-map`: parallel MAP via `asyncio.Semaphore` + indexed-gather in cleanup/map-reduce/full-extract, `parallel_workers` setting + UI. **Docs**: EPIC-26/27/29 docs, USER_GUIDE.md (Setup/Modes/Features/Troubleshooting/FAQ), README slimmed, CLAUDE.md updated, Epic 21 deferred, Phase 3 epics renumbered 20-22 → 30-32. | ~1 h 40 min (18:14–19:54) |
 
 *Table updated after each session.*
-
----
-
-## How to update
-
-After each session run:
-
-```bash
-# View commits with timestamps
-git log --pretty=format:"%h %ad %s" --date=format:"%Y-%m-%d %H:%M"
-
-# View commits for a specific day
-git log --after="18.04.2026 00:00" --before="18.04.2026 23:59" --pretty=format:"%h %ad %s" --date=format:"%H:%M"
-```
-
-Then update the table above manually (or ask Claude).
