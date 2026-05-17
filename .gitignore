@@ -84,6 +84,8 @@ start.vbs
 start.sh
 kill-backend.bat
 kill-backend.*
+start-backend.bat
+start-backend.*
 
 # ========================
 # Logs
