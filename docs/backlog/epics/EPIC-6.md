@@ -166,5 +166,5 @@ So that I understand why cleanup might fail before I even try
 ## Status
 
 **Status**: ✅ Done  
-**Completed**: 2026-04-25  
+**Completed**: 25.04.2026  
 **Priority**: 🟠 P1

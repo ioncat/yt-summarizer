@@ -11,21 +11,21 @@ Time analysis based on git history (commit timestamps).
 
 | Date | Commits | Work description | Session time |
 |------|---------|-----------------|-------------|
-| 2026-04-18 | 13 | Full project bootstrap: discovery docs, repo structure, FastAPI backend, DB models, subtitle extractor (yt-dlp, cookies, 429 fix), text formatter, DB service layer, REST API (5 endpoints), Phase 2 architecture docs | ~1 h 35 min (15:06–16:41) |
-| 2026-04-18 | — | Frontend (React + TypeScript + Vite, 4 pages), language UX feature (available-language buttons on error), multiple backend bug fixes (duplicate video rows, FK cascade on ORM delete, scalar_one_or_none on multi-row results, stale pending cleanup) | ~3 h |
-| 2026-04-25 | 3 | .gitignore cleanup (untrack Claude local config), one-click dev launchers (start.vbs / start.sh), fix .env.example (CORS_ORIGINS JSON format, correct data/ paths) | ~30 min |
-| 2026-04-25 | — | **Epic 6**: AI cleanup refactored to manual button (POST /cleanup, polling, cleanup_status field, Re-run support); StatusBar (health dots for backend + Ollama); tab CSS fix; backlog restructure (Epics 6–11); README/docs cleanup; config cleanup (OLLAMA_MODEL removed from .env) | ~3 h |
-| 2026-04-25 | — | **Epic 7**: Settings Page — PipelineSettings model, service CRUD, API endpoints (GET/PUT/DELETE /settings, GET /models), SettingsPage.tsx with editable Cleanup + locked Summarization panels; text_cleaner.py wired to DB settings; tab switching bug fixed; backup rule added | ~2 h |
-| 2026-04-26 | — | **Epic 8 (dropped)**: react-markdown + Markdown prompt rule tested — LLM output inconsistent, reverted to plain text. **Cleanup bug fix**: default model was qwen3:8b (not installed) → silently returned original text; fixed by removing hardcoded model default (user must pick via Settings). **History**: char_count added. **Epic 13**: Settings 2.0 — AppSetting model + app_settings table, seed on first launch, config.py infrastructure-only; ytdlp_path/cookies_path/ollama_url moved to DB; Settings page redesigned with tabs (General/AI Cleanup/Summarization); warning banners for missing required fields on Home + Settings; cookie upload via web; PUT /api/settings/app + POST /api/settings/upload-cookies | ~3 h |
-| 2026-04-26 | — | **Codex review + bug fixes**: reviewed Codex-generated Epic 14 (cleanup timer) — fixed `_CANCEL_SET` not cleared on re-run, fixed timestamp format (isoformat T→space for SQLAlchemy). Deleted junk .js files Codex generated. Synced all epic files (EPIC-1..5 status, EPIC-8 dropped, EPIC-9/11 done, created EPIC-12/13/14). **Epics 9, 11, 12, 14** confirmed working. | ~30 min |
-| 2026-04-26 | — | **Epic 10**: Auto-pipeline toggle — checkbox on Home page, localStorage persistence, ProcessingPage three-stage UI (① Extracting → ② Cleaning → ③ Summarizing), pre-flight validation (checks ollama_url + cleanup model + summary model before submit, shows bullet list of issues). | ~1 h |
-| 2026-04-26 | — | **Epic 15**: LLM Summarization (single-pass) — `text_summarizer.py`, 6 new DB columns + migrations, `set_summary_processing`/`finish_summary`/`reset_summary_status` in video_service, POST/DELETE `/api/result/{video_id}/summary`, `_SUMMARY_CANCEL_SET`, full ResultPage rewrite (Summary tab, per-tab model selectors, timers, "Cleaned/Summarized in X:XX · model" in meta). SettingsPage: Summarization tab unlocked. ProcessingPage: stage ③ Summarizing wired. Epic 16 added to backlog. | ~2 h |
-| 2026-04-26 | — | **UI polish**: Tab-aware actions bar and meta on Result page (controls + AI-specific meta change with active tab). Nav redesign: three-section flex layout (left: logo+links, center: Systems Health, right: Settings ⚙); "Systems Health ♥" label with SVG EKG icon; "+ New", "◷ History" nav icons. | ~30 min |
-| 2026-04-28 | — | **Epic 17**: Map-Reduce summarization — `text_summarizer.py` full rewrite (MAP_REDUCE_THRESHOLD=24K, CHUNK_SIZE=3K, overlap, on_progress callback), 2 new DB columns + migrations, `summarization_extract`/`summarization_combine` stages, `force_map_reduce` app setting, `_SUMMARY_PROGRESS` live counter, API wired. Frontend: chunk counter in meta, Force MR toggle, Single Pass/Map-Reduce sub-tabs in Settings. EPIC-17.md created. CLAUDE.md updated with conventions reminder. | ~3 h |
-| 2026-04-30 | — | **Live cleanup counter**: `_CLEANUP_PROGRESS` + `on_progress` in `text_cleaner.py`, `cleanup_paragraphs_done/total` in API + frontend. **Logging**: `backend.log` in `app/data/logs/`, handlers attached directly to service loggers (bypasses uvicorn root config). **Map-Reduce prompt overhaul**: goal shifted to narrative конспект (not bullet points) — MAP "detailed paragraph, do not compress aggressively", REDUCE "thematic sections + headings, preserve all details, no invented content". **Scaling research**: 26K→10.6K (41%) ✅, 75K→1.5K (2%) ❌ — root cause: REDUCE overloaded at ~25 chunks. Documented in phase2-architecture.md. | ~2 h |
-| 2026-05-16 | 1 | **Epic 22**: Auto language detection — `_detect_language()` + `_fetch_metadata()` two-call yt-dlp flow, "Auto (detect)" default in HomePage. | ~15 min |
-| 2026-05-17 | 7 | **Epic 23**: Chapter-aware formatting (`text_formatter.py` two branches, `Video.chapters` JSON column, `## Chapter Title` headings). **Epic 24**: Completion notifications (`notify()` tab title + Browser Notification when `document.hidden`). **Epic 25**: Heading preservation (`text_cleaner.py` bypasses `## ` paragraphs, prompts updated, `renderText()` in ResultPage). README updated for all epics. | ~2 h 06 min (12:50–14:56) |
-| 2026-05-17 | 12 | **Bug fix**: cancel was nulling `cleaned_text`/`summary_text` → fixed. **Epic 27**: Full Extract (no-reduce) — `extract_notes()`, `_split_by_chapter_headings()`, auto-select, frontend meta + progress label. **Epic 26 impl** on `feature/epic-26-benchmark`: `BenchmarkRun` model, `benchmark_service.py`, API endpoints, `BenchmarkPage.tsx` (N-column grid, sync scroll, HTML export), `renderText()` shared util. **Epic 29 impl** on `feature/epic-29-parallel-map`: parallel MAP via `asyncio.Semaphore` + indexed-gather in cleanup/map-reduce/full-extract, `parallel_workers` setting + UI. **Docs**: EPIC-26/27/29 docs, USER_GUIDE.md (Setup/Modes/Features/Troubleshooting/FAQ), README slimmed, CLAUDE.md updated, Epic 21 deferred, Phase 3 epics renumbered 20-22 → 30-32. | ~1 h 40 min (18:14–19:54) |
+| 18.04.2026 | 13 | Full project bootstrap: discovery docs, repo structure, FastAPI backend, DB models, subtitle extractor (yt-dlp, cookies, 429 fix), text formatter, DB service layer, REST API (5 endpoints), Phase 2 architecture docs | ~1 h 35 min (15:06–16:41) |
+| 18.04.2026 | — | Frontend (React + TypeScript + Vite, 4 pages), language UX feature (available-language buttons on error), multiple backend bug fixes (duplicate video rows, FK cascade on ORM delete, scalar_one_or_none on multi-row results, stale pending cleanup) | ~3 h |
+| 25.04.2026 | 3 | .gitignore cleanup (untrack Claude local config), one-click dev launchers (start.vbs / start.sh), fix .env.example (CORS_ORIGINS JSON format, correct data/ paths) | ~30 min |
+| 25.04.2026 | — | **Epic 6**: AI cleanup refactored to manual button (POST /cleanup, polling, cleanup_status field, Re-run support); StatusBar (health dots for backend + Ollama); tab CSS fix; backlog restructure (Epics 6–11); README/docs cleanup; config cleanup (OLLAMA_MODEL removed from .env) | ~3 h |
+| 25.04.2026 | — | **Epic 7**: Settings Page — PipelineSettings model, service CRUD, API endpoints (GET/PUT/DELETE /settings, GET /models), SettingsPage.tsx with editable Cleanup + locked Summarization panels; text_cleaner.py wired to DB settings; tab switching bug fixed; backup rule added | ~2 h |
+| 26.04.2026 | — | **Epic 8 (dropped)**: react-markdown + Markdown prompt rule tested — LLM output inconsistent, reverted to plain text. **Cleanup bug fix**: default model was qwen3:8b (not installed) → silently returned original text; fixed by removing hardcoded model default (user must pick via Settings). **History**: char_count added. **Epic 13**: Settings 2.0 — AppSetting model + app_settings table, seed on first launch, config.py infrastructure-only; ytdlp_path/cookies_path/ollama_url moved to DB; Settings page redesigned with tabs (General/AI Cleanup/Summarization); warning banners for missing required fields on Home + Settings; cookie upload via web; PUT /api/settings/app + POST /api/settings/upload-cookies | ~3 h |
+| 26.04.2026 | — | **Codex review + bug fixes**: reviewed Codex-generated Epic 14 (cleanup timer) — fixed `_CANCEL_SET` not cleared on re-run, fixed timestamp format (isoformat T→space for SQLAlchemy). Deleted junk .js files Codex generated. Synced all epic files (EPIC-1..5 status, EPIC-8 dropped, EPIC-9/11 done, created EPIC-12/13/14). **Epics 9, 11, 12, 14** confirmed working. | ~30 min |
+| 26.04.2026 | — | **Epic 10**: Auto-pipeline toggle — checkbox on Home page, localStorage persistence, ProcessingPage three-stage UI (① Extracting → ② Cleaning → ③ Summarizing), pre-flight validation (checks ollama_url + cleanup model + summary model before submit, shows bullet list of issues). | ~1 h |
+| 26.04.2026 | — | **Epic 15**: LLM Summarization (single-pass) — `text_summarizer.py`, 6 new DB columns + migrations, `set_summary_processing`/`finish_summary`/`reset_summary_status` in video_service, POST/DELETE `/api/result/{video_id}/summary`, `_SUMMARY_CANCEL_SET`, full ResultPage rewrite (Summary tab, per-tab model selectors, timers, "Cleaned/Summarized in X:XX · model" in meta). SettingsPage: Summarization tab unlocked. ProcessingPage: stage ③ Summarizing wired. Epic 16 added to backlog. | ~2 h |
+| 26.04.2026 | — | **UI polish**: Tab-aware actions bar and meta on Result page (controls + AI-specific meta change with active tab). Nav redesign: three-section flex layout (left: logo+links, center: Systems Health, right: Settings ⚙); "Systems Health ♥" label with SVG EKG icon; "+ New", "◷ History" nav icons. | ~30 min |
+| 28.04.2026 | — | **Epic 17**: Map-Reduce summarization — `text_summarizer.py` full rewrite (MAP_REDUCE_THRESHOLD=24K, CHUNK_SIZE=3K, overlap, on_progress callback), 2 new DB columns + migrations, `summarization_extract`/`summarization_combine` stages, `force_map_reduce` app setting, `_SUMMARY_PROGRESS` live counter, API wired. Frontend: chunk counter in meta, Force MR toggle, Single Pass/Map-Reduce sub-tabs in Settings. EPIC-17.md created. CLAUDE.md updated with conventions reminder. | ~3 h |
+| 30.04.2026 | — | **Live cleanup counter**: `_CLEANUP_PROGRESS` + `on_progress` in `text_cleaner.py`, `cleanup_paragraphs_done/total` in API + frontend. **Logging**: `backend.log` in `app/data/logs/`, handlers attached directly to service loggers (bypasses uvicorn root config). **Map-Reduce prompt overhaul**: goal shifted to narrative конспект (not bullet points) — MAP "detailed paragraph, do not compress aggressively", REDUCE "thematic sections + headings, preserve all details, no invented content". **Scaling research**: 26K→10.6K (41%) ✅, 75K→1.5K (2%) ❌ — root cause: REDUCE overloaded at ~25 chunks. Documented in phase2-architecture.md. | ~2 h |
+| 16.05.2026 | 1 | **Epic 22**: Auto language detection — `_detect_language()` + `_fetch_metadata()` two-call yt-dlp flow, "Auto (detect)" default in HomePage. | ~15 min |
+| 17.05.2026 | 7 | **Epic 23**: Chapter-aware formatting (`text_formatter.py` two branches, `Video.chapters` JSON column, `## Chapter Title` headings). **Epic 24**: Completion notifications (`notify()` tab title + Browser Notification when `document.hidden`). **Epic 25**: Heading preservation (`text_cleaner.py` bypasses `## ` paragraphs, prompts updated, `renderText()` in ResultPage). README updated for all epics. | ~2 h 06 min (12:50–14:56) |
+| 17.05.2026 | 12 | **Bug fix**: cancel was nulling `cleaned_text`/`summary_text` → fixed. **Epic 27**: Full Extract (no-reduce) — `extract_notes()`, `_split_by_chapter_headings()`, auto-select, frontend meta + progress label. **Epic 26 impl** on `feature/epic-26-benchmark`: `BenchmarkRun` model, `benchmark_service.py`, API endpoints, `BenchmarkPage.tsx` (N-column grid, sync scroll, HTML export), `renderText()` shared util. **Epic 29 impl** on `feature/epic-29-parallel-map`: parallel MAP via `asyncio.Semaphore` + indexed-gather in cleanup/map-reduce/full-extract, `parallel_workers` setting + UI. **Docs**: EPIC-26/27/29 docs, USER_GUIDE.md (Setup/Modes/Features/Troubleshooting/FAQ), README slimmed, CLAUDE.md updated, Epic 21 deferred, Phase 3 epics renumbered 20-22 → 30-32. | ~1 h 40 min (18:14–19:54) |
 
 *Table updated after each session.*
 
@@ -60,18 +60,18 @@ After each session run:
 git log --pretty=format:"%h %ad %s" --date=format:"%Y-%m-%d %H:%M"
 
 # View commits for a specific day
-git log --after="2026-04-18 00:00" --before="2026-04-18 23:59" --pretty=format:"%h %ad %s" --date=format:"%H:%M"
+git log --after="18.04.2026 00:00" --before="18.04.2026 23:59" --pretty=format:"%h %ad %s" --date=format:"%H:%M"
 ```
 
 Then update the tables above manually (or ask Claude).
 
 ---
 
-## Session 1 — 2026-04-18
+## Session 1 — 18.04.2026
 
 | Parameter | Value |
 |-----------|-------|
-| Date | 2026-04-18 |
+| Date | 18.04.2026 |
 | Status | ✅ Phase 1 backend complete |
 | Completed | Discovery docs, repo structure (Docker, Makefile, .gitignore), FastAPI + DB models (4 tables), subtitle extractor via yt-dlp (fixed 429 with single-call approach, deduplicated rolling window VTT cues), text formatter (map-reduce overlap removal + time-gap paragraphs), DB service layer (CRUD), REST API (POST /process, GET /status, GET /result, GET /history, DELETE /result), Phase 2 map-reduce architecture documented |
 | Blockers | HTTP 429 on VTT download (resolved: combined --print-json + --write-subs into single yt-dlp call). YouTube cookies required (Get cookies.txt LOCALLY extension). |
@@ -79,11 +79,11 @@ Then update the tables above manually (or ask Claude).
 | Time | ~1 h 35 min (15:06–16:41) |
 | Next | Frontend (React + TypeScript, Epic 5) |
 
-## Session 2 — 2026-04-18
+## Session 2 — 18.04.2026
 
 | Parameter | Value |
 |-----------|-------|
-| Date | 2026-04-18 |
+| Date | 18.04.2026 |
 | Status | ✅ Phase 1 MVP complete |
 | Completed | **Frontend**: React + TypeScript + Vite, 4 pages (Home, Processing, Result, History), Vite proxy to backend. **Language UX**: hint text on dropdown, available-language buttons on error, one-click retry with new language. **Backend fixes**: (1) duplicate video rows on youtu.be vs youtube.com URLs — changed dup detection from URL to video_id match; (2) stale `__pending__` video causing UNIQUE constraint on re-submit — added cleanup in create_pending_task; (3) `scalar_one_or_none()` crash on multiple rows — changed to `.scalars().first()`; (4) SQLAlchemy FK cascade nulling task.video_id on placeholder delete — flush reassignment before delete; (5) available_languages not propagated to frontend — stored as JSON in error_message, parsed in status endpoint |
 | Blockers | Multiple ORM edge cases from re-processing same video. Each required a targeted fix. |
@@ -91,11 +91,11 @@ Then update the tables above manually (or ask Claude).
 | Time | ~3 h |
 | Next | Phase 2 — LLM summarization (Epic 6) |
 
-## Session 3 — 2026-04-25
+## Session 3 — 25.04.2026
 
 | Parameter | Value |
 |-----------|-------|
-| Date | 2026-04-25 |
+| Date | 25.04.2026 |
 | Status | ✅ Tooling complete |
 | Completed | **Gitignore cleanup**: untracked `.claude/` and `docs/project-bootstrap-guide.md` from repo. **One-click launchers**: `start.vbs` (Windows — Windows Terminal split panes or two cmd fallback, auto-opens browser) and `start.sh` (Linux/macOS — parallel background processes, Ctrl+C stops both). **Env fixes**: `CORS_ORIGINS` as JSON list `["..."]` (pydantic v2 requirement), paths `./data/` → `../data/` in `.env.example`. |
 | Blockers | — |

@@ -166,5 +166,5 @@ Whisper fallback when no subtitles are available. Language param from Phase 1 re
 ## Document Control
 
 - **Version**: 1.5
-- **Last Updated**: 2026-04-30
+- **Last Updated**: 30.04.2026
 - **Status**: 🔄 Active Development

@@ -439,7 +439,7 @@ formatted text (paragraphs)
 
 ## Document Status
 
-- **Created**: 2024-04-18
+- **Created**: 18.04.2024
 - **Status**: ✅ Complete Discovery Phase
 - **Next Phase**: Delivery (Backlog with Epics & User Stories)
 - **Review**: Ready for team feedback

@@ -33,5 +33,5 @@ Stop a running AI cleanup without waiting for it to finish.
 ## Status
 
 **Status**: ✅ Done  
-**Completed**: 2026-04-26  
+**Completed**: 26.04.2026  
 **Priority**: 🔴 P0

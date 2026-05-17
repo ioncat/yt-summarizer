@@ -88,5 +88,5 @@ So that I don't re-select it every time
 ## Status
 
 **Status**: ✅ Done (inline model selector on Result page)  
-**Completed**: 2026-04-26  
+**Completed**: 26.04.2026  
 **Priority**: 🟡 P2

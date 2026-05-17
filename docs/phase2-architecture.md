@@ -188,7 +188,7 @@ The same pattern can be extended to inject other per-video data:
 
 ---
 
-## Observed Scaling Behaviour (empirical, 2026-04-30)
+## Observed Scaling Behaviour (empirical, 30.04.2026)
 
 Current implementation: `CHUNK_SIZE = 3 000`, `MAP_REDUCE_THRESHOLD = 24 000`.
 Model tested: Qwen2.5-Coder-14B.

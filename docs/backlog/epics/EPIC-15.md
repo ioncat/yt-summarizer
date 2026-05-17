@@ -87,5 +87,5 @@ Users who want a quick digest instead of reading the full cleaned transcript can
 ## Status
 
 **Status**: ✅ Done  
-**Completed**: 2026-04-26  
+**Completed**: 26.04.2026  
 **Priority**: 🟠 P1

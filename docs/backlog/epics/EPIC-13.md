@@ -46,5 +46,5 @@ Move all user-facing settings out of config files into the database, configurabl
 ## Status
 
 **Status**: ✅ Done  
-**Completed**: 2026-04-25  
+**Completed**: 25.04.2026  
 **Priority**: 🟠 P1

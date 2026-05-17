@@ -129,5 +129,5 @@ So that I immediately see the result I asked for
 ## Status
 
 **Status**: ✅ Done (all three stages: Extract → Cleanup → Summarize)  
-**Completed**: 2026-04-26  
+**Completed**: 26.04.2026  
 **Priority**: 🟡 P2
