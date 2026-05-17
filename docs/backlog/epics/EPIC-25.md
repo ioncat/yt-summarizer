@@ -1,7 +1,7 @@
 # Epic 25: Chapter Heading Preservation & Rendering
 
 **Phase**: 2 — Summarization Quality  
-**Status**: 🔄 In Progress  
+**Status**: ✅ Done  
 **Priority**: 🔴 P0
 
 ## Goal
