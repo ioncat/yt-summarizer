@@ -146,9 +146,9 @@ Whisper fallback when no subtitles are available. Language param from Phase 1 re
 
 | Epic | Description | Status |
 |------|-------------|--------|
-| Epic 20: Audio Extraction | Extract audio via yt-dlp | 🔵 Planned |
-| Epic 21: Whisper Transcription | Local Whisper model | 🔵 Planned |
-| Epic 22: Fallback UX | One-click fallback offer when subtitles missing | 🔵 Planned |
+| Epic 30: Audio Extraction | Extract audio via yt-dlp | 🔵 Planned |
+| Epic 31: Whisper Transcription | Local Whisper model | 🔵 Planned |
+| Epic 32: Fallback UX | One-click fallback offer when subtitles missing | 🔵 Planned |
 
 ---
 
@@ -157,9 +157,9 @@ Whisper fallback when no subtitles are available. Language param from Phase 1 re
 | Phase | Epics | Status |
 |-------|-------|--------|
 | Phase 1 — MVP | 1–5 | ✅ Done |
-| Phase 1.5 — LLM Cleanup & UX | 6–16 | ✅ Done (6–7, 9–16 done; 8 dropped) |
-| Phase 2 — Summarization Quality | 17–20 | 🔄 In Progress (Epic 17 implemented) |
-| Phase 3 — STT Fallback | 21–23 | 🔵 Planned |
+| Phase 1.5 — LLM Cleanup & UX | 6–16, 22–25 | ✅ Done (8 dropped) |
+| Phase 2 — Summarization Quality | 17–21, 26–29 | 🔄 In Progress (17, 20, 22–25, 27 done; 21 deferred; 26, 29 implemented on feature branches; 18, 19, 28 planned) |
+| Phase 3 — STT Fallback | 30–32 | 🔵 Planned |
 
 ---
 
