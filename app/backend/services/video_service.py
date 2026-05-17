@@ -339,7 +339,6 @@ async def reset_cleanup_status(db: AsyncSession, video_id: str) -> None:
         text("""
             UPDATE subtitles_formatted
             SET cleanup_status = NULL,
-                cleaned_text = NULL,
                 cleanup_started_at = NULL,
                 cleanup_finished_at = NULL
             WHERE id = :id
@@ -413,10 +412,6 @@ async def reset_summary_status(db: AsyncSession, video_id: str) -> None:
         text("""
             UPDATE subtitles_formatted
             SET summary_status = NULL,
-                summary_text = NULL,
-                summary_model = NULL,
-                summary_mode = NULL,
-                summary_chunks_count = NULL,
                 summary_started_at = NULL,
                 summary_finished_at = NULL
             WHERE id = :id
