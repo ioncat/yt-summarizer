@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Callable, Optional
 
@@ -215,6 +216,7 @@ async def summarize_text(
     combine_prompt: str | None = None,
     on_progress: Callable[[int, int], None] | None = None,
     language: str | None = None,
+    parallel_workers: int = 1,
 ) -> tuple[Optional[str], str, int]:
     """
     Summarize text via Ollama.
@@ -261,6 +263,7 @@ async def summarize_text(
                     combine_prompt=combine_prompt,
                     on_progress=on_progress,
                     lang_instruction=lang_instruction,
+                    parallel_workers=parallel_workers,
                 )
                 return result, "map_reduce", chunks_count
 
@@ -294,38 +297,65 @@ async def _map_reduce(
     combine_prompt: str | None = None,
     on_progress: Callable[[int, int], None] | None = None,
     lang_instruction: str = "",
+    parallel_workers: int = 1,
 ) -> tuple[str | None, int]:
     """
-    Map-Reduce summarization.
+    Map-Reduce summarization. MAP step is parallelized via Semaphore.
     Returns (final_summary, chunks_count).
     """
     chunks = _split_into_chunks(text)
     chunks_count = len(chunks)
-    logger.info("map_reduce: %d chunks from %d chars", chunks_count, len(text))
+    workers = max(1, min(16, parallel_workers))
+    logger.info(
+        "map_reduce: %d chunks from %d chars, parallel_workers=%d",
+        chunks_count, len(text), workers,
+    )
 
     map_system = system_prompt or DEFAULT_MAP_SYSTEM_PROMPT
     effective_extract = extract_prompt or DEFAULT_MAP_USER_PROMPT
     effective_combine = combine_prompt or DEFAULT_REDUCE_USER_PROMPT
 
-    # MAP — summarize each chunk
-    chunk_summaries: list[str] = []
-    for i, chunk in enumerate(chunks):
-        if is_cancelled and is_cancelled():
-            logger.info("map_reduce: cancelled at MAP chunk %d/%d", i + 1, chunks_count)
-            return None, chunks_count
+    # MAP — summarize each chunk in parallel, preserve order via index
+    sem = asyncio.Semaphore(workers)
+    completed = 0
 
-        logger.info("map_reduce: MAP %d/%d (%d chars)", i + 1, chunks_count, len(chunk))
-        summary = await _call_ollama(
-            client, ollama_url, model,
-            map_system,
-            lang_instruction + effective_extract.format(text=chunk),
-        )
+    async def _map_one(idx: int, chunk: str) -> tuple[int, str | None]:
+        nonlocal completed
+        async with sem:
+            if is_cancelled and is_cancelled():
+                return idx, None
+            logger.info("map_reduce: MAP %d/%d (%d chars)", idx + 1, chunks_count, len(chunk))
+            summary = await _call_ollama(
+                client, ollama_url, model,
+                map_system,
+                lang_instruction + effective_extract.format(text=chunk),
+            )
+            completed += 1
+            if on_progress:
+                on_progress(completed, chunks_count)
+            return idx, summary
+
+    map_tasks = [_map_one(i, c) for i, c in enumerate(chunks)]
+    map_results = await asyncio.gather(*map_tasks, return_exceptions=True)
+
+    if is_cancelled and is_cancelled():
+        logger.info("map_reduce: cancelled during MAP")
+        return None, chunks_count
+
+    # Sort by index; abort if any chunk failed (preserves existing behavior)
+    indexed: list[tuple[int, str | None]] = []
+    for r in map_results:
+        if isinstance(r, BaseException):
+            logger.warning("map_reduce: MAP task raised %s — aborting", type(r).__name__)
+            return None, chunks_count
+        indexed.append(r)
+    indexed.sort(key=lambda x: x[0])
+    chunk_summaries: list[str] = []
+    for idx, summary in indexed:
         if summary is None:
-            logger.warning("map_reduce: MAP chunk %d failed — aborting", i + 1)
+            logger.warning("map_reduce: MAP chunk %d failed — aborting", idx + 1)
             return None, chunks_count
         chunk_summaries.append(summary)
-        if on_progress:
-            on_progress(i + 1, chunks_count)
 
     if is_cancelled and is_cancelled():
         return None, chunks_count
@@ -386,10 +416,11 @@ async def extract_notes(
     language: str | None = None,
     system_prompt: str | None = None,
     user_prompt_template: str | None = None,
+    parallel_workers: int = 1,
 ) -> tuple[Optional[str], str, int]:
     """
     Full Extract: process each chapter section independently, no REDUCE step.
-    Splits text by '## ' headings; each section sent to LLM separately.
+    Splits text by '## ' headings; each section sent to LLM separately, in parallel.
     Returns (result_text, 'full_extract', sections_count).
     """
     if not model:
@@ -414,36 +445,59 @@ async def extract_notes(
 
             sections = _split_by_chapter_headings(text)
             sections_count = len(sections)
-            logger.info("extract_notes: %d sections from %d chars", sections_count, len(text))
+            workers = max(1, min(16, parallel_workers))
+            logger.info(
+                "extract_notes: %d sections from %d chars, parallel_workers=%d",
+                sections_count, len(text), workers,
+            )
 
             effective_system = system_prompt or DEFAULT_EXTRACT_SYSTEM_PROMPT
             effective_template = user_prompt_template or DEFAULT_EXTRACT_USER_PROMPT
             lang_instruction = _language_instruction(language)
 
-            results: list[str] = []
-            for i, (_heading, content) in enumerate(sections):
-                if is_cancelled and is_cancelled():
-                    logger.info("extract_notes: cancelled at section %d/%d", i + 1, sections_count)
-                    return None, "full_extract", sections_count
+            sem = asyncio.Semaphore(workers)
+            completed = 0
 
-                logger.info(
-                    "extract_notes: section %d/%d (%d chars)", i + 1, sections_count, len(content)
-                )
-                extracted = await _call_ollama(
-                    client, ollama_url, model,
-                    effective_system,
-                    lang_instruction + effective_template.format(text=content),
-                )
-                if extracted is None:
-                    logger.warning(
-                        "extract_notes: section %d failed — using raw content", i + 1
+            async def _extract_one(idx: int, content: str) -> tuple[int, str]:
+                nonlocal completed
+                async with sem:
+                    if is_cancelled and is_cancelled():
+                        return idx, content  # fallback to raw
+                    logger.info(
+                        "extract_notes: section %d/%d (%d chars)",
+                        idx + 1, sections_count, len(content),
                     )
-                    results.append(content)  # fallback: keep raw text
-                else:
-                    results.append(extracted)
+                    extracted = await _call_ollama(
+                        client, ollama_url, model,
+                        effective_system,
+                        lang_instruction + effective_template.format(text=content),
+                    )
+                    completed += 1
+                    if on_progress:
+                        on_progress(completed, sections_count)
+                    if extracted is None:
+                        logger.warning(
+                            "extract_notes: section %d failed — using raw content", idx + 1
+                        )
+                        return idx, content  # fallback: raw text
+                    return idx, extracted
 
-                if on_progress:
-                    on_progress(i + 1, sections_count)
+            tasks = [_extract_one(i, content) for i, (_h, content) in enumerate(sections)]
+            section_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            if is_cancelled and is_cancelled():
+                logger.info("extract_notes: cancelled during processing")
+                return None, "full_extract", sections_count
+
+            # Sort by index; exceptions → fallback to raw content from sections
+            indexed: list[tuple[int, str]] = []
+            for r in section_results:
+                if isinstance(r, BaseException):
+                    logger.warning("extract_notes: task raised %s — skipping", type(r).__name__)
+                    continue
+                indexed.append(r)
+            indexed.sort(key=lambda x: x[0])
+            results = [text for _, text in indexed]
 
             return "\n\n".join(results), "full_extract", sections_count
 

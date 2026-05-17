@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Callable, Optional
 
@@ -73,11 +74,13 @@ async def clean_text(
     ollama_url: str | None = None,
     is_cancelled: Callable[[], bool] | None = None,
     on_progress: Callable[[int, int], None] | None = None,
+    parallel_workers: int = 1,
 ) -> Optional[str]:
     """
     Clean each paragraph via Ollama.
 
     model and ollama_url must be provided (loaded from DB app_settings).
+    parallel_workers controls concurrent paragraph processing (default 1 = sequential).
     Returns None if model/url not configured, Ollama unreachable, or cancelled.
     """
     if not model:
@@ -94,25 +97,50 @@ async def clean_text(
     if not paragraphs:
         return None
 
+    workers = max(1, min(16, parallel_workers))
+    total = len(paragraphs)
+    logger.info("clean_text: %d paragraphs, parallel_workers=%d", total, workers)
+
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as client:
             await client.get(f"{ollama_url}/api/tags", timeout=3.0)
 
-            cleaned = []
-            total = len(paragraphs)
-            for i, p in enumerate(paragraphs):
-                if is_cancelled and is_cancelled():
-                    logger.info("Cleanup cancelled mid-run.")
-                    return None
-                # Chapter headings are immutable — pass through without touching LLM
-                if p.startswith("## "):
-                    cleaned.append(p)
-                else:
-                    cleaned.append(
-                        await _clean_paragraph(client, p, effective_system, effective_user, model, ollama_url)
-                    )
-                if on_progress:
-                    on_progress(i + 1, total)
+            sem = asyncio.Semaphore(workers)
+            completed = 0
+
+            async def _process(idx: int, p: str) -> tuple[int, str | None]:
+                nonlocal completed
+                async with sem:
+                    if is_cancelled and is_cancelled():
+                        return idx, None
+                    # Chapter headings are immutable — pass through without touching LLM
+                    if p.startswith("## "):
+                        result = p
+                    else:
+                        result = await _clean_paragraph(
+                            client, p, effective_system, effective_user, model, ollama_url
+                        )
+                    completed += 1
+                    if on_progress:
+                        on_progress(completed, total)
+                    return idx, result
+
+            tasks = [_process(i, p) for i, p in enumerate(paragraphs)]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            if is_cancelled and is_cancelled():
+                logger.info("Cleanup cancelled mid-run.")
+                return None
+
+            # Sort by index, drop None and exceptions (fallback handled per-paragraph in _clean_paragraph)
+            indexed: list[tuple[int, str | None]] = []
+            for r in results:
+                if isinstance(r, BaseException):
+                    logger.warning("clean_text: task raised %s — skipping", type(r).__name__)
+                    continue
+                indexed.append(r)
+            indexed.sort(key=lambda x: x[0])
+            cleaned = [text for _, text in indexed if text is not None]
             return "\n\n".join(cleaned)
 
     except httpx.ConnectError:

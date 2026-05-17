@@ -17,6 +17,8 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
   const [ollamaUrl, setOllamaUrl] = useState(initial.ollama_url ?? '')
   const [ytdlpPath, setYtdlpPath] = useState(initial.ytdlp_path ?? '')
   const [cookiesPath, setCookiesPath] = useState(initial.cookies_path ?? '')
+  const [parallelWorkers, setParallelWorkers] = useState(initial.parallel_workers ?? '1')
+  const [parallelError, setParallelError] = useState('')
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -25,6 +27,7 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
     setOllamaUrl(initial.ollama_url ?? '')
     setYtdlpPath(initial.ytdlp_path ?? '')
     setCookiesPath(initial.cookies_path ?? '')
+    setParallelWorkers(initial.parallel_workers ?? '1')
   }, [initial])
 
   function showToast(msg: string) {
@@ -33,6 +36,13 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
   }
 
   async function handleSave() {
+    // Validate parallel_workers
+    const pw = parseInt(parallelWorkers, 10)
+    if (isNaN(pw) || pw < 1 || pw > 16) {
+      setParallelError('Must be an integer between 1 and 16')
+      return
+    }
+    setParallelError('')
     setSaving(true)
     const start = Date.now()
     try {
@@ -40,6 +50,7 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
         ollama_url: ollamaUrl || null,
         ytdlp_path: ytdlpPath || null,
         cookies_path: cookiesPath || null,
+        parallel_workers: String(pw),
       })
       onSaved(saved)
       showToast('Saved')
@@ -127,6 +138,24 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
         </div>
         <input ref={fileRef} type="file" accept=".txt" style={{ display: 'none' }} onChange={handleCookiesUpload} />
         <div className="field-hint">Export from Chrome via "Get cookies.txt LOCALLY" extension.</div>
+      </div>
+
+      <div className="form-group">
+        <label>Parallel workers</label>
+        <input
+          type="number"
+          min={1}
+          max={16}
+          value={parallelWorkers}
+          onChange={e => { setParallelWorkers(e.target.value); setParallelError('') }}
+          style={{ maxWidth: '100px' }}
+          className={parallelError ? 'input-missing' : ''}
+        />
+        {parallelError && <div className="field-hint" style={{ color: '#dc2626' }}>{parallelError}</div>}
+        <div className="field-hint">
+          Number of paragraphs/chunks processed simultaneously during cleanup and summarization.
+          Should match <code>OLLAMA_NUM_PARALLEL</code> on your Ollama server (default 1 = sequential).
+        </div>
       </div>
 
       <div className="actions">

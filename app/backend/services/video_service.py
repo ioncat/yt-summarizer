@@ -516,7 +516,7 @@ async def reset_stage_settings(db: AsyncSession, stage: str) -> dict:
 # App settings CRUD (key-value: ollama_url, ytdlp_path, cookies_path)
 # ---------------------------------------------------------------------------
 
-APP_SETTING_KEYS = ("ollama_url", "ytdlp_path", "cookies_path", "force_map_reduce")
+APP_SETTING_KEYS = ("ollama_url", "ytdlp_path", "cookies_path", "force_map_reduce", "parallel_workers")
 
 
 async def get_all_app_settings(db: AsyncSession) -> dict:
