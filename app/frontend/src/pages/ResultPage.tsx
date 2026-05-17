@@ -54,6 +54,27 @@ export default function ResultPage() {
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const CHAT_WARN_CHARS = 100_000
 
+  // ── Notifications ──────────────────────────────────────────────────────────
+  const originalTitleRef = useRef(document.title)
+
+  function requestNotifyPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }
+
+  function notify(title: string, body?: string) {
+    // Tab title
+    document.title = `✓ ${title}`
+    setTimeout(() => { document.title = originalTitleRef.current }, 10_000)
+
+    // Browser notification (only when tab is hidden)
+    if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
+      new Notification(title, { body, icon: '/favicon.ico' })
+    }
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const summaryPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const cleanupTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -120,8 +141,14 @@ export default function ResultPage() {
           else if (data.cleanup_status === 'done') setActiveTab('cleaned')
           else setActiveTab('subtitles')
         } else {
-          if (prevCleanup === 'processing' && data.cleanup_status === 'done') setActiveTab('cleaned')
-          if (prevSummary === 'processing' && data.summary_status === 'done') setActiveTab('summary')
+          if (prevCleanup === 'processing' && data.cleanup_status === 'done') {
+            setActiveTab('cleaned')
+            notify('AI Cleanup complete', data.title ?? undefined)
+          }
+          if (prevSummary === 'processing' && data.summary_status === 'done') {
+            setActiveTab('summary')
+            notify('Summary complete', data.title ?? undefined)
+          }
         }
 
         // Cleanup polling/timer management
@@ -185,8 +212,19 @@ export default function ResultPage() {
   }
 
   useEffect(() => {
+    originalTitleRef.current = document.title
+    return () => { document.title = originalTitleRef.current }
+  }, [])
+
+  useEffect(() => {
     loadSettings()
-    const onVisible = () => { if (document.visibilityState === 'visible') loadSettings() }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadSettings()
+        // Restore title when user returns to tab
+        document.title = originalTitleRef.current
+      }
+    }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
@@ -360,6 +398,7 @@ export default function ResultPage() {
 
   async function handleCleanup() {
     if (!videoId || !result) return
+    requestNotifyPermission()
     try {
       setCleanupError('')
       await startCleanup(videoId)
@@ -378,6 +417,7 @@ export default function ResultPage() {
 
   async function handleSummarize() {
     if (!videoId || !result) return
+    requestNotifyPermission()
     try {
       setSummaryError('')
       await startSummary(videoId)
