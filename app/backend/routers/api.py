@@ -327,6 +327,63 @@ async def cancel_summary(video_id: str):
     return {"status": "cancelling"}
 
 
+# ---------------------------------------------------------------------------
+# Benchmark endpoints
+# ---------------------------------------------------------------------------
+
+class BenchmarkRunRequest(BaseModel):
+    video_id: str
+    models: list[str]
+    mode_override: str | None = None  # 'single' | 'map_reduce' | 'full_extract' | None
+
+
+@router.post("/benchmark/run")
+async def start_benchmark_run(
+    request: BenchmarkRunRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Start benchmark: run N models on the same video text in parallel."""
+    from services.benchmark_service import start_benchmark
+    if not request.models:
+        raise HTTPException(status_code=400, detail="No models specified")
+    if len(request.models) > 4:
+        raise HTTPException(status_code=400, detail="Maximum 4 models per benchmark")
+    try:
+        run_ids = await start_benchmark(
+            db,
+            video_id=request.video_id,
+            models=request.models,
+            mode_override=request.mode_override,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"run_ids": run_ids, "count": len(run_ids)}
+
+
+@router.get("/benchmark/{video_id}")
+async def get_benchmark(
+    video_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Return all benchmark runs for a video."""
+    from services.benchmark_service import get_benchmark_runs
+    runs = await get_benchmark_runs(db, video_id)
+    return {"runs": runs}
+
+
+@router.get("/benchmark/run/{run_id}")
+async def get_benchmark_run_detail(
+    run_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Return a single benchmark run by ID."""
+    from services.benchmark_service import get_benchmark_run
+    run = await get_benchmark_run(db, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return run
+
+
 @router.get("/health")
 async def health_check(db: Annotated[AsyncSession, Depends(get_db)]):
     """Returns backend status and Ollama availability."""

@@ -25,7 +25,7 @@ _console_handler.setFormatter(_log_fmt)
 
 # Attach handlers directly to our service loggers — bypasses uvicorn's root config
 for _name in ("services.text_summarizer", "services.text_cleaner", "services.subtitle_extractor",
-               "services.video_service", "routers.api"):
+               "services.video_service", "services.benchmark_service", "routers.api"):
     _lg = logging.getLogger(_name)
     _lg.setLevel(logging.INFO)
     _lg.propagate = False  # не пробрасывать в root (uvicorn не перехватит)

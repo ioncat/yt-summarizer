@@ -121,3 +121,20 @@ class ProcessingTask(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     video: Mapped["Video"] = relationship(back_populates="tasks")
+
+
+class BenchmarkRun(Base):
+    """One model's result in a benchmark comparison run."""
+    __tablename__ = "benchmark_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    video_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    stage: Mapped[str] = mapped_column(String(20), nullable=False)   # 'summary'
+    mode: Mapped[str] = mapped_column(String(20), nullable=False)    # 'single' | 'map_reduce' | 'full_extract'
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    input_chars: Mapped[int] = mapped_column(Integer, nullable=False)
+    output_text: Mapped[str | None] = mapped_column(Text)
+    output_chars: Mapped[int | None] = mapped_column(Integer)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="processing")  # processing | done | failed
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

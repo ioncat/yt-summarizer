@@ -4,6 +4,7 @@ import ProcessingPage from './pages/ProcessingPage'
 import ResultPage from './pages/ResultPage'
 import HistoryPage from './pages/HistoryPage'
 import SettingsPage from './pages/SettingsPage'
+import BenchmarkPage from './pages/BenchmarkPage'
 import StatusBar from './components/StatusBar'
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/result/:videoId" element={<ResultPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/benchmark/:videoId" element={<BenchmarkPage />} />
       </Routes>
     </>
   )

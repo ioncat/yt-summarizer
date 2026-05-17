@@ -7,6 +7,7 @@ import {
   getSettings, getModels, saveSettings,
   ResultResponse,
 } from '../api'
+import { renderText } from '../utils/renderText'
 
 type Tab = 'subtitles' | 'cleaned' | 'summary'
 
@@ -342,16 +343,6 @@ export default function ResultPage() {
     activeTab === 'cleaned' ? (result?.cleaned_text ?? result?.formatted_text) :
     result?.formatted_text
 
-  function renderText(text: string) {
-    const blocks = text.split('\n\n')
-    return blocks.map((block, i) => {
-      if (block.startsWith('## ')) {
-        return <h3 key={i} className="chapter-heading">{block.slice(3)}</h3>
-      }
-      return <p key={i} className="text-paragraph">{block}</p>
-    })
-  }
-
   async function handleCopy() {
     if (!displayText) return
     await navigator.clipboard.writeText(displayText)
@@ -574,6 +565,9 @@ export default function ResultPage() {
 
           <a className="btn btn-secondary" href={result.url} target="_blank" rel="noreferrer">
             Open video
+          </a>
+          <a className="btn btn-secondary" href={`/benchmark/${result.video_id}`}>
+            ⚖ Benchmark
           </a>
           <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
         </div>

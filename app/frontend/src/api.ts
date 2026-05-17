@@ -190,3 +190,42 @@ export async function getModels(): Promise<string[]> {
   const data = await res.json()
   return data.models ?? []
 }
+
+// ---------------------------------------------------------------------------
+// Benchmark
+// ---------------------------------------------------------------------------
+
+export interface BenchmarkRun {
+  id: number
+  video_id: string
+  stage: string
+  mode: string
+  model: string
+  input_chars: number
+  output_text: string | null
+  output_chars: number | null
+  duration_seconds: number | null
+  status: 'processing' | 'done' | 'failed'
+  created_at: string
+}
+
+export async function startBenchmark(
+  video_id: string,
+  models: string[],
+  mode_override?: string | null,
+): Promise<{ run_ids: number[]; count: number }> {
+  const res = await fetch(`${BASE}/benchmark/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ video_id, models, mode_override: mode_override ?? null }),
+  })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function getBenchmarkRuns(video_id: string): Promise<BenchmarkRun[]> {
+  const res = await fetch(`${BASE}/benchmark/${video_id}`)
+  if (!res.ok) throw new Error('Failed to load benchmark runs')
+  const data = await res.json()
+  return data.runs ?? []
+}
