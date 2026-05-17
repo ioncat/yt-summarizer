@@ -2,8 +2,23 @@
 
 Time analysis based on git history (commit timestamps).
 
-> Methodology: session time = difference between first and last commit of the day.
-> Sessions with a single commit are estimated at 15 min (minimum).
+## Methodology
+
+Time is estimated by **commit clusters**, not by calendar day. This handles
+multiple sessions per day (e.g. morning + evening work) with reasonable accuracy.
+
+**Rules:**
+
+1. **Cluster** = a sequence of commits with gaps ≤ 1 hour between consecutive commits.
+   A gap > 1 hour ends the cluster and starts a new one.
+2. **Session time** = timestamp of last commit in cluster − timestamp of first commit in cluster.
+3. **Single-commit cluster** → estimated at **~15 min** (minimum).
+4. Multiple clusters in one day → multiple rows in the table.
+5. Time spent **before the first commit** (planning, discussion) and **after the last commit**
+   (testing, debugging) is NOT counted. The number is therefore a lower bound on real time.
+
+**Why this works:** the developer doesn't use a stopwatch. Cluster-based estimation is
+close enough to reality without manual tracking overhead. Git history is the source of truth.
 
 ---
 
