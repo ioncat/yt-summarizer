@@ -31,26 +31,6 @@ Time analysis based on git history (commit timestamps).
 
 ---
 
-## Phase summary
-
-| Phase | Commits | Time |
-|-------|---------|------|
-| Docs & Planning | 3 | ~15 min |
-| Phase 1 — Backend (extractor + formatter + API) | 7 | ~1 h |
-| Phase 1 — Docs (Phase 2 architecture) | 3 | ~20 min |
-| Phase 1 — Frontend + Language UX + bug fixes | — | ~3 h |
-| Tooling — launchers, .gitignore, .env fixes | 3 | ~30 min |
-| Phase 1.5 — Epic 6: AI Cleanup (manual, polling, health check) | — | ~3 h |
-| Phase 1.5 — Epic 7: Settings Page (prompts + models per stage) | — | ~2 h |
-| Phase 1.5 — Epic 8 (dropped) + cleanup fix + Epic 13: Settings 2.0 | — | ~3 h |
-| Phase 1.5 — Codex review + bug fixes + epic sync | — | ~30 min |
-| Phase 1.5 — Epic 10: Auto-pipeline toggle + pre-flight validation | — | ~1 h |
-| Phase 1.5 — Epic 15: LLM Summarization (single-pass) | — | ~2 h |
-| Phase 1.5 — UI polish: tab-aware actions, nav redesign | — | ~30 min |
-| **Total** | **16+** | **~17 h 5 min** |
-
----
-
 ## How to update
 
 After each session run:
@@ -63,42 +43,4 @@ git log --pretty=format:"%h %ad %s" --date=format:"%Y-%m-%d %H:%M"
 git log --after="18.04.2026 00:00" --before="18.04.2026 23:59" --pretty=format:"%h %ad %s" --date=format:"%H:%M"
 ```
 
-Then update the tables above manually (or ask Claude).
-
----
-
-## Session 1 — 18.04.2026
-
-| Parameter | Value |
-|-----------|-------|
-| Date | 18.04.2026 |
-| Status | ✅ Phase 1 backend complete |
-| Completed | Discovery docs, repo structure (Docker, Makefile, .gitignore), FastAPI + DB models (4 tables), subtitle extractor via yt-dlp (fixed 429 with single-call approach, deduplicated rolling window VTT cues), text formatter (map-reduce overlap removal + time-gap paragraphs), DB service layer (CRUD), REST API (POST /process, GET /status, GET /result, GET /history, DELETE /result), Phase 2 map-reduce architecture documented |
-| Blockers | HTTP 429 on VTT download (resolved: combined --print-json + --write-subs into single yt-dlp call). YouTube cookies required (Get cookies.txt LOCALLY extension). |
-| Commits | 13 |
-| Time | ~1 h 35 min (15:06–16:41) |
-| Next | Frontend (React + TypeScript, Epic 5) |
-
-## Session 2 — 18.04.2026
-
-| Parameter | Value |
-|-----------|-------|
-| Date | 18.04.2026 |
-| Status | ✅ Phase 1 MVP complete |
-| Completed | **Frontend**: React + TypeScript + Vite, 4 pages (Home, Processing, Result, History), Vite proxy to backend. **Language UX**: hint text on dropdown, available-language buttons on error, one-click retry with new language. **Backend fixes**: (1) duplicate video rows on youtu.be vs youtube.com URLs — changed dup detection from URL to video_id match; (2) stale `__pending__` video causing UNIQUE constraint on re-submit — added cleanup in create_pending_task; (3) `scalar_one_or_none()` crash on multiple rows — changed to `.scalars().first()`; (4) SQLAlchemy FK cascade nulling task.video_id on placeholder delete — flush reassignment before delete; (5) available_languages not propagated to frontend — stored as JSON in error_message, parsed in status endpoint |
-| Blockers | Multiple ORM edge cases from re-processing same video. Each required a targeted fix. |
-| Commits | — (no git commits this session) |
-| Time | ~3 h |
-| Next | Phase 2 — LLM summarization (Epic 6) |
-
-## Session 3 — 25.04.2026
-
-| Parameter | Value |
-|-----------|-------|
-| Date | 25.04.2026 |
-| Status | ✅ Tooling complete |
-| Completed | **Gitignore cleanup**: untracked `.claude/` and `docs/project-bootstrap-guide.md` from repo. **One-click launchers**: `start.vbs` (Windows — Windows Terminal split panes or two cmd fallback, auto-opens browser) and `start.sh` (Linux/macOS — parallel background processes, Ctrl+C stops both). **Env fixes**: `CORS_ORIGINS` as JSON list `["..."]` (pydantic v2 requirement), paths `./data/` → `../data/` in `.env.example`. |
-| Blockers | — |
-| Commits | 3 |
-| Time | ~30 min |
-| Next | Phase 2 — LLM summarization (Epic 6) |
+Then update the table above manually (or ask Claude).
