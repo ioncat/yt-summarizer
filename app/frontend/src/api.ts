@@ -131,6 +131,7 @@ export interface AppSettings {
   ytdlp_path: string | null
   cookies_path: string | null
   force_map_reduce: string | null
+  parallel_workers: string | null
 }
 
 export interface StageSettings {
