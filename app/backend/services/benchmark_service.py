@@ -31,6 +31,51 @@ async def get_benchmark_runs(db: AsyncSession, video_id: str) -> list[dict]:
     return [_run_to_dict(r) for r in rows]
 
 
+async def get_all_benchmarks_grouped(db: AsyncSession) -> list[dict]:
+    """Return all benchmark runs grouped by video_id, newest video first.
+    Each group: { video_id, title, total_runs, models, latest_run_at }.
+    """
+    from models.models import Video
+
+    stmt = select(BenchmarkRun).order_by(BenchmarkRun.created_at.desc())
+    result = await db.execute(stmt)
+    rows = result.scalars().all()
+
+    # Group by video_id
+    groups: dict[str, dict] = {}
+    for r in rows:
+        if r.video_id not in groups:
+            groups[r.video_id] = {
+                "video_id": r.video_id,
+                "title": None,
+                "total_runs": 0,
+                "models": set(),
+                "latest_run_at": r.created_at.isoformat(),
+            }
+        g = groups[r.video_id]
+        g["total_runs"] += 1
+        g["models"].add(r.model)
+
+    if not groups:
+        return []
+
+    # Look up video titles
+    video_ids = list(groups.keys())
+    title_stmt = select(Video.video_id, Video.title).where(Video.video_id.in_(video_ids))
+    title_rows = (await db.execute(title_stmt)).all()
+    for vid, title in title_rows:
+        if vid in groups:
+            groups[vid]["title"] = title
+
+    # Convert sets to sorted lists, return as list
+    out = []
+    for g in groups.values():
+        g["models"] = sorted(g["models"])
+        out.append(g)
+    out.sort(key=lambda x: x["latest_run_at"], reverse=True)
+    return out
+
+
 async def get_benchmark_run(db: AsyncSession, run_id: int) -> dict | None:
     result = await db.execute(select(BenchmarkRun).where(BenchmarkRun.id == run_id))
     row = result.scalar_one_or_none()
