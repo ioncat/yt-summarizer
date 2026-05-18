@@ -166,6 +166,7 @@ async def list_history(
 async def _run_cleanup(video_id: str) -> None:
     """Background task: run LLM cleanup and persist result."""
     from models.database import AsyncSessionLocal
+    from datetime import datetime as _dt
 
     async with AsyncSessionLocal() as db:
         fmt = await get_result(db, video_id)
@@ -179,6 +180,7 @@ async def _run_cleanup(video_id: str) -> None:
     def _on_cleanup_progress(done: int, total: int) -> None:
         _CLEANUP_PROGRESS[video_id] = {"done": done, "total": total}
 
+    started_at = _dt.utcnow()
     cleaned = await clean_text(
         formatted_text,
         system_prompt=stage.get("system_prompt"),
@@ -197,7 +199,7 @@ async def _run_cleanup(video_id: str) -> None:
             _CANCEL_SET.discard(video_id)
             await reset_cleanup_status(db, video_id)
         else:
-            await finish_cleanup(db, video_id, cleaned)
+            await finish_cleanup(db, video_id, cleaned, started_at=started_at)
 
 
 @router.post("/result/{video_id}/cleanup")
@@ -236,6 +238,7 @@ async def cancel_cleanup(video_id: str):
 async def _run_summary(video_id: str) -> None:
     """Background task: run LLM summarization and persist result."""
     from models.database import AsyncSessionLocal
+    from datetime import datetime as _dt
 
     async with AsyncSessionLocal() as db:
         fmt = await get_result(db, video_id)
@@ -263,6 +266,7 @@ async def _run_summary(video_id: str) -> None:
         and len(source_text) >= MAP_REDUCE_THRESHOLD
     )
 
+    started_at = _dt.utcnow()
     if use_full_extract:
         summary, mode, chunks_count = await extract_notes(
             source_text,
@@ -297,7 +301,7 @@ async def _run_summary(video_id: str) -> None:
             _SUMMARY_CANCEL_SET.discard(video_id)
             await reset_summary_status(db, video_id)
         else:
-            await finish_summary(db, video_id, summary, mode=mode, chunks_count=chunks_count)
+            await finish_summary(db, video_id, summary, mode=mode, chunks_count=chunks_count, started_at=started_at)
 
 
 @router.post("/result/{video_id}/summary")

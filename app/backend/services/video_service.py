@@ -292,7 +292,10 @@ async def _get_fmt_id(db: AsyncSession, video_id: str) -> str | None:
 
 
 async def set_cleanup_processing(db: AsyncSession, video_id: str, model: str | None = None) -> bool:
-    """Mark cleanup as in progress. Returns False if record not found."""
+    """Mark cleanup as in progress. Returns False if record not found.
+    Does NOT touch cleanup_started_at / cleanup_finished_at — those are
+    written only by finish_cleanup() so previous run's meta survives cancel.
+    """
     fmt_id = await _get_fmt_id(db, video_id)
     if not fmt_id:
         return False
@@ -300,47 +303,55 @@ async def set_cleanup_processing(db: AsyncSession, video_id: str, model: str | N
         text("""
             UPDATE subtitles_formatted
             SET cleanup_status = 'processing',
-                cleanup_model = :model,
-                cleanup_started_at = :ts,
-                cleanup_finished_at = NULL
+                cleanup_model = :model
             WHERE id = :id
         """),
-        {"model": model, "ts": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f"), "id": fmt_id},
+        {"model": model, "id": fmt_id},
     )
     await db.commit()
     return True
 
 
-async def finish_cleanup(db: AsyncSession, video_id: str, cleaned_text: str | None) -> None:
-    """Store cleanup result and update status."""
+async def finish_cleanup(
+    db: AsyncSession, video_id: str, cleaned_text: str | None, started_at: datetime | None = None
+) -> None:
+    """Store cleanup result + both timestamps atomically."""
     fmt_id = await _get_fmt_id(db, video_id)
     if not fmt_id:
         return
     status = "done" if cleaned_text else "failed"
+    finished_ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")
+    started_ts = (started_at or datetime.utcnow()).strftime("%Y-%m-%d %H:%M:%S.%f")
     await db.execute(
         text("""
             UPDATE subtitles_formatted
             SET cleanup_status = :status,
                 cleaned_text = :cleaned,
-                cleanup_finished_at = :ts
+                cleanup_started_at = :started,
+                cleanup_finished_at = :finished
             WHERE id = :id
         """),
-        {"status": status, "cleaned": cleaned_text, "ts": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f"), "id": fmt_id},
+        {
+            "status": status,
+            "cleaned": cleaned_text,
+            "started": started_ts,
+            "finished": finished_ts,
+            "id": fmt_id,
+        },
     )
     await db.commit()
 
 
 async def reset_cleanup_status(db: AsyncSession, video_id: str) -> None:
-    """Reset cleanup status to null (used after cancellation)."""
+    """Reset cleanup status to null on cancel. Preserves previous run's
+    cleaned_text, cleanup_model, cleanup_started_at, cleanup_finished_at."""
     fmt_id = await _get_fmt_id(db, video_id)
     if not fmt_id:
         return
     await db.execute(
         text("""
             UPDATE subtitles_formatted
-            SET cleanup_status = NULL,
-                cleanup_started_at = NULL,
-                cleanup_finished_at = NULL
+            SET cleanup_status = NULL
             WHERE id = :id
         """),
         {"id": fmt_id},
@@ -349,7 +360,10 @@ async def reset_cleanup_status(db: AsyncSession, video_id: str) -> None:
 
 
 async def set_summary_processing(db: AsyncSession, video_id: str, model: str | None = None) -> bool:
-    """Mark summarization as in progress. Returns False if record not found."""
+    """Mark summarization as in progress. Returns False if record not found.
+    Does NOT touch summary_text / started_at / finished_at — those are
+    written only by finish_summary() so previous run's meta survives cancel.
+    """
     fmt_id = await _get_fmt_id(db, video_id)
     if not fmt_id:
         return False
@@ -357,13 +371,10 @@ async def set_summary_processing(db: AsyncSession, video_id: str, model: str | N
         text("""
             UPDATE subtitles_formatted
             SET summary_status = 'processing',
-                summary_text = NULL,
-                summary_model = :model,
-                summary_started_at = :ts,
-                summary_finished_at = NULL
+                summary_model = :model
             WHERE id = :id
         """),
-        {"model": model, "ts": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f"), "id": fmt_id},
+        {"model": model, "id": fmt_id},
     )
     await db.commit()
     return True
@@ -375,12 +386,15 @@ async def finish_summary(
     summary_text: str | None,
     mode: str = "single",
     chunks_count: int = 1,
+    started_at: datetime | None = None,
 ) -> None:
-    """Store summarization result and update status."""
+    """Store summarization result + both timestamps atomically."""
     fmt_id = await _get_fmt_id(db, video_id)
     if not fmt_id:
         return
     status = "done" if summary_text else "failed"
+    finished_ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")
+    started_ts = (started_at or datetime.utcnow()).strftime("%Y-%m-%d %H:%M:%S.%f")
     await db.execute(
         text("""
             UPDATE subtitles_formatted
@@ -388,7 +402,8 @@ async def finish_summary(
                 summary_text = :summary,
                 summary_mode = :mode,
                 summary_chunks_count = :chunks,
-                summary_finished_at = :ts
+                summary_started_at = :started,
+                summary_finished_at = :finished
             WHERE id = :id
         """),
         {
@@ -396,7 +411,8 @@ async def finish_summary(
             "summary": summary_text,
             "mode": mode,
             "chunks": chunks_count,
-            "ts": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f"),
+            "started": started_ts,
+            "finished": finished_ts,
             "id": fmt_id,
         },
     )
@@ -404,16 +420,16 @@ async def finish_summary(
 
 
 async def reset_summary_status(db: AsyncSession, video_id: str) -> None:
-    """Reset summary status to null (used after cancellation)."""
+    """Reset summary status to null on cancel. Preserves previous run's
+    summary_text, summary_model, summary_mode, summary_chunks_count,
+    summary_started_at, summary_finished_at."""
     fmt_id = await _get_fmt_id(db, video_id)
     if not fmt_id:
         return
     await db.execute(
         text("""
             UPDATE subtitles_formatted
-            SET summary_status = NULL,
-                summary_started_at = NULL,
-                summary_finished_at = NULL
+            SET summary_status = NULL
             WHERE id = :id
         """),
         {"id": fmt_id},
