@@ -6,6 +6,7 @@ import HistoryPage from './pages/HistoryPage'
 import SettingsPage from './pages/SettingsPage'
 import BenchmarkPage from './pages/BenchmarkPage'
 import StatusBar from './components/StatusBar'
+import ThemeToggle from './components/ThemeToggle'
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
           <NavLink to="/settings">Settings ⚙</NavLink>
         </div>
         <div className="nav-right">
+          <ThemeToggle />
           <StatusBar />
         </div>
       </nav>
