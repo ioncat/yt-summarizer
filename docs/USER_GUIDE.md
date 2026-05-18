@@ -75,23 +75,48 @@ Each stage's output is stored separately in SQLite and shown as its own tab in t
 
 ## Processing modes
 
-Summarization automatically picks a mode based on text length and whether the video has chapters.
+Summarization automatically picks a mode based on text length and whether the video has chapters. The selection is determined by **video content type** which falls into one of these categories:
 
-| Condition | Mode | What it does |
+### Video content types
+
+| Type | Condition | Auto-selected mode |
 |---|---|---|
-| Text < 24,000 chars | **Single-pass** | One LLM call, full text → bullet-point summary |
-| Text ≥ 24,000 chars, no chapters | **Map-Reduce** | Splits into ~3K-char chunks → summarize each (MAP) → combine into final document (REDUCE) |
-| Text ≥ 24,000 chars, has YouTube chapters | **Full Extract** | Each chapter processed independently; no compression; structured reference document |
+| 📄 **Short** | text < 24,000 chars | Single-pass |
+| 📑 **Long** | text ≥ 24,000 chars, no chapters | Map-Reduce |
+| 📚 **Long Structured** | text ≥ 24,000 chars, has YouTube chapters | Full Extract |
+| 📕 **XL** (planned, Epic 18) | text > 50,000 chars, no chapters | Hierarchical Map-Reduce |
 
-The active mode is shown in the Summary tab meta line: `Summarized in 4:12 · qwen2.5:7b · Map-Reduce · 28 chunks` or similar.
+This classification is shown as a label on the History page so you can see at a glance how each video will be processed.
 
-**Override:** in Settings → Summarization there's a `Force Map-Reduce` toggle that disables Full Extract and uses Map-Reduce even for chapter videos. Useful for A/B testing.
+### Auto-selection logic
+
+When you trigger summarization, the backend picks the mode using these rules in order:
+
+1. **Force Map-Reduce override:** if Settings → Summarization → Force Map-Reduce is **ON** → use Map-Reduce regardless of other factors.
+2. **Long Structured detection:** if video has chapters (`video.chapters` is not empty in DB, populated from yt-dlp metadata) AND `len(text) >= 24,000` → use **Full Extract** (`extract_notes()`). Each `## ` section gets its own LLM call. No REDUCE step. Results concatenated in order, preserving chapter structure.
+3. **Map-Reduce threshold:** if `len(text) >= 24,000` → use **Map-Reduce** (`summarize_text()` with `force_map_reduce=true`). Split into ~3K-char chunks → MAP each → REDUCE all into final summary.
+4. **Default:** use **Single-pass**. One LLM call with full text → bullet-point summary.
+
+### Mode behavior summary
+
+| Mode | LLM calls | Compression | Preserves structure | Best for |
+|---|---|---|---|---|
+| Single-pass | 1 | High (5-7 bullets) | No | Short videos, single-topic clips |
+| Map-Reduce | N MAP + 1 REDUCE | Medium | Sometimes | Long tutorials without chapters |
+| Full Extract | N (one per chapter) | None (lossless) | Yes (`## ` headings) | Courses, lectures with chapters |
+| Hierarchical | N MAP + M intermediate REDUCE + 1 final REDUCE | Medium | Sometimes | Very long flat content (planned) |
+
+The active mode is shown in the Summary tab meta line:
+- Single-pass: `Summarized in 4:12 · qwen2.5:7b`
+- Map-Reduce: `Summarized in 4:12 · qwen2.5:7b · 28 chunks · 82% compressed`
+- Full Extract: `Summarized in 4:12 · qwen2.5:7b · Full Extract · 12 chapters`
 
 ### When to use which
 
 - **Short video / single topic** → Single-pass picks itself, no action needed
 - **Tutorial without chapters** → Map-Reduce — gets condensed but loses detail
 - **Long structured course with chapters** → Full Extract — preserves all content, structured by chapter
+- **Force Map-Reduce override** → toggle in Settings → Summarization. Useful for A/B testing the same video across modes via the Benchmark page.
 
 ---
 

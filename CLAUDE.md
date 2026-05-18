@@ -161,14 +161,23 @@ All 5 epics done. Full stack running:
 
 #### Processing mode matrix
 
-| Condition | Mode | Status |
-|---|---|---|
-| text < 24K | single-pass | ✅ |
-| text ≥ 24K, no chapters | map-reduce | ✅ |
-| text ≥ 24K, has chapters | full_extract | ✅ Epic 27 |
-| text > 50K, no chapters | hierarchical map-reduce | 🔵 Epic 18 |
+Video content type → auto-selected mode. Type is determined by `len(text)` and `has_chapters` (= `bool(video.chapters)` from yt-dlp metadata).
 
-Auto-select logic in `api.py _run_summary()`. `force_map_reduce=true` in `app_settings` overrides to map-reduce.
+| Type label | Condition | Mode | Status |
+|---|---|---|---|
+| 📄 Short | text < 24K | single-pass | ✅ |
+| 📑 Long | text ≥ 24K, no chapters | map-reduce | ✅ |
+| 📚 Long Structured | text ≥ 24K, has chapters | full_extract | ✅ Epic 27 |
+| 📕 XL | text > 50K, no chapters | hierarchical map-reduce | 🔵 Epic 18 |
+
+**Auto-select rules** (in order) in `api.py _run_summary()`:
+
+1. `force_map_reduce=true` in `app_settings` → map-reduce (override)
+2. `has_chapters AND len(text) ≥ MAP_REDUCE_THRESHOLD` → `extract_notes()` (full_extract, no REDUCE)
+3. `len(text) ≥ MAP_REDUCE_THRESHOLD` → `summarize_text(force_map_reduce=true)` (map-reduce)
+4. Default → `summarize_text()` single-pass
+
+`MAP_REDUCE_THRESHOLD = 24_000` in `text_summarizer.py`. Type labels surfaced on the History page as a badge.
 
 #### Epic 17 ✅ — Map-Reduce Summarization
 - `text_summarizer.py`: `_split_into_chunks()` (3K char chunks with overlap) → MAP per chunk → REDUCE all summaries
