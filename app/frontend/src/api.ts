@@ -230,3 +230,18 @@ export async function getBenchmarkRuns(video_id: string): Promise<BenchmarkRun[]
   const data = await res.json()
   return data.runs ?? []
 }
+
+export interface BenchmarkGroup {
+  video_id: string
+  title: string | null
+  total_runs: number
+  models: string[]
+  latest_run_at: string
+}
+
+export async function getAllBenchmarks(): Promise<BenchmarkGroup[]> {
+  const res = await fetch(`${BASE}/benchmarks`)
+  if (!res.ok) throw new Error('Failed to load benchmarks')
+  const data = await res.json()
+  return data.groups ?? []
+}

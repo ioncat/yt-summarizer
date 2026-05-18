@@ -370,6 +370,16 @@ async def start_benchmark_run(
     return {"run_ids": run_ids, "count": len(run_ids)}
 
 
+@router.get("/benchmarks")
+async def list_all_benchmarks(
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Return all benchmark runs grouped by video."""
+    from services.benchmark_service import get_all_benchmarks_grouped
+    groups = await get_all_benchmarks_grouped(db)
+    return {"groups": groups}
+
+
 @router.get("/benchmark/{video_id}")
 async def get_benchmark(
     video_id: str,

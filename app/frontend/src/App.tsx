@@ -5,6 +5,7 @@ import ResultPage from './pages/ResultPage'
 import HistoryPage from './pages/HistoryPage'
 import SettingsPage from './pages/SettingsPage'
 import BenchmarkPage from './pages/BenchmarkPage'
+import BenchmarksIndexPage from './pages/BenchmarksIndexPage'
 import StatusBar from './components/StatusBar'
 import ThemeToggle from './components/ThemeToggle'
 
@@ -18,6 +19,7 @@ export default function App() {
         <div className="nav-center">
           <NavLink to="/">+ New</NavLink>
           <NavLink to="/history">◷ History</NavLink>
+          <NavLink to="/benchmarks">⚖ Benchmarks</NavLink>
           <NavLink to="/settings">Settings ⚙</NavLink>
         </div>
         <div className="nav-right">
@@ -31,6 +33,7 @@ export default function App() {
         <Route path="/result/:videoId" element={<ResultPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/benchmarks" element={<BenchmarksIndexPage />} />
         <Route path="/benchmark/:videoId" element={<BenchmarkPage />} />
       </Routes>
     </>
