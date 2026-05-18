@@ -484,6 +484,14 @@ export default function ResultPage() {
               <div className="meta-item">
                 Cleaned in: <span>{formatDuration(cleanupDuration)}</span>
                 {result.cleanup_model && <span className="meta-model"> · {result.cleanup_model}</span>}
+                {(() => {
+                  const count = result.cleaned_text
+                    ? result.cleaned_text.split('\n\n').filter(p => p.trim()).length
+                    : null
+                  return count != null ? (
+                    <span className="meta-model"> · {count} paragraphs</span>
+                  ) : null
+                })()}
               </div>
             ) : null
           )}
