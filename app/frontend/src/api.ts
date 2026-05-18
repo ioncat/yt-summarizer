@@ -46,6 +46,7 @@ export interface HistoryItem {
   author: string | null
   language: string | null
   char_count: number | null
+  has_chapters?: boolean
   created_at: string
 }
 

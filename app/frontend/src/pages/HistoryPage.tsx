@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getHistory, deleteResult, HistoryItem } from '../api'
+import { classifyVideo } from '../utils/videoType'
 
 export default function HistoryPage() {
   const [items, setItems] = useState<HistoryItem[]>([])
@@ -47,23 +48,31 @@ export default function HistoryPage() {
           <div className="empty">No videos processed yet.</div>
         ) : (
           <ul className="history-list">
-            {items.map(item => (
-              <li key={item.video_id} className="history-item">
-                <div className="history-info" onClick={() => navigate(`/result/${item.video_id}`)} style={{ cursor: 'pointer' }}>
-                  <div className="history-title">{item.title ?? 'Untitled'}</div>
-                  <div className="history-meta">
-                    {item.author && <>{item.author} · </>}
-                    {new Date(item.created_at).toLocaleDateString()}
-                    {item.char_count && <> · {item.char_count.toLocaleString()} chars</>}
+            {items.map(item => {
+              const type = classifyVideo(item.char_count, item.has_chapters)
+              return (
+                <li key={item.video_id} className="history-item">
+                  <div className="history-info" onClick={() => navigate(`/result/${item.video_id}`)} style={{ cursor: 'pointer' }}>
+                    <div className="history-title">{item.title ?? 'Untitled'}</div>
+                    <div className="history-meta">
+                      {item.author && <>{item.author} · </>}
+                      {new Date(item.created_at).toLocaleDateString()}
+                      {item.char_count && <> · {item.char_count.toLocaleString()} chars</>}
+                    </div>
                   </div>
-                </div>
-                {item.language && <span className="lang-badge">{item.language.toUpperCase()}</span>}
-                <button className="btn btn-danger" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
-                  onClick={() => handleDelete(item.video_id)}>
-                  Delete
-                </button>
-              </li>
-            ))}
+                  {type && (
+                    <span className={`type-badge type-${type.key}`} title={`Auto-mode: ${type.mode}`}>
+                      {type.emoji} {type.label}
+                    </span>
+                  )}
+                  {item.language && <span className="lang-badge">{item.language.toUpperCase()}</span>}
+                  <button className="btn btn-danger" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                    onClick={() => handleDelete(item.video_id)}>
+                    Delete
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         )}
         {hasMore && (

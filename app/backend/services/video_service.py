@@ -253,6 +253,7 @@ async def get_history(db: AsyncSession, page: int = 1, page_size: int = 20) -> d
             "author": v.author,
             "language": v.language_detected,
             "char_count": fmt.text_length if fmt else None,
+            "has_chapters": bool(v.chapters),
             "created_at": v.created_at.isoformat(),
         })
 
