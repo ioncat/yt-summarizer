@@ -35,6 +35,19 @@ TL;DR | summary | full reference | study guide
 
 ---
 
+## Recommended order of work
+
+Перед началом любой architectural experiments — стабилизировать фундамент. Иначе невозможно объективно оценивать изменения.
+
+1. **Stabilize current pipeline** — закрыть текущие баги, протестить Epic 26/27/29
+2. **Add measurement layer** — определить proxy-метрики и failure taxonomy (Foundation 1)
+3. **Build benchmark harness** — `evaluate.py` + 5 selected videos
+4. **Только потом — architecture experiments** (Phase A → B → C ...)
+
+Без baseline measurements Phase A/B/C невозможно объективно оценивать. Это причина почему Foundation 1 = блокер.
+
+---
+
 ## Current state
 
 | Компонент | Реализация | Соответствие принципам |
@@ -59,27 +72,49 @@ TL;DR | summary | full reference | study guide
 
 **What's added:**
 
-- Benchmark suite: 3–5 эталонных видео для старта (потом расширяем до 15–30) разных типов — лекция, интервью, новости, tutorial, разговорный
+- **Benchmark suite — 3–5 carefully selected cases**, не random:
+  - Dense technical lecture
+  - Chaotic interview / podcast
+  - Structured tutorial
+  - News / opinion piece
+  - Long-form discussion
 - Три ожидаемых output: TL;DR, summary, full reference на каждое
-- Автоматические proxy-метрики:
+- **Quantitative proxy-метрики:**
   - Named entity recall (entities из source присутствуют в output)
-  - Number/date preservation
+  - Number / date preservation
   - Quote preservation
-  - Semantic similarity (cosine между embeddings source vs output secs)
+  - Semantic similarity (cosine между embeddings source secs vs output)
   - Section coherence
   - Hallucination rate (source-grounded verification — каждое утверждение в output должно иметь source)
-- Скрипт `evaluate.py`: прогоняет pipeline на benchmark, выдаёт report
+- **Qualitative failure taxonomy** — категории типичных деградаций:
+  - Hallucination (выдумки модели)
+  - Dropped entities (потерянные сущности)
+  - Broken chronology (нарушенный порядок событий)
+  - Duplicated ideas (одна мысль повторяется разными словами)
+  - Lost section boundaries (структура размылась)
+  - Incoherent transitions (рваные переходы между частями)
+  - Overcompression (слишком сжато, потеря смысла)
+  - Undercompression (вода не убрана)
+- Скрипт `evaluate.py`: прогоняет pipeline на benchmark, выдаёт numeric report + классификацию failures по таксономии
 - Regression check: новая фаза прогоняется автоматически перед merge
 
-**Why this is the blocker (из Q1):**
+**Why initial benchmark — 5 carefully selected, не 30 random (из Q1):**
 
-Без evaluation каждая новая фаза = "subjective feels better". Уверенно двигаться нельзя. Hybrid evaluation (proxy-метрики + small human eval на benchmark set) дешевле и более воспроизводим, чем full human evaluation.
+- 30 random видео = evaluation сам по себе становится отдельным проектом (45+ ручных оценок для 3 modes)
+- 5 carefully selected покрывают спектр типов контента, на которых pipeline должен работать
+- Цель initial benchmark: **поймать regression, увидеть qualitative failures, валидировать proxy metrics** — не построить большой test set
+- Когда инфраструктура (метрики, harness) стабильна — scale до 15–30 без переделок
 
-**Why только 3–5 видео для старта (а не 15–30 сразу):**
+**Why failure taxonomy, а не только метрики:**
 
-Подготовка 15+ видео = серьёзная ручная работа (3 modes × 15 видео = 45+ оценок). Начать с малого набора (proof-of-concept), масштабировать когда инфраструктура готова. Иначе риск утонуть в подготовке данных до начала работы.
+Numeric metrics показывают что качество упало, не объясняют почему. Таксономия даёт vocabulary для discussion ("текущий выход страдает от overcompression и broken chronology") и ускоряет iteration — каждая фаза адресует конкретные failure modes. Без таксономии итерируем вслепую.
 
-**Done when:** скрипт прогоняет текущий pipeline на 3–5 видео и выдаёт numeric report. Метрики стабильны при повторных прогонах (детерминизм где возможен).
+**Done when:**
+
+- Скрипт прогоняет текущий pipeline на 5 selected videos
+- Выдаёт numeric report по proxy-метрикам
+- Каждый output классифицирован по failure taxonomy (вручную или semi-automated)
+- Метрики стабильны при повторных прогонах (детерминизм где возможен)
 
 ---
 
@@ -105,21 +140,34 @@ TL;DR | summary | full reference | study guide
 
 ---
 
-### Foundation 3: Reversibility via Benchmark
+### Foundation 3: Reversibility — pipeline-wide toggle + Benchmark
 
-**Goal:** уметь сравнивать новый pipeline со старым на одном видео.
+**Goal:** уметь сравнивать новый pipeline со старым на одном видео без destructive replacement.
 
-**Что уже есть и что добавляется:**
+**What's added:**
 
-- Существующий Benchmark UI и `benchmark_runs.triggered_by='main' | 'benchmark'` уже различают original от experimental
-- Добавляется: `pipeline_version` поле в `benchmark_runs` — фиксирует какая итерация pipeline дала результат
-- При запуске нового pipeline старый остаётся доступным для side-by-side
+- **Pipeline-wide toggle в Settings → General:**
+  - `Legacy pipeline` (текущий map-reduce / full-extract)
+  - `Experimental semantic pipeline` (новые фазы по мере появления)
+- `pipeline_version` поле в `benchmark_runs` — фиксирует какая итерация pipeline дала результат
+- При запуске Summary / Cleanup из Result page — используется выбранный pipeline
+- Benchmark page остаётся source of truth для side-by-side сравнения
 
-**Why используем существующий Benchmark, не делаем legacy_mode toggle (из Q4):**
+**Why pipeline-wide toggle, не per-stage (из Q4):**
 
-Toggle = бинарный switch, теряем историю. Benchmark уже даёт side-by-side. Нужно только различать "версии pipeline", не "включён/выключен legacy". Минимальный refactor — добавление одной колонки.
+- Per-stage toggles (отдельные switches для pre-cleaning / semantic seg / IR / rendering) = combinatorial explosion. Сложно дебажить, невозможно reproducible benchmark
+- Pipeline-wide = два чёткие режима. Можно сравнить целиком, есть chosen baseline. Простая architecture
+- Per-stage toggles пригодятся позже, когда experimental pipeline стабилизируется и нужно профилировать конкретные шаги — это premature complexity сейчас
 
-**Done when:** в `benchmark_runs` видна версия pipeline для каждой записи. UI показывает версию в колонке.
+**Why используем существующий Benchmark вместо нового UI:**
+
+Benchmark уже даёт side-by-side с историей и метаданными. Не нужно строить второй сравнительный интерфейс. Просто добавить `pipeline_version` колонку.
+
+**Done when:**
+
+- Settings → General → "Pipeline" dropdown с двумя опциями
+- `benchmark_runs.pipeline_version` присутствует и заполняется
+- Можно запустить summary на видео двумя pipeline (legacy + experimental) и увидеть оба результата в Benchmark page
 
 ---
 
@@ -261,9 +309,39 @@ Topic shift — relative problem, не absolute. На двух разных ви
 
 Existing Full Extract и Map-Reduce переписываются поверх IR. Full Extract = `render(ir, "full")`. Map-Reduce = `render(ir, "summary")`. TL;DR = `render(ir, "tldr")`. Из одной обработки — три режима output.
 
+### Claim — определение и extraction methodology
+
+**Distinct claim** = атомарное verifiable semantic unit. Должен быть:
+
+- **Attributable** — можно указать source segment / timestamp
+- **Semantically independent** — имеет смысл вне контекста других claims
+- **Retrievable** — можно найти по similarity к запросу
+- **Compressible** — может быть выражен одной фразой без потери смысла
+
+**Пример хорошего claim:**
+
+> "React Server Components reduce client bundle size"
+
+**Пример плохого claim (opinion / noisy):**
+
+> "React is good and modern"
+
+— субъективно, не verifiable, не attributable к конкретному факту.
+
+**Extraction methodology (из Q12):**
+
+Извлечение claims = LLM-pass, но **строго constrained**:
+
+- НЕ "extract every claim from huge chunk" (модель начнёт editorializing)
+- Извлечение **per semantic segment** (output Phase B), bounded output size
+- Extraction prompt запрещает:
+  - Paraphrase (переформулировку — должна быть близко к оригиналу)
+  - Synthesis (объединение разных claims в один)
+  - Merging distant ideas (claims из разных частей текста)
+
 ### Why claim-level granularity, не sentence/phrase (из Q12)
 
-- **Sentence-level** слишком привязан к transcript. Теряется при перефразировании
+- **Sentence-level** слишком привязан к transcript. Теряется при перефразировании, плохая dedup
 - **Phrase-level** разрушает семантику ("в 2020 году" сам по себе не информация)
 - **Claim-level** = атомарное утверждение, сохраняющее context для retrieval, dedup, compression. Optimal balance
 
