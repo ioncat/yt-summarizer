@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Callable, Optional
 
 import httpx
@@ -60,6 +61,15 @@ async def _clean_paragraph(
         )
         response.raise_for_status()
         cleaned = response.json()["message"]["content"].strip()
+        if not cleaned:
+            return text
+        # Normalize whitespace: collapse any internal newlines (single \n,
+        # multiple \n) to a single space, then collapse runs of spaces.
+        # Cleanup output is meant to be flowing prose within one paragraph;
+        # paragraph boundaries come from the outer split('\n\n'), not from
+        # newlines inside a paragraph.
+        cleaned = re.sub(r"\s*\n+\s*", " ", cleaned)
+        cleaned = re.sub(r"  +", " ", cleaned).strip()
         return cleaned if cleaned else text
     except Exception as exc:
         logger.warning("Ollama failed on paragraph: %s", exc)
