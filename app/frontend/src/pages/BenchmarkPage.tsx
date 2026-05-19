@@ -131,11 +131,16 @@ export default function BenchmarkPage() {
         <div class="col-body">${
           run.status === 'failed' ? '<p class="error">❌ Failed</p>' :
           run.status === 'processing' ? '<p class="processing">⏳ Processing…</p>' :
-          (run.output_text ?? '').split('\n\n').map(b =>
-            b.startsWith('## ')
-              ? `<h3>${b.slice(3)}</h3>`
-              : `<p>${b}</p>`
-          ).join('')
+          (run.output_text ?? '').split('\n\n').map(b => {
+            if (b.startsWith('## ')) {
+              const nl = b.indexOf('\n')
+              if (nl === -1) return `<h3>${b.slice(3)}</h3>`
+              const heading = b.slice(3, nl).trim()
+              const body = b.slice(nl + 1).trim()
+              return `<h3>${heading}</h3>${body ? `<p>${body}</p>` : ''}`
+            }
+            return `<p>${b}</p>`
+          }).join('')
         }</div>
       </div>`).join('')
 
@@ -149,7 +154,7 @@ body{font-family:sans-serif;margin:0;padding:16px;background:#f9fafb}
 .col-header{padding:12px;background:#f3f4f6;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px}
 .badge{background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:12px;font-size:12px}
 .col-body{padding:16px;font-size:14px;line-height:1.6}
-h3{font-weight:600;border-bottom:2px solid #e0e7ff;padding-bottom:4px;margin:24px 0 8px}
+h3{font-size:1.05rem;font-weight:700;margin:24px 0 8px}
 p{margin:0 0 12px}
 .error{color:#dc2626}.processing{color:#92400e}
 </style></head>
