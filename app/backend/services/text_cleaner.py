@@ -56,7 +56,11 @@ async def _clean_paragraph(
                     {"role": "user", "content": user_prompt_template.format(text=text)},
                 ],
                 "stream": False,
-                "options": {"temperature": 0.1},
+                # num_ctx 4K: cleanup paragraphs are ~500 chars (~150 tokens)
+                # — large default context (128K on some models) inflates per-slot
+                # KV-cache memory ~25× and pushes weights to CPU on consumer GPUs.
+                # See open-questions: parallel speedup test (19.05.2026).
+                "options": {"temperature": 0.1, "num_ctx": 4096},
             },
         )
         response.raise_for_status()
