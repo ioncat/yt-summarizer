@@ -28,6 +28,7 @@ from services.video_service import (
     get_result,
     get_stage_settings,
     get_task,
+    replace_subtitles_after_reextract,
     reset_cleanup_status,
     reset_stage_settings,
     reset_summary_status,
@@ -47,6 +48,8 @@ _SUMMARY_CANCEL_SET: set[str] = set()
 # In-memory progress: {video_id: {"done": int, "total": int}}
 _CLEANUP_PROGRESS: dict[str, dict] = {}
 _SUMMARY_PROGRESS: dict[str, dict] = {}
+# Videos currently being re-extracted (set of video_id)
+_REEXTRACT_SET: set[str] = set()
 
 router = APIRouter(prefix="/api")
 
@@ -152,6 +155,9 @@ async def get_video_result(video_id: str, db: Annotated[AsyncSession, Depends(ge
     if summary_progress:
         result["summary_chunks_done"] = summary_progress["done"]
         result["summary_chunks_total"] = summary_progress["total"]
+    # Flag if a re-extract is currently running
+    if video_id in _REEXTRACT_SET:
+        result["reextract_in_progress"] = True
     return result
 
 
@@ -233,6 +239,56 @@ async def cancel_cleanup(video_id: str):
     """Signal a running cleanup to stop. Status resets to null after current paragraph."""
     _CANCEL_SET.add(video_id)
     return {"status": "cancelling"}
+
+
+async def _run_reextract(video_id: str) -> None:
+    """Background task: re-extract subtitles for an existing video.
+    Overwrites formatted_text + chapters, invalidates cleanup/summary."""
+    from models.database import AsyncSessionLocal
+
+    _REEXTRACT_SET.add(video_id)
+    try:
+        async with AsyncSessionLocal() as db:
+            fmt = await get_result(db, video_id)
+            if not fmt:
+                return
+            url = fmt["url"]
+            language = fmt.get("language") or "ru"
+            cookies_path = await get_app_setting(db, "cookies_path")
+            ytdlp_path = await get_app_setting(db, "ytdlp_path") or "yt-dlp"
+
+        extraction = await asyncio.to_thread(
+            extract_subtitles, url, language, cookies_path, ytdlp_path
+        )
+        if not extraction.success:
+            return
+        formatted = format_subtitles(
+            extraction.subtitles, chapters=extraction.metadata.chapters
+        )
+        async with AsyncSessionLocal() as db:
+            await replace_subtitles_after_reextract(db, video_id, extraction, formatted)
+    finally:
+        _REEXTRACT_SET.discard(video_id)
+
+
+@router.post("/result/{video_id}/reextract")
+async def trigger_reextract(
+    video_id: str,
+    background_tasks: BackgroundTasks,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Re-fetch subtitles for an existing video. Invalidates cleanup/summary."""
+    fmt = await get_result(db, video_id)
+    if not fmt:
+        raise HTTPException(status_code=404, detail="Video not found")
+    if fmt.get("cleanup_status") == "processing":
+        raise HTTPException(status_code=409, detail="Cleanup is in progress — cancel first")
+    if fmt.get("summary_status") == "processing":
+        raise HTTPException(status_code=409, detail="Summarization is in progress — cancel first")
+    if video_id in _REEXTRACT_SET:
+        raise HTTPException(status_code=409, detail="Re-extract already in progress")
+    background_tasks.add_task(_run_reextract, video_id)
+    return {"status": "reextracting"}
 
 
 async def _run_summary(video_id: str) -> None:

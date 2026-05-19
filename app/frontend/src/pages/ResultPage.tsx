@@ -4,6 +4,7 @@ import {
   getResult, deleteResult,
   startCleanup, cancelCleanup,
   startSummary, cancelSummary,
+  reextractSubtitles,
   getSettings, getModels, saveSettings,
   ResultResponse,
 } from '../api'
@@ -193,6 +194,13 @@ export default function ResultPage() {
     }
   }, [videoId])
 
+  // While re-extract is in progress, poll every 3s until backend clears the flag
+  useEffect(() => {
+    if (!result?.reextract_in_progress) return
+    const id = setInterval(() => loadResult(), 3000)
+    return () => clearInterval(id)
+  }, [result?.reextract_in_progress])
+
   function loadSettings() {
     Promise.all([getSettings(), getModels()])
       .then(([s, list]) => {
@@ -373,6 +381,29 @@ export default function ResultPage() {
     if (!window.confirm('Delete this video and all its data? This cannot be undone.')) return
     try { await deleteResult(videoId); navigate('/history') }
     catch (err) { console.error('[Result] deleteResult failed:', err) }
+  }
+
+  async function handleReextract() {
+    if (!videoId) return
+    const ok = window.confirm(
+      'Re-extract subtitles from YouTube?\n\n' +
+      'This will:\n' +
+      '• Replace the current Subtitles tab content with a fresh download\n' +
+      '• Clear the Cleaned tab (you will need to re-run AI Cleanup)\n' +
+      '• Clear the Summary tab (you will need to re-run summarization)\n\n' +
+      'Continue?'
+    )
+    if (!ok) return
+    try {
+      await reextractSubtitles(videoId)
+      // Optimistic UI flag — polling will refresh once the backend writes new text
+      setResult(prev => prev ? { ...prev, reextract_in_progress: true } : prev)
+      // Force a quick first poll
+      loadResult()
+    } catch (err: any) {
+      console.error('[Result] reextract failed:', err)
+      setError(err.message ?? 'Failed to re-extract subtitles')
+    }
   }
 
   async function handleCleanupModelChange(newModel: string) {
@@ -577,6 +608,18 @@ export default function ResultPage() {
           <a className="btn btn-secondary" href={`/benchmark/${result.video_id}`}>
             ⚖ Benchmark
           </a>
+          <button
+            className="btn btn-secondary"
+            onClick={handleReextract}
+            disabled={
+              !!result.reextract_in_progress ||
+              result.cleanup_status === 'processing' ||
+              result.summary_status === 'processing'
+            }
+            title="Re-fetch subtitles from YouTube. Cleanup and Summary will be cleared."
+          >
+            {result.reextract_in_progress ? '↻ Re-extracting…' : '↻ Re-extract'}
+          </button>
           <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
         </div>
 

@@ -524,6 +524,96 @@ async def reset_summary_status(db: AsyncSession, video_id: str) -> None:
     await db.commit()
 
 
+async def replace_subtitles_after_reextract(
+    db: AsyncSession,
+    video_id: str,
+    extraction: "ExtractionResult",
+    formatted: dict,
+) -> None:
+    """Apply a fresh extraction to an existing video: overwrite
+    formatted_text, chapters, language fields, and invalidate all derived
+    cleanup / summary data (they were produced from the old text).
+
+    Existing subtitles_raw row is replaced with a new one to keep the
+    cache in sync. cleanup/summary fields are cleared but the row itself
+    is preserved (we only have one subtitles_formatted row per video).
+    """
+    # Find video
+    stmt = select(Video).where(
+        Video.video_id == video_id, ~Video.url.startswith("__pending__")
+    )
+    video = (await db.execute(stmt)).scalars().first()
+    if not video:
+        return
+
+    m = extraction.metadata
+    video.title = m.title
+    video.author = m.author
+    video.duration = m.duration
+    video.chapters = m.chapters
+    video.language_detected = extraction.language
+    video.has_subtitles = True
+    video.subtitles_type = (
+        extraction.source_type.value if extraction.source_type else None
+    )
+
+    # Replace SubtitleRaw — delete existing, add fresh
+    await db.execute(
+        text("DELETE FROM subtitles_raw WHERE video_id = :vid"),
+        {"vid": video.id},
+    )
+    db.add(SubtitleRaw(
+        id=generate_id(),
+        video_id=video.id,
+        language=extraction.language,
+        original_subtitles=subtitles_to_json(extraction.subtitles),
+        source_type=(extraction.source_type.value if extraction.source_type else None),
+    ))
+
+    # Overwrite formatted_text and clear all derived cleanup/summary fields
+    fmt_id = await _get_fmt_id(db, video_id)
+    if fmt_id:
+        await db.execute(
+            text("""
+                UPDATE subtitles_formatted
+                SET language = :lang,
+                    formatted_text = :ft,
+                    text_length = :tl,
+                    cleaned_text = NULL,
+                    cleanup_status = NULL,
+                    cleanup_started_at = NULL,
+                    cleanup_finished_at = NULL,
+                    cleanup_model = NULL,
+                    summary_text = NULL,
+                    summary_status = NULL,
+                    summary_started_at = NULL,
+                    summary_finished_at = NULL,
+                    summary_model = NULL,
+                    summary_mode = NULL,
+                    summary_chunks_count = NULL
+                WHERE id = :id
+            """),
+            {
+                "lang": extraction.language,
+                "ft": formatted["formatted_text"],
+                "tl": formatted["char_count"],
+                "id": fmt_id,
+            },
+        )
+    else:
+        # No existing row — create one (rare edge case)
+        db.add(SubtitleFormatted(
+            id=generate_id(),
+            video_id=video.id,
+            language=extraction.language,
+            formatted_text=formatted["formatted_text"],
+            text_length=formatted["char_count"],
+            processing_status="success",
+        ))
+
+    await db.commit()
+
+
 async def delete_video(db: AsyncSession, video_id: str) -> bool:
     stmt = select(Video).where(Video.video_id == video_id)
     video = (await db.execute(stmt)).scalar_one_or_none()

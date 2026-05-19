@@ -37,6 +37,7 @@ export interface ResultResponse {
   summary_duration_seconds: number | null
   char_count: number | null
   chapters: Array<{ start_time: number; end_time: number; title: string }> | null
+  reextract_in_progress?: boolean
   created_at: string
 }
 
@@ -113,6 +114,14 @@ export async function startCleanup(videoId: string): Promise<void> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(body.detail || 'Failed to start cleanup')
+  }
+}
+
+export async function reextractSubtitles(videoId: string): Promise<void> {
+  const res = await fetch(`${BASE}/result/${videoId}/reextract`, { method: 'POST' })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || 'Failed to start re-extract')
   }
 }
 
