@@ -1,6 +1,42 @@
 # Open Questions
 
-Design and architecture questions without a final answer yet. Different from bugs — these are decisions that can be deferred and revisited based on real-world usage. When a question is resolved, move the decision into the relevant epic / docs and delete the entry here.
+Design questions and known issues without a final answer yet. Decisions that can be deferred and revisited based on real-world usage. When resolved, move the decision into the relevant epic / docs and delete the entry here.
+
+---
+
+## Cleanup timeout on large chapter paragraphs (17.05.2026)
+
+### The problem
+
+Chapter-aware formatting on a 5-hour video produces ~58 large chapter-sized paragraphs. Each paragraph sent to Ollama in `text_cleaner.py` with a 120s timeout (`httpx.ReadTimeout`). With slow/large models, every paragraph times out → cleanup silently falls back to original text. Result: `cleaned_text` ends up as a copy of `formatted_text`, no actual cleanup happened.
+
+### Side effects
+
+- UI and History may appear slow/empty during heavy Ollama load (backend event-loop starved)
+- No clear signal to user that cleanup is failing — log shows `Ollama failed on paragraph: ` (empty exception message)
+
+### Options
+
+1. **Bump timeout** from 120s to 300s+ — naive fix, doesn't help if model is genuinely too slow
+2. **Split large paragraphs** before sending to LLM — keeps timeout reasonable, more LLM calls
+3. **Use faster model** for cleanup — user choice, requires education
+4. **Parallel MAP** (Epic 29) — already implemented; helps if `OLLAMA_NUM_PARALLEL` set, doesn't fix per-paragraph timeout
+
+### Recommendation
+
+Combine **2 + 3**: split large paragraphs (>3000 chars) into sub-chunks within `text_cleaner.py`, plus surface a UI hint when cleanup completes with cleaned_text == formatted_text (likely silent fail).
+
+---
+
+## Transient "Could not load result" on cleanup/summary finish (18.05.2026)
+
+### The problem
+
+Frontend `loadResult()` polls `GET /api/result/{video_id}` every few seconds. At the moment a background task transitions `processing → done` (backend writes `finish_*` row), a coincident poll request can fail → first catch handler shows "Could not load result" full-screen error. Next poll succeeds, but user already saw the error.
+
+### Recommendation
+
+In `loadResult` catch, count consecutive failures, only show error after 2–3 in a row. Single transient miss = ignore, retry on next tick. ~10 min fix.
 
 ---
 
