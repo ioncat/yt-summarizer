@@ -1,3 +1,4 @@
+import html
 import json
 import os
 import re
@@ -109,6 +110,11 @@ def _parse_vtt_to_entries(vtt_content: str) -> list[SubtitleEntry]:
                     text_lines.append(text_line)
                 i += 1
             text = " ".join(text_lines).strip()
+            # Decode HTML entities (e.g. &nbsp;, &amp;) that some YouTube
+            # auto-captions inject. Then collapse any resulting whitespace
+            # runs (multiple &nbsp; → multiple spaces) to a single space.
+            text = html.unescape(text)
+            text = re.sub(r"\s+", " ", text).strip()
             if text and text not in seen_texts:
                 seen_texts.add(text)
                 ts = timestamp[:8] if len(timestamp) >= 8 else timestamp
