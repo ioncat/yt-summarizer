@@ -207,9 +207,14 @@ export interface BenchmarkRun {
   output_text: string | null
   output_chars: number | null
   duration_seconds: number | null
-  status: 'processing' | 'done' | 'failed'
+  status: 'queued' | 'processing' | 'done' | 'failed'
   triggered_by?: 'main' | 'benchmark'
   created_at: string
+}
+
+export async function deleteBenchmarkRun(run_id: number): Promise<void> {
+  const res = await fetch(`${BASE}/benchmark/run/${run_id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete run')
 }
 
 export async function startBenchmark(

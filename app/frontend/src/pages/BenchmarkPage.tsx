@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getResult, getModels, startBenchmark, getBenchmarkRuns, BenchmarkRun, ResultResponse } from '../api'
+import { getResult, getModels, startBenchmark, getBenchmarkRuns, deleteBenchmarkRun, BenchmarkRun, ResultResponse } from '../api'
 import { renderText } from '../utils/renderText'
 
 function formatDuration(seconds: number | null): string {
@@ -58,15 +58,16 @@ export default function BenchmarkPage() {
     ])
   }, [videoId])
 
-  // Poll while any run is processing
+  // Poll while any run is queued or processing
   useEffect(() => {
-    const hasProcessing = runs.some(r => r.status === 'processing')
-    if (hasProcessing && !pollRef.current) {
+    const pending = runs.some(r => r.status === 'processing' || r.status === 'queued')
+    if (pending && !pollRef.current) {
       pollRef.current = setInterval(async () => {
         if (!videoId) return
         const fresh = await getBenchmarkRuns(videoId).catch(() => runs)
         setRuns(fresh)
-        if (!fresh.some(r => r.status === 'processing')) {
+        const stillPending = fresh.some(r => r.status === 'processing' || r.status === 'queued')
+        if (!stillPending) {
           clearInterval(pollRef.current!)
           pollRef.current = null
           setRunning(false)
@@ -74,12 +75,25 @@ export default function BenchmarkPage() {
       }, 3000)
     }
     return () => {
-      if (!hasProcessing && pollRef.current) {
+      if (!pending && pollRef.current) {
         clearInterval(pollRef.current)
         pollRef.current = null
       }
     }
   }, [runs, videoId])
+
+  async function handleDeleteRun(run: BenchmarkRun) {
+    const confirmed = window.confirm(
+      `Delete this benchmark run?\n\nModel: ${run.model}\nStage: ${run.stage}\nStatus: ${run.status}\n\nThis cannot be undone.`
+    )
+    if (!confirmed) return
+    try {
+      await deleteBenchmarkRun(run.id)
+      setRuns(prev => prev.filter(r => r.id !== run.id))
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to delete run')
+    }
+  }
 
   function toggleModel(model: string) {
     setSelectedModels(prev =>
@@ -130,6 +144,7 @@ export default function BenchmarkPage() {
         </div>
         <div class="col-body">${
           run.status === 'failed' ? '<p class="error">❌ Failed</p>' :
+          run.status === 'queued' ? '<p class="processing">⏸ Queued</p>' :
           run.status === 'processing' ? '<p class="processing">⏳ Processing…</p>' :
           (run.output_text ?? '').split('\n\n').map(b => {
             if (b.startsWith('## ')) {
@@ -267,7 +282,7 @@ p{margin:0 0 12px}
           style={{ gridTemplateColumns: `repeat(${displayRuns.length}, 1fr)` }}
         >
           {displayRuns.map((run, idx) => (
-            <div key={run.id} className="benchmark-col">
+            <div key={run.id} className={`benchmark-col benchmark-col--${run.status}`}>
               <div className="benchmark-col-header">
                 <strong className="benchmark-model-name">{run.model}</strong>
                 {run.triggered_by === 'main' && (
@@ -284,12 +299,24 @@ p{margin:0 0 12px}
                     )}
                   </>
                 )}
+                {run.status === 'queued' && (
+                  <span className="benchmark-meta queued">⏸ queued</span>
+                )}
                 {run.status === 'processing' && (
                   <span className="benchmark-meta processing">⏳ processing…</span>
                 )}
                 {run.status === 'failed' && (
                   <span className="benchmark-meta failed">❌ failed</span>
                 )}
+                <button
+                  type="button"
+                  className="benchmark-col-close"
+                  aria-label="Delete this run"
+                  title="Delete this run"
+                  onClick={() => handleDeleteRun(run)}
+                >
+                  ×
+                </button>
               </div>
               <div
                 className="benchmark-col-body formatted-text"
@@ -298,6 +325,9 @@ p{margin:0 0 12px}
               >
                 {run.status === 'failed' && (
                   <p className="benchmark-error">Model failed or timed out.</p>
+                )}
+                {run.status === 'queued' && (
+                  <p className="benchmark-queued">Waiting for previous runs to finish…</p>
                 )}
                 {run.status === 'processing' && (
                   <p className="benchmark-processing">Processing…</p>

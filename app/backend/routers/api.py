@@ -408,6 +408,19 @@ async def get_benchmark_run_detail(
     return run
 
 
+@router.delete("/benchmark/run/{run_id}")
+async def delete_benchmark_run_endpoint(
+    run_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Delete a single benchmark run by ID."""
+    from services.benchmark_service import delete_benchmark_run
+    ok = await delete_benchmark_run(db, run_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {"deleted": run_id}
+
+
 @router.get("/health")
 async def health_check(db: Annotated[AsyncSession, Depends(get_db)]):
     """Returns backend status and Ollama availability."""

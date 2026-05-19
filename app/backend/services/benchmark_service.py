@@ -82,6 +82,16 @@ async def get_benchmark_run(db: AsyncSession, run_id: int) -> dict | None:
     return _run_to_dict(row) if row else None
 
 
+async def delete_benchmark_run(db: AsyncSession, run_id: int) -> bool:
+    """Delete a single benchmark run by ID. Returns True if a row was deleted."""
+    result = await db.execute(
+        text("DELETE FROM benchmark_runs WHERE id = :id"),
+        {"id": run_id},
+    )
+    await db.commit()
+    return result.rowcount > 0
+
+
 def _run_to_dict(run: BenchmarkRun) -> dict:
     return {
         "id": run.id,
@@ -115,6 +125,17 @@ def _resolve_mode(
     return "map_reduce"
 
 
+async def _mark_run_status(run_id: int, status: str) -> None:
+    """Update only the status column for one benchmark run."""
+    from models.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            text("UPDATE benchmark_runs SET status = :s WHERE id = :id"),
+            {"s": status, "id": run_id},
+        )
+        await db.commit()
+
+
 async def _run_one_model(
     run_id: int,
     stage: str,
@@ -129,6 +150,9 @@ async def _run_one_model(
     """Run one model benchmark, update its DB row when done."""
     from models.database import AsyncSessionLocal
     from services.text_cleaner import clean_text
+
+    # Flip from 'queued' → 'processing' just before doing work
+    await _mark_run_status(run_id, "processing")
 
     logger.info("benchmark: run_id=%d stage=%s model=%s mode=%s start", run_id, stage, model, mode)
     started = time.monotonic()
@@ -237,7 +261,7 @@ async def start_benchmark(
             mode=mode,
             model=model,
             input_chars=input_chars,
-            status="processing",
+            status="queued",
             triggered_by="benchmark",
         )
         db.add(run)
@@ -246,9 +270,13 @@ async def start_benchmark(
 
     await db.commit()
 
-    for run_id, model in zip(run_ids, models):
-        asyncio.create_task(
-            _run_one_model(
+    # Sequential execution: one model at a time, in selection order.
+    # Prevents Ollama overload (multiple large models contending for the
+    # same GPU/RAM) and keeps the UI honest — one column is processing,
+    # the rest visibly queued until their turn.
+    async def _sequential_runner():
+        for run_id, model in zip(run_ids, models):
+            await _run_one_model(
                 run_id=run_id,
                 stage=stage,
                 model=model,
@@ -259,7 +287,8 @@ async def start_benchmark(
                 language=language,
                 video_id=video_id,
             )
-        )
+
+    asyncio.create_task(_sequential_runner())
 
     logger.info(
         "benchmark: started %d models for video=%s stage=%s mode=%s run_ids=%s",
