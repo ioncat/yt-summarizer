@@ -345,6 +345,7 @@ class BenchmarkRunRequest(BaseModel):
     video_id: str
     models: list[str]
     mode_override: str | None = None  # 'single' | 'map_reduce' | 'full_extract' | None
+    stage: str = "summary"  # 'summary' | 'cleanup'
 
 
 @router.post("/benchmark/run")
@@ -358,12 +359,15 @@ async def start_benchmark_run(
         raise HTTPException(status_code=400, detail="No models specified")
     if len(request.models) > 4:
         raise HTTPException(status_code=400, detail="Maximum 4 models per benchmark")
+    if request.stage not in ("summary", "cleanup"):
+        raise HTTPException(status_code=400, detail="stage must be 'summary' or 'cleanup'")
     try:
         run_ids = await start_benchmark(
             db,
             video_id=request.video_id,
             models=request.models,
             mode_override=request.mode_override,
+            stage=request.stage,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

@@ -217,19 +217,107 @@ All data available from `benchmark_runs` row: `mode`, `duration_seconds`, `input
 
 ---
 
+### US-2605: Mirror primary runs into benchmark_runs (Original entry)
+
+**As a** user who already summarized or cleaned a video from the Result page  
+**I want** that primary run to appear automatically on the Benchmark page as the first column  
+**So that** I can compare subsequent models against my baseline without re-running the original
+
+#### Acceptance Criteria
+
+**Given** a user runs summarization (or cleanup) from the Result page  
+**When** the run completes successfully  
+**Then** a row is inserted into `benchmark_runs` with `triggered_by='main'`, full output, model, duration, and input_chars
+
+**Given** the Benchmark page is opened for that video  
+**When** runs are rendered  
+**Then** the mirrored row appears alongside any `triggered_by='benchmark'` rows  
+**And** the column shows a **📌 Original** badge to distinguish it
+
+**Given** user re-runs summarization with a different model from the Result page  
+**When** the new run completes  
+**Then** a new `benchmark_runs` row is inserted (history preserved, not overwritten)
+
+#### Edge Cases
+
+- Failed run (`status='failed'`) still inserted into `benchmark_runs` for visibility
+- Run without a configured model → no benchmark_runs insert (no value)
+- Re-run same model from Benchmark page → newest run wins in dedup-by-model display
+
+#### Out of Scope
+
+- Per-version diff view between original and benchmark runs
+- Manual deletion of individual benchmark rows from UI
+
+#### Notes for Engineering
+
+`finish_summary()` and `finish_cleanup()` in `video_service.py` perform the INSERT after updating `subtitles_formatted`. Fields populated from existing data: model from primary row, input_chars from source text length, output from the function argument, duration computed from `started_at` to now.
+
+---
+
+### US-2606: Benchmark cleanup stage in addition to summary
+
+**As a** user choosing between models for AI cleanup (heavy operation)  
+**I want** to benchmark several models on the same cleanup task  
+**So that** I can pick the best speed/quality tradeoff before running cleanup on long videos
+
+#### Acceptance Criteria
+
+**Given** the Benchmark page is open  
+**When** user selects "Cleanup" stage  
+**Then** model selector + Run button work for cleanup as for summary  
+**And** Mode dropdown is hidden (cleanup has no modes)  
+**And** Run uses `text_cleaner.clean_text()` instead of summarize/extract
+
+**Given** cleanup-stage runs exist for a video  
+**When** user toggles stage Summary ↔ Cleanup  
+**Then** display switches between the two stage filters; summary and cleanup runs are NOT shown together
+
+**Given** the user runs cleanup from the Result page  
+**When** the cleanup completes  
+**Then** a `benchmark_runs` row with `stage='cleanup'`, `mode='cleanup'`, `triggered_by='main'` is also inserted (mirrors US-2605 logic)
+
+#### Edge Cases
+
+- Cleanup operates on `formatted_text` (raw subtitles), not on `cleaned_text` — important when same model already cleaned the text
+- Large videos: cleanup-benchmark can take hours per model; UX warning would help (out of scope here)
+- Mode column for cleanup runs stored as literal `'cleanup'` to keep the schema uniform
+
+#### Out of Scope
+
+- "Sample mode" — cleanup only first N paragraphs for quick comparison (future feature)
+- Cleanup quality scoring / diff against original — future epic
+- Side-by-side cleanup + summary in the same view
+
+#### Notes for Engineering
+
+`start_benchmark(..., stage)` accepts `'summary'` (default) or `'cleanup'`. For cleanup:
+- `mode = 'cleanup'`
+- `source_text = fmt['formatted_text']` (raw)
+- `_run_one_model` dispatches to `clean_text()` instead of `summarize_text()`/`extract_notes()`
+
+`POST /api/benchmark/run` request body adds `stage: 'summary' | 'cleanup'` with 'summary' as default.
+
+Frontend: stage selector dropdown on BenchmarkPage; `displayRuns` filters by `runs.filter(r => r.stage === stage)`; Mode selector conditionally rendered only for summary stage.
+
+---
+
 ## Implementation Order
 
-1. DB migration — `benchmark_runs` table in `_migrate_db()`
-2. Backend service — `benchmark_service.py`: `run_benchmark()`, `get_benchmark_runs()`
-3. API endpoints — `POST /api/benchmark/run`, `GET /api/benchmark/{video_id}`
-4. Extract `renderText()` to shared util
-5. Frontend — `/benchmark/:videoId` page: model selector, run button, N-column grid, synchronized scroll
-6. Column headers — mode badge, duration, compression
-7. HTML export
+1. DB migration — `benchmark_runs` table in `_migrate_db()` ✅
+2. Backend service — `benchmark_service.py`: `run_benchmark()`, `get_benchmark_runs()` ✅
+3. API endpoints — `POST /api/benchmark/run`, `GET /api/benchmark/{video_id}` ✅
+4. Extract `renderText()` to shared util ✅
+5. Frontend — `/benchmark/:videoId` page: model selector, run button, N-column grid, synchronized scroll ✅
+6. Column headers — mode badge, duration, compression ✅
+7. HTML export ✅
+8. **US-2605**: mirror primary runs into `benchmark_runs` via `finish_summary` / `finish_cleanup`. Add `triggered_by` column + migration. 📌 Original badge in UI. ✅
+9. **US-2606**: cleanup stage support. `start_benchmark(stage)`, `_run_one_model` cleanup branch, stage selector UI, displayRuns filter. ✅
 
 ## Out of Scope (Epic level)
 
-- Cleanup stage benchmark (US-2601 covers summary only)
 - Prompt comparison (same model, different prompts) — separate epic
 - Automatic benchmark on every new video
 - Storing benchmark history across videos in a dashboard
+- Cleanup sample mode (partial cleanup for quick benchmark)
+- Quality scoring / output diffing

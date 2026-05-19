@@ -39,6 +39,7 @@ export default function BenchmarkPage() {
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [selectedModels, setSelectedModels] = useState<string[]>([])
   const [modeOverride, setModeOverride] = useState<string>('')
+  const [stage, setStage] = useState<'summary' | 'cleanup'>('summary')
   const [runs, setRuns] = useState<BenchmarkRun[]>([])
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -93,7 +94,7 @@ export default function BenchmarkPage() {
     setError(null)
     setRunning(true)
     try {
-      await startBenchmark(videoId, selectedModels, modeOverride || null)
+      await startBenchmark(videoId, selectedModels, modeOverride || null, stage)
       const fresh = await getBenchmarkRuns(videoId)
       setRuns(fresh)
     } catch (e: any) {
@@ -166,14 +167,17 @@ p{margin:0 0 12px}
     URL.revokeObjectURL(a.href)
   }
 
-  // Show most recent run per model (deduplicate by model, keep newest)
+  // Filter by selected stage, then dedup by model (keep newest)
   const displayRuns = (() => {
     const seen = new Set<string>()
-    return [...runs].sort((a, b) => b.id - a.id).filter(r => {
-      if (seen.has(r.model)) return false
-      seen.add(r.model)
-      return true
-    }).reverse()
+    return [...runs]
+      .filter(r => r.stage === stage)
+      .sort((a, b) => b.id - a.id)
+      .filter(r => {
+        if (seen.has(r.model)) return false
+        seen.add(r.model)
+        return true
+      }).reverse()
   })()
 
   const hasProcessing = runs.some(r => r.status === 'processing')
@@ -192,6 +196,17 @@ p{margin:0 0 12px}
 
       {/* Controls */}
       <div className="benchmark-controls">
+        <div className="benchmark-mode-selector">
+          <label>Stage:</label>
+          <select
+            value={stage}
+            onChange={e => setStage(e.target.value as 'summary' | 'cleanup')}
+            disabled={running}
+          >
+            <option value="summary">Summary</option>
+            <option value="cleanup">Cleanup</option>
+          </select>
+        </div>
         <div className="benchmark-model-selector">
           <label>Models (select up to 4):</label>
           <div className="model-chips">
@@ -208,18 +223,20 @@ p{margin:0 0 12px}
           </div>
         </div>
 
-        <div className="benchmark-mode-selector">
-          <label>Mode:</label>
-          <select
-            value={modeOverride}
-            onChange={e => setModeOverride(e.target.value)}
-            disabled={running}
-          >
-            {MODE_OPTIONS.map(o => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-        </div>
+        {stage === 'summary' && (
+          <div className="benchmark-mode-selector">
+            <label>Mode:</label>
+            <select
+              value={modeOverride}
+              onChange={e => setModeOverride(e.target.value)}
+              disabled={running}
+            >
+              {MODE_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <button
           className="btn-primary"
