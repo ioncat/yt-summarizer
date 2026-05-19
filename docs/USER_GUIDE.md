@@ -118,6 +118,55 @@ The active mode is shown in the Summary tab meta line:
 - **Long structured course with chapters** → Full Extract — preserves all content, structured by chapter
 - **Force Map-Reduce override** → toggle in Settings → Summarization. Useful for A/B testing the same video across modes via the Benchmark page.
 
+### Expected behavior per mode
+
+How to recognize each mode is running correctly on your screen.
+
+#### Single-pass (📄 Short videos)
+
+**While running:**
+- Summary tab shows `Summarizing: 0:XX` (no chunk/chapter counter — it's one LLM call)
+
+**After completion:**
+- Meta line: `Summarized in X:XX · <model>` (no mode label)
+- Output: 5–7 bullet points capturing main ideas
+- High compression (output is much shorter than input)
+
+#### Map-Reduce (📑 Long videos, no chapters)
+
+**While running:**
+- Meta line shows `Summarizing: X:XX · chunk N / M` — model is going through chunks
+- After all chunks done, REDUCE step runs (no separate counter for it)
+
+**After completion:**
+- Meta line: `Summarized in X:XX · <model> · N chunks · K% compressed`
+- Output: narrative paragraphs grouped into thematic sections with `## ` headings invented by the LLM
+- Medium compression (typically 50–85%)
+
+**Watch out:** if you see `MAP chunk 1 failed — aborting` in the backend log, the model isn't responding correctly. Try a different model.
+
+#### Full Extract (📚 Long Structured)
+
+**While running:**
+- Meta line shows `Summarizing: X:XX · chapter N / M` — note the word **"chapter"**, not "chunk"
+- One LLM call per `## ` chapter heading in the formatted text
+
+**After completion:**
+- Meta line: `Summarized in X:XX · <model> · Full Extract · N chapters`
+- Output preserves every original `## Chapter Title` from the video author
+- Each chapter is processed independently — no REDUCE step, no cross-chapter compression
+- Compression near 0% or sometimes negative (output longer than input). This is **correct**: Full Extract is lossless by design
+
+**Verify correctness:**
+- Meta says "Full Extract · N chapters" (not "N chunks")
+- All chapter headings from the source video are present in the output
+
+**Negative test:** to force Map-Reduce instead, enable Settings → Summarization → Force Map-Reduce. Re-run Summary; meta should show "chunks" instead of "chapters".
+
+#### Hierarchical Map-Reduce (📕 XL, planned)
+
+Not yet implemented. See Epic 18 in the backlog.
+
 ---
 
 ## Features
