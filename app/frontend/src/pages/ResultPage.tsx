@@ -582,12 +582,12 @@ export default function ResultPage() {
 
         {activeTab === 'cleaned' && (result.cleanup_status === 'failed' || cleanupError) && (
           <div className="cleanup-error">
-            {cleanupError || 'Cleanup failed — make sure Ollama is running and a model is selected.'}
+            {cleanupError || 'Cleanup failed. Possible causes: Ollama is not running, no model is selected, or the model returned no output (e.g. due to timeout on large paragraphs). Check backend log for details.'}
           </div>
         )}
         {activeTab === 'summary' && (result.summary_status === 'failed' || summaryError) && (
           <div className="cleanup-error">
-            {summaryError || 'Summarization failed — make sure Ollama is running and a model is selected.'}
+            {summaryError || 'Summarization failed. Possible causes: Ollama is not running, no model is selected, or a stage (MAP / REDUCE / chapter) timed out. For long videos (>50K chars without chapters) the REDUCE step may exceed the model context — try a stronger model, or wait for hierarchical map-reduce (Epic 18). Check backend log for details.'}
           </div>
         )}
 
