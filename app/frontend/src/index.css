@@ -415,8 +415,10 @@ input.input-missing:focus, select.input-missing:focus { border-color: var(--acce
 .benchmark-grid { display: grid; gap: 1rem; height: calc(100vh - 260px); }
 .benchmark-col { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
 .benchmark-col-header { padding: 0.6rem 0.8rem; background: #f3f4f6; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; font-size: 0.8rem; min-height: 42px; }
-.benchmark-model-name { font-weight: 600; color: var(--text)827; }
+.benchmark-model-name { font-weight: 600; color: var(--text); }
 .benchmark-badge { background: #e0e7ff; color: #3730a3; padding: 1px 8px; border-radius: 10px; font-size: 0.75rem; }
+.benchmark-badge-original { background: var(--ok); color: var(--surface); }
+[data-theme="dark"] .benchmark-badge-original { color: var(--bg); }
 .benchmark-meta { color: var(--text-faint); }
 .benchmark-meta.processing { color: var(--warn); }
 .benchmark-meta.failed { color: var(--err); }

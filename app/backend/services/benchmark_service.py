@@ -94,6 +94,7 @@ def _run_to_dict(run: BenchmarkRun) -> dict:
         "output_chars": run.output_chars,
         "duration_seconds": run.duration_seconds,
         "status": run.status,
+        "triggered_by": run.triggered_by,
         "created_at": run.created_at.isoformat(),
     }
 
@@ -116,6 +117,7 @@ def _resolve_mode(
 
 async def _run_one_model(
     run_id: int,
+    stage: str,
     model: str,
     source_text: str,
     mode: str,
@@ -126,11 +128,18 @@ async def _run_one_model(
 ) -> None:
     """Run one model benchmark, update its DB row when done."""
     from models.database import AsyncSessionLocal
+    from services.text_cleaner import clean_text
 
-    logger.info("benchmark: run_id=%d model=%s mode=%s start", run_id, model, mode)
+    logger.info("benchmark: run_id=%d stage=%s model=%s mode=%s start", run_id, stage, model, mode)
     started = time.monotonic()
 
-    if mode == "full_extract":
+    if stage == "cleanup":
+        output = await clean_text(
+            source_text,
+            model=model,
+            ollama_url=ollama_url,
+        )
+    elif mode == "full_extract":
         output, _, _ = await extract_notes(
             source_text,
             model=model,
@@ -182,50 +191,66 @@ async def start_benchmark(
     video_id: str,
     models: list[str],
     mode_override: str | None = None,
+    stage: str = "summary",
 ) -> list[int]:
     """
     Create benchmark_runs rows for each model and launch background tasks.
     Returns list of run IDs (one per model).
+
+    stage: 'summary' (default) — benchmark summarization, uses auto-mode
+           'cleanup' — benchmark AI cleanup, mode field stored as 'cleanup'
     """
+    if stage not in ("summary", "cleanup"):
+        raise ValueError(f"Unknown stage: {stage}")
+
     fmt = await get_result(db, video_id)
     if not fmt:
         raise ValueError(f"Video {video_id} not found")
 
-    source_text = fmt.get("cleaned_text") or fmt.get("formatted_text") or ""
+    # Cleanup operates on formatted_text (raw subtitles).
+    # Summary operates on cleaned_text if present else formatted_text.
+    if stage == "cleanup":
+        source_text = fmt.get("formatted_text") or ""
+    else:
+        source_text = fmt.get("cleaned_text") or fmt.get("formatted_text") or ""
     if not source_text:
         raise ValueError("No text available for benchmark")
 
     has_chapters = bool(fmt.get("chapters"))
     language = fmt.get("language")
-
-    force_map_reduce_raw = await get_app_setting(db, "force_map_reduce") or "false"
-    force_map_reduce = force_map_reduce_raw == "true"
     ollama_url = await get_app_setting(db, "ollama_url") or ""
 
-    mode = _resolve_mode(source_text, has_chapters, force_map_reduce, mode_override)
+    if stage == "cleanup":
+        mode = "cleanup"
+    else:
+        force_map_reduce_raw = await get_app_setting(db, "force_map_reduce") or "false"
+        force_map_reduce = force_map_reduce_raw == "true"
+        mode = _resolve_mode(source_text, has_chapters, force_map_reduce, mode_override)
+
     input_chars = len(source_text)
 
     run_ids: list[int] = []
     for model in models:
         run = BenchmarkRun(
             video_id=video_id,
-            stage="summary",
+            stage=stage,
             mode=mode,
             model=model,
             input_chars=input_chars,
             status="processing",
+            triggered_by="benchmark",
         )
         db.add(run)
-        await db.flush()  # get auto-increment id
+        await db.flush()
         run_ids.append(run.id)
 
     await db.commit()
 
-    # Fire background tasks — one per model, all parallel
     for run_id, model in zip(run_ids, models):
         asyncio.create_task(
             _run_one_model(
                 run_id=run_id,
+                stage=stage,
                 model=model,
                 source_text=source_text,
                 mode=mode,
@@ -237,7 +262,7 @@ async def start_benchmark(
         )
 
     logger.info(
-        "benchmark: started %d models for video=%s mode=%s run_ids=%s",
-        len(models), video_id, mode, run_ids,
+        "benchmark: started %d models for video=%s stage=%s mode=%s run_ids=%s",
+        len(models), video_id, stage, mode, run_ids,
     )
     return run_ids

@@ -208,6 +208,7 @@ export interface BenchmarkRun {
   output_chars: number | null
   duration_seconds: number | null
   status: 'processing' | 'done' | 'failed'
+  triggered_by?: 'main' | 'benchmark'
   created_at: string
 }
 
@@ -215,11 +216,12 @@ export async function startBenchmark(
   video_id: string,
   models: string[],
   mode_override?: string | null,
+  stage: 'summary' | 'cleanup' = 'summary',
 ): Promise<{ run_ids: number[]; count: number }> {
   const res = await fetch(`${BASE}/benchmark/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ video_id, models, mode_override: mode_override ?? null }),
+    body: JSON.stringify({ video_id, models, mode_override: mode_override ?? null, stage }),
   })
   if (!res.ok) throw new Error(await res.text())
   return res.json()
