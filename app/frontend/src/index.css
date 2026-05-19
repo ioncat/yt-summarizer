@@ -165,8 +165,6 @@ input[type="text"]:focus, select:focus { border-color: var(--accent); }
   font-weight: 700;
   color: var(--text);
   margin: 2rem 0 0.5rem;
-  padding-bottom: 0.35rem;
-  border-bottom: 2px solid var(--ai-soft);
 }
 .formatted-text .chapter-heading:first-child {
   margin-top: 0;
@@ -462,7 +460,7 @@ input.input-missing:focus, select.input-missing:focus { border-color: var(--acce
   color: var(--text);
 }
 [data-theme="dark"] .formatted-text { color: var(--text); }
-[data-theme="dark"] .formatted-text .chapter-heading { color: var(--text); border-bottom-color: var(--ai); }
+[data-theme="dark"] .formatted-text .chapter-heading { color: var(--text); }
 
 /* Type badges on History — keep saturated in dark with softer backgrounds */
 [data-theme="dark"] .type-badge.type-short          { background: #14321f; color: #86efac; border-color: #15803d; }
