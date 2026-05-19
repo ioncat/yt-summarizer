@@ -137,4 +137,7 @@ class BenchmarkRun(Base):
     output_chars: Mapped[int | None] = mapped_column(Integer)
     duration_seconds: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), default="processing")  # processing | done | failed
+    # 'main' = mirrored from primary cleanup/summary pipeline (Result page action)
+    # 'benchmark' = created by an explicit Benchmark run
+    triggered_by: Mapped[str] = mapped_column(String(20), default="benchmark")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

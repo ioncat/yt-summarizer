@@ -248,6 +248,9 @@ p{margin:0 0 12px}
             <div key={run.id} className="benchmark-col">
               <div className="benchmark-col-header">
                 <strong className="benchmark-model-name">{run.model}</strong>
+                {run.triggered_by === 'main' && (
+                  <span className="benchmark-badge benchmark-badge-original" title="From Result page (primary pipeline)">📌 Original</span>
+                )}
                 <span className="benchmark-badge">{modeBadge(run.mode)}</span>
                 {run.status === 'done' && (
                   <>

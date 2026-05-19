@@ -94,6 +94,7 @@ def _run_to_dict(run: BenchmarkRun) -> dict:
         "output_chars": run.output_chars,
         "duration_seconds": run.duration_seconds,
         "status": run.status,
+        "triggered_by": run.triggered_by,
         "created_at": run.created_at.isoformat(),
     }
 
@@ -214,6 +215,7 @@ async def start_benchmark(
             model=model,
             input_chars=input_chars,
             status="processing",
+            triggered_by="benchmark",
         )
         db.add(run)
         await db.flush()  # get auto-increment id

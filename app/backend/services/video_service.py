@@ -389,13 +389,19 @@ async def finish_summary(
     chunks_count: int = 1,
     started_at: datetime | None = None,
 ) -> None:
-    """Store summarization result + both timestamps atomically."""
+    """Store summarization result + both timestamps atomically, AND mirror
+    the run into benchmark_runs so it shows up on the Benchmark page."""
     fmt_id = await _get_fmt_id(db, video_id)
     if not fmt_id:
         return
     status = "done" if summary_text else "failed"
-    finished_ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")
-    started_ts = (started_at or datetime.utcnow()).strftime("%Y-%m-%d %H:%M:%S.%f")
+    finished_dt = datetime.utcnow()
+    started_dt = started_at or finished_dt
+    finished_ts = finished_dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+    started_ts = started_dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+    duration_seconds = max(0, int((finished_dt - started_dt).total_seconds()))
+
+    # Update primary subtitles_formatted row
     await db.execute(
         text("""
             UPDATE subtitles_formatted
@@ -417,6 +423,46 @@ async def finish_summary(
             "id": fmt_id,
         },
     )
+
+    # Mirror into benchmark_runs as a "main"-triggered entry.
+    # Fetch model + input_chars to populate the row.
+    row = (await db.execute(
+        text("""
+            SELECT summary_model, cleaned_text, formatted_text
+            FROM subtitles_formatted WHERE id = :id
+        """),
+        {"id": fmt_id},
+    )).first()
+    if row:
+        model = row[0]
+        source_text = row[1] or row[2] or ""
+        input_chars = len(source_text)
+        output_chars = len(summary_text) if summary_text else 0
+        if model:
+            await db.execute(
+                text("""
+                    INSERT INTO benchmark_runs
+                        (video_id, stage, mode, model, input_chars,
+                         output_text, output_chars, duration_seconds, status,
+                         triggered_by, created_at)
+                    VALUES
+                        (:video_id, 'summary', :mode, :model, :input_chars,
+                         :output_text, :output_chars, :duration, :status,
+                         'main', :created_at)
+                """),
+                {
+                    "video_id": video_id,
+                    "mode": mode,
+                    "model": model,
+                    "input_chars": input_chars,
+                    "output_text": summary_text,
+                    "output_chars": output_chars,
+                    "duration": duration_seconds,
+                    "status": status,
+                    "created_at": finished_ts,
+                },
+            )
+
     await db.commit()
 
 

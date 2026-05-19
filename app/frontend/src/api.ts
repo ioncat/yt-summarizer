@@ -208,6 +208,7 @@ export interface BenchmarkRun {
   output_chars: number | null
   duration_seconds: number | null
   status: 'processing' | 'done' | 'failed'
+  triggered_by?: 'main' | 'benchmark'
   created_at: string
 }
 
