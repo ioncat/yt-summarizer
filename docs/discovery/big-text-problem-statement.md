@@ -47,7 +47,7 @@
 2. **Структурированную сводку** — параграфы по темам, 20 минут
 3. **Полный референс** — главы как в книге, час чтения, ничего не потеряно
 
-Все три = один pipeline с разными режимами (см. [USER_GUIDE → Processing modes](USER_GUIDE.md#processing-modes)).
+Все три = один pipeline с разными режимами (см. [USER_GUIDE → Processing modes](../USER_GUIDE.md#processing-modes)).
 
 ## Антипатерны (что мы НЕ хотим)
 
@@ -67,8 +67,8 @@
 
 ## Related docs
 
-- [USER_GUIDE.md](USER_GUIDE.md) — пользовательские режимы обработки
-- [CLAUDE.md](../CLAUDE.md) — техническая архитектура
+- [USER_GUIDE.md](../USER_GUIDE.md) — пользовательские режимы обработки
+- [CLAUDE.md](../../CLAUDE.md) — техническая архитектура
 - [open-questions.md](open-questions.md) — нерешённые проектные вопросы
-- [phase2-architecture.md](phase2-architecture.md) — детали Map-Reduce
-- [backlog/BACKLOG.md](backlog/BACKLOG.md) — эпики
+- [phase2-architecture.md](../phase2-architecture.md) — детали Map-Reduce
+- [backlog/BACKLOG.md](../backlog/BACKLOG.md) — эпики
