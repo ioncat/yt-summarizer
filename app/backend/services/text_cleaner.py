@@ -35,6 +35,42 @@ DEFAULT_USER_PROMPT_TEMPLATE = (
 )
 
 
+# Sentence terminators across Russian and English. ":" included because
+# a paragraph that ends with ":" is usually introducing a list / continuation.
+_SENTENCE_TERMINATORS = (".", "?", "!", "…", "»", "\")", "\"", ":", ";")
+
+
+def _merge_split_sentences(paragraphs: list[str]) -> list[str]:
+    """
+    Post-process: merge paragraphs where the gap-based formatter (4s pause
+    in ASR) cut a sentence mid-thought. Heuristic: if paragraph i does NOT
+    end with a sentence terminator AND paragraph i+1 starts with a
+    lowercase letter — they are likely one continuous sentence. Merge.
+
+    Never merges across chapter headings (## ).
+    """
+    if not paragraphs:
+        return paragraphs
+    out: list[str] = [paragraphs[0]]
+    for p in paragraphs[1:]:
+        prev = out[-1]
+        # Don't merge into or across headings
+        if prev.startswith("## ") or p.startswith("## "):
+            out.append(p)
+            continue
+        # Determine if prev ends with terminator (handle trailing quotes/brackets)
+        prev_stripped = prev.rstrip()
+        ends_with_terminator = prev_stripped.endswith(_SENTENCE_TERMINATORS)
+        # Determine if p starts with lowercase
+        first_char = p.lstrip()[:1]
+        starts_lowercase = first_char.islower()
+        if not ends_with_terminator and starts_lowercase:
+            out[-1] = prev_stripped + " " + p.lstrip()
+        else:
+            out.append(p)
+    return out
+
+
 async def _clean_paragraph(
     client: httpx.AsyncClient,
     text: str,
@@ -155,6 +191,7 @@ async def clean_text(
                 indexed.append(r)
             indexed.sort(key=lambda x: x[0])
             cleaned = [text for _, text in indexed if text is not None]
+            cleaned = _merge_split_sentences(cleaned)
             return "\n\n".join(cleaned)
 
     except httpx.ConnectError:
