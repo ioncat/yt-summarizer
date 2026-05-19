@@ -16,6 +16,23 @@ Key requirements:
 
 ---
 
+## ⚠️ Task Ordering Convention
+
+**When presenting a pending-task list (TODO, test plan, work queue, etc.), always order by blocking dependencies, not by topic or insertion order.**
+
+Mark priority and dependency explicitly:
+
+- 🔴 **BLOCKER** — must be done first; downstream tasks are invalid or noisy until it's done
+- 🟠 **High** — depends on a blocker or another high task
+- 🟡 **Medium** — independent of other tasks, can be parallel
+- 🟢 **Low** — nice to have, no downstream effects
+
+For each task list `Depends on #X` or `Blocks #Y` so the order is auditable. If a task affects defaults, prompts, configuration, or any shared state that downstream tasks consume — it goes to the top.
+
+Example: "Reset prompts to defaults" is a blocker for any quality test, because without it the test runs on stale prompts and apparent bugs may not be real bugs.
+
+---
+
 ## Project Overview
 
 **YT Summarizer** - Extract, format, and store YouTube video subtitles for quick content review.
