@@ -4,6 +4,45 @@ Design questions and known issues without a final answer yet. Decisions that can
 
 ---
 
+## Specific Ollama model hangs on every chunk — `qwen3.5:4b` (19.05.2026)
+
+### The problem
+
+Map-Reduce summarization on a 134K-char video with `qwen3.5:4b` failed every single MAP chunk (51 of 51) with `httpx.ReadTimeout` at exactly 180s each. Total time wasted: ~2.5 hours. Final summary status: `failed`.
+
+Log pattern (every ~3 minutes):
+```
+[WARNING] services.text_summarizer: _call_ollama failed: [ReadTimeout]
+[INFO]    services.text_summarizer: map_reduce: MAP N/51 (~3000 chars)
+```
+
+Eventually: `MAP chunk 1 failed — aborting`.
+
+### What rules out the easy explanations
+
+- **Not a model-name typo:** model dropdown is populated from Ollama's `/api/tags` — the name `qwen3.5:4b` was confirmed present via `ollama list`. Couldn't be wrong.
+- **Not thinking mode in general:** other reasoning models (`gemma4:e4b`, larger Qwen variants) ran fine on the same hardware. So just "thinking model = slow" is wrong.
+- **Not low timeout:** 180s should be plenty for a 4B model on a 3K-char chunk.
+
+### Plausible real causes (untested)
+
+- This particular Ollama build of `qwen3.5:4b` has a broken/incompatible chat template in its Modelfile
+- Context window for this specific model variant too small — chunk + system prompt exceeds it, Ollama hangs instead of returning an error
+- Bug in this exact q4 quant of this model
+
+### What to do when it recurs
+
+1. Test the model directly with `curl http://localhost:11434/api/chat -d '{"model":"...","messages":[{"role":"user","content":"hi"}],"stream":true}'` and time the first token
+2. Try smaller and larger chunks — narrows down to context-size issue
+3. Check Ollama's server log for the model load
+4. Switch to a different model — confirmed-working ones include `cas/aya-expanse-8b`, `gemma3:4b`, `qwen2.5-coder:14b`, `gemma4:e4b`
+
+### Defensive idea (not implemented)
+
+Before launching a long summarization, do one quick health probe (1–2K chars, 30s timeout). If that fails, abort the run with a clear error instead of letting all N chunks time out for 2+ hours. ~30 min to implement; saves a lot of wasted compute.
+
+---
+
 ## Cleanup timeout on large chapter paragraphs (17.05.2026)
 
 ### The problem
