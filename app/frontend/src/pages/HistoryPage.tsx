@@ -60,6 +60,16 @@ export default function HistoryPage() {
                       {item.char_count && <> · {item.char_count.toLocaleString()} chars</>}
                     </div>
                   </div>
+                  <div className="stage-checks">
+                    <span
+                      className={`stage-check ${item.has_cleaned ? 'stage-check--done' : 'stage-check--off'}`}
+                      title={item.has_cleaned ? 'AI Cleanup: done' : 'AI Cleanup: not run'}
+                    >✓</span>
+                    <span
+                      className={`stage-check ${item.has_summary ? 'stage-check--done' : 'stage-check--off'}`}
+                      title={item.has_summary ? 'Summary: done' : 'Summary: not run'}
+                    >✓</span>
+                  </div>
                   {type && (
                     <span className={`type-badge type-${type.key}`} title={`Auto-mode: ${type.mode}`}>
                       {type.emoji} {type.label}

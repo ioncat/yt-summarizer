@@ -170,9 +170,9 @@ All 5 epics done. Full stack running:
 
 #### Epic 25 ✅ — Chapter Heading Preservation & Rendering
 - `text_cleaner.py`: paragraphs starting with `## ` → bypass LLM entirely, pass through unchanged
-- System prompts updated in `text_cleaner.py` + `text_summarizer.py` (single-pass, MAP, REDUCE, extract): instruct model to preserve `## ` headings
-- `renderText()` in `ResultPage.tsx`: splits by `\n\n`, renders `## ` lines as `<h3 class="chapter-heading">`, rest as `<p class="text-paragraph">`
-- Styled: bold, indigo bottom border, top spacing; applied to all three tabs (Subtitles, Cleaned, Summary)
+- System prompts updated in `text_cleaner.py` + `text_summarizer.py` (single-pass, MAP, REDUCE, extract): instruct model to preserve `## ` headings and place blank lines before/after them
+- `services/text_utils.py`: `normalize_chapter_headings(text)` — post-processes all summarizer outputs to guarantee `\n\n` around every `## ` marker; splits heading from body via newline / sentence-break / 120-char word-boundary heuristic; applied in `_single_pass`, `_map_reduce` final, `extract_notes` join
+- `renderText()` moved to `src/utils/renderText.tsx` (shared by ResultPage + BenchmarkPage): pre-normalizes incoming text client-side (rescues legacy DB rows), renders `## ` blocks as `<h3 class="chapter-heading">` + `<p class="text-paragraph">`; handles `## Heading\nbody` (single newline) and inline `## ` (no newline) via same heuristic split
 
 ### 🔄 Phase 2: Summarization Quality
 
@@ -194,13 +194,16 @@ Video content type → auto-selected mode. Type is determined by `len(text)` and
 3. `len(text) ≥ MAP_REDUCE_THRESHOLD` → `summarize_text(force_map_reduce=true)` (map-reduce)
 4. Default → `summarize_text()` single-pass
 
-`MAP_REDUCE_THRESHOLD = 24_000` in `text_summarizer.py`. Type labels surfaced on the History page as a badge.
+`MAP_REDUCE_THRESHOLD = 24_000` in `text_summarizer.py`. Type labels surfaced on the History page as a neutral badge (unified style, no per-type colors).
+- History page also shows two stage checkmarks per row: ✓ AI Cleanup / ✓ Summary — grey = not run, green (`--ok`) = has content. Backend `get_history()` returns `has_cleaned` + `has_summary` booleans based on presence of `cleaned_text` / `summary_text` in DB.
 
 #### Epic 17 ✅ — Map-Reduce Summarization
 - `text_summarizer.py`: `_split_into_chunks()` (3K char chunks with overlap) → MAP per chunk → REDUCE all summaries
 - `MAP_REDUCE_THRESHOLD = 24_000` — texts above this use map-reduce
 - `force_map_reduce` flag in `app_settings` for testing
 - Live chunk progress via `_SUMMARY_PROGRESS[video_id]` dict, injected into `GET /api/result` response
+- Settings → Summarization: Map-Reduce sub-section has Step 1 (Extract) / Step 2 (Combine) as horizontal tabs (no scroll); shared model selector above tabs
+- Result page meta always shows method label next to model: "· Single Pass", "· Map-Reduce · N chunks", "· Full Extract · N chapters"; Cleaned tab shows "· AI Cleanup"
 
 #### Epic 27 ✅ — Full Extract (No-Reduce)
 - `text_summarizer.py`: `_split_by_chapter_headings()` splits text by `## ` markers; `extract_notes()` processes each section independently, no REDUCE step

@@ -254,6 +254,8 @@ async def get_history(db: AsyncSession, page: int = 1, page_size: int = 20) -> d
             "language": v.language_detected,
             "char_count": fmt.text_length if fmt else None,
             "has_chapters": bool(v.chapters),
+            "has_cleaned": bool(fmt and fmt.cleaned_text),
+            "has_summary": bool(fmt and fmt.summary_text),
             "created_at": v.created_at.isoformat(),
         })
 

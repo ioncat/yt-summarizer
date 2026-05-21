@@ -188,6 +188,16 @@ input[type="text"]:focus, select:focus { border-color: var(--accent); }
 .history-info { flex: 1; min-width: 0; }
 .history-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .history-meta { font-size: 0.82rem; color: var(--text-faint); margin-top: 0.2rem; }
+
+.stage-checks { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
+.stage-check {
+  font-size: 0.85rem;
+  cursor: default;
+  line-height: 1;
+}
+.stage-check--off  { color: var(--text-faint); opacity: 0.4; }
+.stage-check--done { color: var(--ok); }
+
 .lang-badge {
   font-size: 0.75rem;
   background: var(--surface-3);
@@ -203,12 +213,14 @@ input[type="text"]:focus, select:focus { border-color: var(--accent); }
   border-radius: 12px;
   flex-shrink: 0;
   white-space: nowrap;
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-faint);
 }
-.type-badge.type-short          { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
-.type-badge.type-long           { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
-.type-badge.type-long_structured { background: #eff6ff; color: var(--info); border-color: #bfdbfe; }
-.type-badge.type-xl             { background: var(--err-soft); color: #991b1b; border-color: #fecaca; }
+.type-badge.type-short          { }
+.type-badge.type-long           { }
+.type-badge.type-long_structured { }
+.type-badge.type-xl             { }
 
 .field-hint { font-size: 0.8rem; color: var(--text-faint); margin-top: 0.4rem; }
 
@@ -513,10 +525,6 @@ input.input-missing:focus, select.input-missing:focus { border-color: var(--acce
 [data-theme="dark"] .formatted-text .chapter-heading { color: var(--text); }
 
 /* Type badges on History — keep saturated in dark with softer backgrounds */
-[data-theme="dark"] .type-badge.type-short          { background: #14321f; color: #86efac; border-color: #15803d; }
-[data-theme="dark"] .type-badge.type-long           { background: #3a2a08; color: #fdba74; border-color: #b45309; }
-[data-theme="dark"] .type-badge.type-long_structured { background: #1a2a4a; color: #93c5fd; border-color: #1e40af; }
-[data-theme="dark"] .type-badge.type-xl             { background: #3a1818; color: #fca5a5; border-color: #b91c1c; }
 
 /* Theme toggle button */
 .theme-toggle {

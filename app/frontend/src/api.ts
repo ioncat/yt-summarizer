@@ -48,6 +48,8 @@ export interface HistoryItem {
   language: string | null
   char_count: number | null
   has_chapters?: boolean
+  has_cleaned?: boolean
+  has_summary?: boolean
   created_at: string
 }
 
