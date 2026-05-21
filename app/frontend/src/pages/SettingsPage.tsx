@@ -417,6 +417,7 @@ function StagePanel({ stage, initial, models, modelsOnline, locked, hideModel, l
 
 type TabId = 'general' | 'cleanup' | 'summarization'
 type SummSubTab = 'single_pass' | 'map_reduce'
+type MapReduceStep = 'extract' | 'combine'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'general', label: 'General' },
@@ -427,6 +428,7 @@ const TABS: { id: TabId; label: string }[] = [
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>('general')
   const [summSubTab, setSummSubTab] = useState<SummSubTab>('single_pass')
+  const [mapReduceStep, setMapReduceStep] = useState<MapReduceStep>('extract')
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null)
   const [cleanup, setCleanup] = useState<StageSettings | null>(null)
   const [summarization, setSummarization] = useState<StageSettings | null>(null)
@@ -543,22 +545,39 @@ export default function SettingsPage() {
               )}
               {summSubTab === 'map_reduce' && (
                 <>
-                  <StagePanel
-                    stage="summarization_extract"
-                    initial={summExtract}
-                    models={models}
-                    modelsOnline={modelsOnline}
-                    hideModel
-                    label="Step 1 — Extract (per chunk)"
-                  />
-                  <StagePanel
-                    stage="summarization_combine"
-                    initial={summCombine}
-                    models={models}
-                    modelsOnline={modelsOnline}
-                    hideModel
-                    label="Step 2 — Combine (all chunks)"
-                  />
+                  <div className="result-tabs" style={{ marginBottom: '1rem' }}>
+                    <button
+                      className={`result-tab ${mapReduceStep === 'extract' ? 'active' : ''}`}
+                      onClick={() => setMapReduceStep('extract')}
+                    >
+                      Step 1 — Extract (per chunk)
+                    </button>
+                    <button
+                      className={`result-tab ${mapReduceStep === 'combine' ? 'active' : ''}`}
+                      onClick={() => setMapReduceStep('combine')}
+                    >
+                      Step 2 — Combine (all chunks)
+                    </button>
+                  </div>
+
+                  {mapReduceStep === 'extract' && (
+                    <StagePanel
+                      stage="summarization_extract"
+                      initial={summExtract}
+                      models={models}
+                      modelsOnline={modelsOnline}
+                      hideModel
+                    />
+                  )}
+                  {mapReduceStep === 'combine' && (
+                    <StagePanel
+                      stage="summarization_combine"
+                      initial={summCombine}
+                      models={models}
+                      modelsOnline={modelsOnline}
+                      hideModel
+                    />
+                  )}
                 </>
               )}
             </>

@@ -515,6 +515,7 @@ export default function ResultPage() {
               <div className="meta-item">
                 Cleaned in: <span>{formatDuration(cleanupDuration)}</span>
                 {result.cleanup_model && <span className="meta-model"> · {result.cleanup_model}</span>}
+                <span className="meta-model meta-method"> · AI Cleanup</span>
                 {(() => {
                   const count = result.cleaned_text
                     ? result.cleaned_text.split('\n\n').filter(p => p.trim()).length
@@ -538,11 +539,20 @@ export default function ResultPage() {
               <div className="meta-item">
                 Summarized in: <span>{formatDuration(summaryDuration)}</span>
                 {result.summary_model && <span className="meta-model"> · {result.summary_model}</span>}
-                {result.summary_mode === 'map_reduce' && result.summary_chunks_count != null && (
-                  <span className="meta-model"> · {result.summary_chunks_count} chunks</span>
+                {result.summary_mode === 'single' && (
+                  <span className="meta-model meta-method"> · Single Pass</span>
                 )}
-                {result.summary_mode === 'full_extract' && result.summary_chunks_count != null && (
-                  <span className="meta-model"> · Full Extract · {result.summary_chunks_count} chapters</span>
+                {result.summary_mode === 'map_reduce' && (
+                  <span className="meta-model meta-method">
+                    {' · Map-Reduce'}
+                    {result.summary_chunks_count != null && ` · ${result.summary_chunks_count} chunks`}
+                  </span>
+                )}
+                {result.summary_mode === 'full_extract' && (
+                  <span className="meta-model meta-method">
+                    {' · Full Extract'}
+                    {result.summary_chunks_count != null && ` · ${result.summary_chunks_count} chapters`}
+                  </span>
                 )}
                 {(() => {
                   const inputLen = result.cleaned_text?.length ?? result.formatted_text?.length ?? null
@@ -679,7 +689,13 @@ export default function ResultPage() {
                     {chatHistory.map((msg, i) => (
                       <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
                         {msg.content || (msg.role === 'assistant' && isChatting
-                          ? <span className="chat-typing">…</span>
+                          ? (
+                            <span className="chat-typing">
+                              <span className="chat-typing-dot" />
+                              <span className="chat-typing-dot" />
+                              <span className="chat-typing-dot" />
+                            </span>
+                          )
                           : null)}
                       </div>
                     ))}
@@ -747,7 +763,7 @@ export default function ResultPage() {
             disabled={isChatting || !chatInput.trim()}
             title="Send"
           >
-            {isChatting ? '…' : '➤'}
+            {isChatting ? <span className="chat-send-spinner" /> : '➤'}
           </button>
         </div>
       </div>
