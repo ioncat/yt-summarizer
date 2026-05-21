@@ -6,6 +6,8 @@ from typing import Callable, Optional
 
 import httpx
 
+from .text_utils import normalize_chapter_headings
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -28,7 +30,9 @@ DEFAULT_SYSTEM_PROMPT = (
     "You are a helpful assistant that creates concise, accurate summaries. "
     "Preserve the key information and maintain the same language as the input. "
     "If the text contains lines starting with '## ', treat them as chapter headings — "
-    "preserve them exactly as-is in your output. Do not translate, rephrase, or remove them."
+    "preserve them exactly as-is in your output. Do not translate, rephrase, or remove them. "
+    "Always place each '## ' heading on its own line with a BLANK LINE before and after it. "
+    "Never put body text on the same line as a heading."
 )
 
 DEFAULT_USER_PROMPT_TEMPLATE = (
@@ -47,7 +51,8 @@ DEFAULT_MAP_SYSTEM_PROMPT = (
     "You are a helpful assistant that extracts key information from text sections. "
     "Preserve the key information and maintain the same language as the input. "
     "If the section starts with a line beginning with '## ', that is a chapter heading — "
-    "begin your summary with that exact heading, then write the summary below it."
+    "begin your output with that exact heading on its own line, followed by a BLANK LINE, "
+    "then the summary body. Never put body text on the same line as the heading."
 )
 
 DEFAULT_MAP_USER_PROMPT = (
@@ -68,7 +73,9 @@ DEFAULT_REDUCE_SYSTEM_PROMPT = (
     "You are a helpful assistant that synthesizes section summaries into a coherent final summary. "
     "Maintain the same language as the input. "
     "If section summaries contain lines starting with '## ', those are chapter headings — "
-    "preserve them exactly as-is in the final output."
+    "preserve them exactly as-is in the final output. "
+    "Each '## ' heading MUST be on its own line with a BLANK LINE before and after it. "
+    "Never put body text on the same line as a heading."
 )
 
 DEFAULT_REDUCE_USER_PROMPT = (
@@ -96,7 +103,9 @@ DEFAULT_EXTRACT_SYSTEM_PROMPT = (
     "Do NOT summarize or compress — restructure for clarity only. "
     "Remove only filler words, off-topic digressions, and exact repetitions. "
     "Maintain the same language as the input. "
-    "If the text starts with a '## ' heading, preserve it exactly at the top of your output."
+    "If the text starts with a '## ' heading, preserve it exactly at the top of your output "
+    "on its own line, followed by a BLANK LINE, then the body. "
+    "Never put body text on the same line as the heading."
 )
 
 DEFAULT_EXTRACT_USER_PROMPT = (
@@ -283,7 +292,8 @@ async def _single_pass(
 ) -> str | None:
     effective_system = system_prompt or DEFAULT_SYSTEM_PROMPT
     effective_user = lang_instruction + (user_prompt_template or DEFAULT_USER_PROMPT_TEMPLATE).format(text=text)
-    return await _call_ollama(client, ollama_url, model, effective_system, effective_user)
+    result = await _call_ollama(client, ollama_url, model, effective_system, effective_user)
+    return normalize_chapter_headings(result) if result else result
 
 
 async def _map_reduce(
@@ -374,6 +384,8 @@ async def _map_reduce(
         timeout=reduce_timeout,
     )
 
+    if final:
+        final = normalize_chapter_headings(final)
     return final, chunks_count
 
 
@@ -499,7 +511,8 @@ async def extract_notes(
             indexed.sort(key=lambda x: x[0])
             results = [text for _, text in indexed]
 
-            return "\n\n".join(results), "full_extract", sections_count
+            joined = "\n\n".join(results)
+            return normalize_chapter_headings(joined), "full_extract", sections_count
 
     except Exception as exc:
         logger.warning("extract_notes failed: %s", exc)
