@@ -124,7 +124,7 @@ Improve summarization quality beyond single-pass. Map-reduce or chunked approach
 
 | Epic | Description | Status |
 |------|-------------|--------|
-| Epic 17: Map-Reduce Summarization | Auto-select single-pass vs map-reduce by text length; MAP (extract per chunk) + REDUCE (combine); live chunk counter in UI; force_map_reduce toggle for testing | 🔄 In Progress (implemented, prompt tuning ongoing) |
+| Epic 17: Map-Reduce Summarization | Auto-select single-pass vs map-reduce by text length; MAP (extract per chunk) + REDUCE (combine); live chunk counter in UI; force_map_reduce toggle for testing; Settings step tabs (Step 1 Extract / Step 2 Combine); always-visible method label in Result meta | ✅ Done |
 | Epic 18: Hierarchical Map-Reduce | 3-level pipeline for texts > 50K chars: MAP → intermediate REDUCE per batch → final REDUCE. Fixes REDUCE overload on large inputs | 🔵 Planned |
 | Epic 19: Prompt Management v2 | Language-aware prompts, per-stage templates | 🔵 Planned |
 | Epic 20: Summary Quality Metrics | Show compression ratio, char count diff input/output | ✅ Done — "86% compressed" shown in Summary meta |
@@ -132,11 +132,26 @@ Improve summarization quality beyond single-pass. Map-reduce or chunked approach
 | Epic 22: Auto Language Detection | Detect original video language from yt-dlp metadata; "Auto (detect)" as default in Home page dropdown; manual override kept during testing | ✅ Done |
 | Epic 23: Chapter-Aware Formatting | Use creator-defined YouTube chapters as semantic boundaries for subtitle grouping; `## Chapter Title` headings in formatted_text; fallback to 4s gap when no chapters | ✅ Done |
 | Epic 24: Completion Notifications | Tab title changes to "✓ Done" when cleanup/summary finishes; Browser Notification when tab is hidden; permission requested lazily on first run | ✅ Done |
-| Epic 25: Chapter Heading Preservation & Rendering | `## Chapter Title` headings pass through cleanup and summarization unchanged; rendered as visual subheadings in UI across all tabs | ✅ Done |
-| [Epic 26: Benchmark](./epics/EPIC-26.md) | Side-by-side N-model comparison; same mode logic as production pipeline; DB table `benchmark_runs`; `/benchmark` page with N-column layout; synchronized scroll; HTML export | 🔵 Planned |
-| [Epic 27: Full Extract (No-Reduce)](./epics/EPIC-27.md) | Lossless processing mode for long structured content: MAP per chapter (no REDUCE); auto-selected for chapter videos ≥ 24K chars; chapter progress in UI | 🔵 Planned |
+| Epic 25: Chapter Heading Preservation & Rendering | `## Chapter Title` headings pass through cleanup and summarization unchanged; rendered as visual subheadings in UI across all tabs. Post-fix (21.05): `normalize_chapter_headings()` in `text_utils.py` fixes inline `## ` markers without `\n\n`; applied server-side (all summarizer outputs) + client-side in `renderText.tsx` for legacy DB rows | ✅ Done |
+| [Epic 26: Benchmark](./epics/EPIC-26.md) | Side-by-side N-model comparison; same mode logic as production pipeline; DB table `benchmark_runs`; `/benchmark` page + `/benchmarks` index; N-column layout; synchronized scroll; HTML export; stage selector (summary/cleanup); "📌 Original" badge for main-triggered runs; delete-run button | ✅ Done |
+| [Epic 27: Full Extract (No-Reduce)](./epics/EPIC-27.md) | Lossless processing mode for long structured content: MAP per chapter (no REDUCE); auto-selected for chapter videos ≥ 24K chars; chapter progress in UI | ✅ Done |
 | Epic 28: Processing Mode Management | Mode picker UI (auto-detect + manual override); unified mode selection across single-pass / map-reduce / full-extract / hierarchical | 🔵 Planned |
-| [Epic 29: Parallel MAP Processing](./epics/EPIC-29.md) | Parallel paragraph/chunk/section processing via asyncio.gather() + Semaphore; preserves order via index; configurable workers matching OLLAMA_NUM_PARALLEL | 🔵 Planned |
+| [Epic 29: Parallel MAP Processing](./epics/EPIC-29.md) | Parallel paragraph/chunk/section processing via asyncio.gather() + Semaphore; preserves order via index; configurable workers matching OLLAMA_NUM_PARALLEL | ✅ Done |
+
+---
+
+## UX Polish & Bug Fixes (не эпики)
+
+Небольшие улучшения и фиксы, не тянущие на отдельный эпик.
+
+| Дата | Описание |
+|------|----------|
+| 19.05.2026 | Re-extract subtitles: `POST /api/result/{video_id}/reextract` — повторное извлечение субтитров для существующего видео без удаления истории |
+| 19.05.2026 | VTT parser fix: decode HTML entities (`&#39;` → `'`) + collapse whitespace |
+| 21.05.2026 | Chat typing animation: 3-dot bounce + spinner на кнопке отправки (yt-summarizer + llm-onpage-summarizer) |
+| 21.05.2026 | History page: stage checkmarks ✓ (grey = not run, green = done) для Cleanup и Summary; type badges унифицированы в нейтральный стиль |
+| 21.05.2026 | Result meta: всегда отображает метод (Single Pass / Map-Reduce / Full Extract) рядом с моделью |
+| 21.05.2026 | Settings → Summarization → Map-Reduce: Step 1 / Step 2 разделены на горизонтальные вкладки (убран скролл) |
 
 ---
 
@@ -158,13 +173,13 @@ Whisper fallback when no subtitles are available. Language param from Phase 1 re
 |-------|-------|--------|
 | Phase 1 — MVP | 1–5 | ✅ Done |
 | Phase 1.5 — LLM Cleanup & UX | 6–16, 22–25 | ✅ Done (8 dropped) |
-| Phase 2 — Summarization Quality | 17–21, 26–29 | 🔄 In Progress (17, 20, 22–25, 27 done; 21 deferred; 26, 29 implemented on feature branches; 18, 19, 28 planned) |
+| Phase 2 — Summarization Quality | 17–21, 26–29 | 🔄 In Progress (17, 20, 22–27, 29 done; 21 deferred; 18, 19, 28 planned) |
 | Phase 3 — STT Fallback | 30–32 | 🔵 Planned |
 
 ---
 
 ## Document Control
 
-- **Version**: 1.5
-- **Last Updated**: 30.04.2026
+- **Version**: 1.6
+- **Last Updated**: 21.05.2026
 - **Status**: 🔄 Active Development
