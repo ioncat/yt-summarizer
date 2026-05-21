@@ -203,7 +203,10 @@ Video content type → auto-selected mode. Type is determined by `len(text)` and
 - `force_map_reduce` flag in `app_settings` for testing
 - Live chunk progress via `_SUMMARY_PROGRESS[video_id]` dict, injected into `GET /api/result` response
 - Settings → Summarization: Map-Reduce sub-section has Step 1 (Extract) / Step 2 (Combine) as horizontal tabs (no scroll); shared model selector above tabs
-- Result page meta always shows method label next to model: "· Single Pass", "· Map-Reduce · N chunks", "· Full Extract · N chapters"; Cleaned tab shows "· AI Cleanup"
+- Result page meta two-row layout: Row 1 = video info (Channel, Duration, Language, Characters, Saved) with `•` separators and `title` tooltips; Row 2 = stage info (timing, model, method, stats, finish timestamp) — only shown when relevant tab active. CSS: `.meta-row`, `.meta-row--stage`, `.meta-chip`, `.meta-sep`, `.meta-label`
+- Method shown in stage row: "Single Pass", "Map-Reduce · N chunks", "Full Extract · N chapters"; Cleaned tab shows "AI Cleanup"
+- `cleanup_finished_at` + `summary_finished_at` returned by `get_result()` and shown at end of stage row
+- Date format: `DD.MM.YYYY, HH:MM` (locale-independent `formatDate()` in ResultPage)
 
 #### Epic 27 ✅ — Full Extract (No-Reduce)
 - `text_summarizer.py`: `_split_by_chapter_headings()` splits text by `## ` markers; `extract_notes()` processes each section independently, no REDUCE step

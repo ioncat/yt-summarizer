@@ -152,6 +152,9 @@ Improve summarization quality beyond single-pass. Map-reduce or chunked approach
 | 21.05.2026 | History page: stage checkmarks ✓ (grey = not run, green = done) для Cleanup и Summary; type badges унифицированы в нейтральный стиль |
 | 21.05.2026 | Result meta: всегда отображает метод (Single Pass / Map-Reduce / Full Extract) рядом с моделью |
 | 21.05.2026 | Settings → Summarization → Map-Reduce: Step 1 / Step 2 разделены на горизонтальные вкладки (убран скролл) |
+| 21.05.2026 | Result meta redesign: два ряда (видео-инфо / stage-инфо), разделители `•`, hover tooltips; классы `.meta-row`, `.meta-chip`, `.meta-sep`, `.meta-label` |
+| 21.05.2026 | Result meta: `cleanup_finished_at` и `summary_finished_at` из API — timestamp последнего запуска этапа отображается в конце stage row |
+| 21.05.2026 | Date format: `DD.MM.YYYY, HH:MM` (locale-independent) вместо локализованного toLocaleString |
 
 ---
 
@@ -181,5 +184,5 @@ Whisper fallback when no subtitles are available. Language param from Phase 1 re
 ## Document Control
 
 - **Version**: 1.6
-- **Last Updated**: 21.05.2026
+- **Last Updated**: 21.05.2026 (session 2)
 - **Status**: 🔄 Active Development
