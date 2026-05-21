@@ -39,6 +39,8 @@ export interface ResultResponse {
   chapters: Array<{ start_time: number; end_time: number; title: string }> | null
   reextract_in_progress?: boolean
   created_at: string
+  cleanup_finished_at: string | null
+  summary_finished_at: string | null
 }
 
 export interface HistoryItem {

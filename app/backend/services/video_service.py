@@ -225,6 +225,8 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
         "char_count": fmt.text_length if fmt else None,
         "chapters": video.chapters,
         "created_at": video.created_at.isoformat(),
+        "cleanup_finished_at": fmt.cleanup_finished_at.isoformat() if fmt and fmt.cleanup_finished_at else None,
+        "summary_finished_at": fmt.summary_finished_at.isoformat() if fmt and fmt.summary_finished_at else None,
     }
 
 

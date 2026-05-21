@@ -22,10 +22,12 @@ function formatDuration(seconds: number | null): string {
 
 function formatDate(iso: string): string {
   const d = new Date(iso)
-  return d.toLocaleString(undefined, {
-    year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const yyyy = d.getFullYear()
+  const hh = String(d.getHours()).padStart(2, '0')
+  const min = String(d.getMinutes()).padStart(2, '0')
+  return `${dd}.${mm}.${yyyy}, ${hh}:${min}`
 }
 
 export default function ResultPage() {
@@ -490,7 +492,7 @@ export default function ResultPage() {
           <div className="meta-row">
             {result.author && <>
               <span className="meta-chip" title="YouTube channel">
-                <span className="meta-label">Channel</span> {result.author}
+                <span className="meta-label">Channel:</span> {result.author}
               </span>
               <span className="meta-sep">•</span>
             </>}
@@ -520,7 +522,7 @@ export default function ResultPage() {
             })()}
             <span className="meta-sep">•</span>
             <span className="meta-chip" title="Date added to history">
-              <span className="meta-label">Saved</span> {formatDate(result.created_at)}
+              <span className="meta-label">Saved:</span> {formatDate(result.created_at)}
             </span>
           </div>
 
@@ -541,7 +543,7 @@ export default function ResultPage() {
             ) : cleanupDuration != null ? (
               <div className="meta-row meta-row--stage">
                 <span className="meta-chip" title="Time spent on AI cleanup">
-                  <span className="meta-label">Cleaned in</span> {formatDuration(cleanupDuration)}
+                  <span className="meta-label">Cleaned in:</span> {formatDuration(cleanupDuration)}
                 </span>
                 {result.cleanup_model && <>
                   <span className="meta-sep">•</span>
@@ -558,6 +560,10 @@ export default function ResultPage() {
                     <span className="meta-chip" title="Number of paragraphs processed">{count} paragraphs</span>
                   </> : null
                 })()}
+                {result.cleanup_finished_at && <>
+                  <span className="meta-sep">•</span>
+                  <span className="meta-chip" title="When AI cleanup finished">{formatDate(result.cleanup_finished_at)}</span>
+                </>}
               </div>
             ) : null
           )}
@@ -613,6 +619,10 @@ export default function ResultPage() {
                     <span className="meta-chip" title="How much the text was compressed vs input">{pct}% compressed</span>
                   </>
                 })()}
+                {result.summary_finished_at && <>
+                  <span className="meta-sep">•</span>
+                  <span className="meta-chip" title="When summarization finished">{formatDate(result.summary_finished_at)}</span>
+                </>}
               </div>
             ) : null
           )}
