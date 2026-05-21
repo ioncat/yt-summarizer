@@ -486,85 +486,136 @@ export default function ResultPage() {
       <div className="card">
         <h2>{result.title ?? 'Untitled'}</h2>
         <div className="meta">
-          {result.author && <div className="meta-item">Channel: <span>{result.author}</span></div>}
-          <div className="meta-item">Duration: <span>{formatDuration(result.duration)}</span></div>
-          {result.language && <div className="meta-item">Language: <span>{result.language.toUpperCase()}</span></div>}
-          {(() => {
-            const subtitlesCount = result.char_count ?? result.formatted_text?.length ?? null
-            const cleanedCount = result.cleaned_text?.length ?? null
-            const summaryCount = result.summary_text?.length ?? null
-            const displayCount =
-              activeTab === 'summary' ? summaryCount :
-              activeTab === 'cleaned' ? cleanedCount :
-              subtitlesCount
-            return (subtitlesCount != null || cleanedCount != null || summaryCount != null) ? (
-              <div className="meta-item">Characters: <span>
-                {displayCount != null ? displayCount.toLocaleString() : '—'}
-              </span></div>
-            ) : null
-          })()}
+          {/* ── Row 1: video info ── */}
+          <div className="meta-row">
+            {result.author && <>
+              <span className="meta-chip" title="YouTube channel">
+                <span className="meta-label">Channel</span> {result.author}
+              </span>
+              <span className="meta-sep">•</span>
+            </>}
+            <span className="meta-chip" title="Video duration">
+              <span className="meta-label">Duration</span> {formatDuration(result.duration)}
+            </span>
+            {result.language && <>
+              <span className="meta-sep">•</span>
+              <span className="meta-chip" title="Detected language">
+                <span className="meta-label">Language</span> {result.language.toUpperCase()}
+              </span>
+            </>}
+            {(() => {
+              const subtitlesCount = result.char_count ?? result.formatted_text?.length ?? null
+              const cleanedCount = result.cleaned_text?.length ?? null
+              const summaryCount = result.summary_text?.length ?? null
+              const displayCount =
+                activeTab === 'summary' ? summaryCount :
+                activeTab === 'cleaned' ? cleanedCount :
+                subtitlesCount
+              return displayCount != null ? <>
+                <span className="meta-sep">•</span>
+                <span className="meta-chip" title="Character count for current tab">
+                  <span className="meta-label">Characters</span> {displayCount.toLocaleString()}
+                </span>
+              </> : null
+            })()}
+            <span className="meta-sep">•</span>
+            <span className="meta-chip" title="Date added to history">
+              <span className="meta-label">Saved</span> {formatDate(result.created_at)}
+            </span>
+          </div>
+
+          {/* ── Divider + Row 2: stage info (tab-dependent) ── */}
           {activeTab === 'cleaned' && (
             result.cleanup_status === 'processing' && cleanupElapsedSeconds != null ? (
-              <div className="meta-item">
-                Cleaning: <span>{formatDuration(cleanupElapsedSeconds)}</span>
-                {result.cleanup_paragraphs_done != null && result.cleanup_paragraphs_total != null && (
-                  <span className="meta-model"> · paragraph {result.cleanup_paragraphs_done} / {result.cleanup_paragraphs_total}</span>
-                )}
+              <div className="meta-row meta-row--stage">
+                <span className="meta-chip" title="AI cleanup in progress">
+                  <span className="meta-label">Cleaning</span> {formatDuration(cleanupElapsedSeconds)}
+                </span>
+                {result.cleanup_paragraphs_done != null && result.cleanup_paragraphs_total != null && <>
+                  <span className="meta-sep">•</span>
+                  <span className="meta-chip" title="Paragraphs processed so far">
+                    paragraph {result.cleanup_paragraphs_done} / {result.cleanup_paragraphs_total}
+                  </span>
+                </>}
               </div>
             ) : cleanupDuration != null ? (
-              <div className="meta-item">
-                Cleaned in: <span>{formatDuration(cleanupDuration)}</span>
-                {result.cleanup_model && <span className="meta-model"> · {result.cleanup_model}</span>}
-                <span className="meta-model meta-method"> · AI Cleanup</span>
+              <div className="meta-row meta-row--stage">
+                <span className="meta-chip" title="Time spent on AI cleanup">
+                  <span className="meta-label">Cleaned in</span> {formatDuration(cleanupDuration)}
+                </span>
+                {result.cleanup_model && <>
+                  <span className="meta-sep">•</span>
+                  <span className="meta-chip" title="Model used for cleanup">{result.cleanup_model}</span>
+                </>}
+                <span className="meta-sep">•</span>
+                <span className="meta-chip meta-method" title="Processing method">AI Cleanup</span>
                 {(() => {
                   const count = result.cleaned_text
                     ? result.cleaned_text.split('\n\n').filter(p => p.trim()).length
                     : null
-                  return count != null ? (
-                    <span className="meta-model"> · {count} paragraphs</span>
-                  ) : null
+                  return count != null ? <>
+                    <span className="meta-sep">•</span>
+                    <span className="meta-chip" title="Number of paragraphs processed">{count} paragraphs</span>
+                  </> : null
                 })()}
               </div>
             ) : null
           )}
           {activeTab === 'summary' && (
             result.summary_status === 'processing' && summaryElapsedSeconds != null ? (
-              <div className="meta-item">
-                Summarizing: <span>{formatDuration(summaryElapsedSeconds)}</span>
-                {result.summary_chunks_done != null && result.summary_chunks_total != null && (
-                  <span className="meta-model"> · {result.chapters ? 'chapter' : 'chunk'} {result.summary_chunks_done} / {result.summary_chunks_total}</span>
-                )}
+              <div className="meta-row meta-row--stage">
+                <span className="meta-chip" title="Summarization in progress">
+                  <span className="meta-label">Summarizing</span> {formatDuration(summaryElapsedSeconds)}
+                </span>
+                {result.summary_chunks_done != null && result.summary_chunks_total != null && <>
+                  <span className="meta-sep">•</span>
+                  <span className="meta-chip" title="Chunks/chapters processed so far">
+                    {result.chapters ? 'chapter' : 'chunk'} {result.summary_chunks_done} / {result.summary_chunks_total}
+                  </span>
+                </>}
               </div>
             ) : summaryDuration != null ? (
-              <div className="meta-item">
-                Summarized in: <span>{formatDuration(summaryDuration)}</span>
-                {result.summary_model && <span className="meta-model"> · {result.summary_model}</span>}
-                {result.summary_mode === 'single' && (
-                  <span className="meta-model meta-method"> · Single Pass</span>
-                )}
-                {result.summary_mode === 'map_reduce' && (
-                  <span className="meta-model meta-method">
-                    {' · Map-Reduce'}
-                    {result.summary_chunks_count != null && ` · ${result.summary_chunks_count} chunks`}
-                  </span>
-                )}
-                {result.summary_mode === 'full_extract' && (
-                  <span className="meta-model meta-method">
-                    {' · Full Extract'}
-                    {result.summary_chunks_count != null && ` · ${result.summary_chunks_count} chapters`}
-                  </span>
-                )}
+              <div className="meta-row meta-row--stage">
+                <span className="meta-chip" title="Time spent on summarization">
+                  <span className="meta-label">Summarized in</span> {formatDuration(summaryDuration)}
+                </span>
+                {result.summary_model && <>
+                  <span className="meta-sep">•</span>
+                  <span className="meta-chip" title="Model used for summarization">{result.summary_model}</span>
+                </>}
+                {result.summary_mode === 'single' && <>
+                  <span className="meta-sep">•</span>
+                  <span className="meta-chip meta-method" title="Processing method">Single Pass</span>
+                </>}
+                {result.summary_mode === 'map_reduce' && <>
+                  <span className="meta-sep">•</span>
+                  <span className="meta-chip meta-method" title="Processing method: text split into chunks, each summarized, then combined">Map-Reduce</span>
+                  {result.summary_chunks_count != null && <>
+                    <span className="meta-sep">•</span>
+                    <span className="meta-chip" title="Number of chunks processed">{result.summary_chunks_count} chunks</span>
+                  </>}
+                </>}
+                {result.summary_mode === 'full_extract' && <>
+                  <span className="meta-sep">•</span>
+                  <span className="meta-chip meta-method" title="Processing method: each chapter extracted independently, no compression">Full Extract</span>
+                  {result.summary_chunks_count != null && <>
+                    <span className="meta-sep">•</span>
+                    <span className="meta-chip" title="Number of chapters processed">{result.summary_chunks_count} chapters</span>
+                  </>}
+                </>}
                 {(() => {
                   const inputLen = result.cleaned_text?.length ?? result.formatted_text?.length ?? null
                   const outputLen = result.summary_text?.length ?? null
                   if (!inputLen || !outputLen || outputLen >= inputLen) return null
                   const pct = Math.round((1 - outputLen / inputLen) * 100)
-                  return <span className="meta-model"> · {pct}% compressed</span>
+                  return <>
+                    <span className="meta-sep">•</span>
+                    <span className="meta-chip" title="How much the text was compressed vs input">{pct}% compressed</span>
+                  </>
                 })()}
               </div>
             ) : null
           )}
-          <div className="meta-item">Saved: <span>{formatDate(result.created_at)}</span></div>
         </div>
 
         <div className="actions">
