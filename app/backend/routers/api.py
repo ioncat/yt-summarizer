@@ -38,6 +38,8 @@ from services.video_service import (
     set_summary_processing,
     finish_summary,
     update_task_failed,
+    save_chat_history,
+    clear_chat_history,
 )
 from services.text_summarizer import summarize_text, extract_notes, MAP_REDUCE_THRESHOLD
 
@@ -593,6 +595,29 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     model: str
+
+
+class ChatHistoryRequest(BaseModel):
+    messages: list[dict]
+
+
+@router.put("/result/{video_id}/chat")
+async def save_chat(
+    video_id: str,
+    body: ChatHistoryRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    await save_chat_history(db, video_id, body.messages)
+    return {"status": "ok"}
+
+
+@router.delete("/result/{video_id}/chat")
+async def clear_chat(
+    video_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    await clear_chat_history(db, video_id)
+    return {"status": "ok"}
 
 
 @router.post("/chat")

@@ -5,6 +5,7 @@ import {
   startCleanup, cancelCleanup,
   startSummary, cancelSummary,
   reextractSubtitles,
+  saveChatHistory, clearChatHistory,
   getSettings, getModels, saveSettings,
   ResultResponse,
 } from '../api'
@@ -57,6 +58,7 @@ export default function ResultPage() {
   const ollamaMessagesRef = useRef<Array<{ role: string; content: string }>>([])
   const chatEndRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
+  const chatHistoryLoadedRef = useRef(false)
   const CHAT_WARN_CHARS = 100_000
 
   // ── Notifications ──────────────────────────────────────────────────────────
@@ -139,6 +141,14 @@ export default function ResultPage() {
         prevCleanupStatusRef.current = data.cleanup_status
         prevSummaryStatusRef.current = data.summary_status
         setResult(data)
+
+        // Load chat history once on first successful fetch
+        if (!chatHistoryLoadedRef.current) {
+          chatHistoryLoadedRef.current = true
+          if (data.chat_history && data.chat_history.length > 0) {
+            setChatHistory(data.chat_history as Array<{ role: 'user' | 'assistant'; content: string }>)
+          }
+        }
 
         // Tab auto-switching on initial load
         if (switchTab) {
@@ -323,6 +333,15 @@ export default function ResultPage() {
       }
 
       ollamaMessagesRef.current = [...ollamaMessagesRef.current, { role: 'assistant', content: fullResponse }]
+      // Persist after successful exchange
+      if (fullResponse && videoId) {
+        const savedHistory = [
+          ...chatHistory,
+          { role: 'user' as const, content: question },
+          { role: 'assistant' as const, content: fullResponse },
+        ]
+        saveChatHistory(videoId, savedHistory).catch(() => {})
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       setChatHistory(prev => {
@@ -334,6 +353,19 @@ export default function ResultPage() {
       setIsChatting(false)
       chatInputRef.current?.focus()
     }
+  }
+
+  async function deleteChatMessage(index: number) {
+    const updated = chatHistory.filter((_, i) => i !== index)
+    setChatHistory(updated)
+    if (videoId) saveChatHistory(videoId, updated).catch(() => {})
+  }
+
+  async function handleClearChat() {
+    if (!window.confirm('Clear entire chat history? This cannot be undone.')) return
+    setChatHistory([])
+    ollamaMessagesRef.current = []
+    if (videoId) clearChatHistory(videoId).catch(() => {})
   }
 
   function copyChat() {
@@ -792,6 +824,12 @@ export default function ResultPage() {
                         }}
                         title="Copy entire chat"
                       >⎘ Copy chat</button>
+                      <button
+                        className="btn-copy-chat"
+                        onClick={handleClearChat}
+                        title="Delete entire chat history"
+                        style={{ marginLeft: '0.5rem', color: 'var(--err)' }}
+                      >🗑 Clear chat</button>
                     </div>
                     <div className="chat-thread">
                       {chatHistory.map((msg, i) => (
@@ -805,13 +843,18 @@ export default function ResultPage() {
                               </span>
                             )
                             : null)}
-                          {msg.content && (
+                          {msg.content && (<>
                             <button
                               className="chat-msg-copy"
                               onClick={() => navigator.clipboard.writeText(msg.content)}
                               title="Copy message"
                             >⎘</button>
-                          )}
+                            <button
+                              className="chat-msg-copy chat-msg-delete"
+                              onClick={() => deleteChatMessage(i)}
+                              title="Delete message"
+                            >🗑</button>
+                          </>)}
                         </div>
                       ))}
                       <div ref={chatEndRef} />

@@ -41,6 +41,7 @@ export interface ResultResponse {
   created_at: string
   cleanup_finished_at: string | null
   summary_finished_at: string | null
+  chat_history: Array<{ role: string; content: string }> | null
 }
 
 export interface HistoryItem {
@@ -119,6 +120,21 @@ export async function startCleanup(videoId: string): Promise<void> {
     const body = await res.json().catch(() => ({}))
     throw new Error(body.detail || 'Failed to start cleanup')
   }
+}
+
+export async function saveChatHistory(
+  videoId: string,
+  messages: Array<{ role: string; content: string }>
+): Promise<void> {
+  await fetch(`${BASE}/result/${videoId}/chat`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages }),
+  })
+}
+
+export async function clearChatHistory(videoId: string): Promise<void> {
+  await fetch(`${BASE}/result/${videoId}/chat`, { method: 'DELETE' })
 }
 
 export async function reextractSubtitles(videoId: string, language: string = 'auto'): Promise<void> {

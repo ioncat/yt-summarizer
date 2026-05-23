@@ -227,6 +227,7 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
         "created_at": video.created_at.isoformat(),
         "cleanup_finished_at": fmt.cleanup_finished_at.isoformat() if fmt and fmt.cleanup_finished_at else None,
         "summary_finished_at": fmt.summary_finished_at.isoformat() if fmt and fmt.summary_finished_at else None,
+        "chat_history": fmt.chat_history if fmt else None,
     }
 
 
@@ -744,3 +745,25 @@ async def get_app_setting(db: AsyncSession, key: str) -> str | None:
     stmt = select(AppSetting).where(AppSetting.key == key)
     row = (await db.execute(stmt)).scalar_one_or_none()
     return row.value if row else None
+
+
+async def save_chat_history(db: AsyncSession, video_id: str, messages: list) -> None:
+    """Persist full chat history for a video (overwrites previous)."""
+    fmt_id = await _get_fmt_id(db, video_id)
+    if not fmt_id:
+        return
+    await db.execute(text(
+        "UPDATE subtitles_formatted SET chat_history = :history WHERE id = :id"
+    ), {"history": json.dumps(messages, ensure_ascii=False), "id": fmt_id})
+    await db.commit()
+
+
+async def clear_chat_history(db: AsyncSession, video_id: str) -> None:
+    """Delete all chat messages for a video."""
+    fmt_id = await _get_fmt_id(db, video_id)
+    if not fmt_id:
+        return
+    await db.execute(text(
+        "UPDATE subtitles_formatted SET chat_history = NULL WHERE id = :id"
+    ), {"id": fmt_id})
+    await db.commit()

@@ -75,6 +75,7 @@ class SubtitleFormatted(Base):
     summary_mode: Mapped[str | None] = mapped_column(String(20))   # single | map_reduce
     summary_chunks_count: Mapped[int | None] = mapped_column(Integer)
     text_length: Mapped[int | None] = mapped_column(Integer)
+    chat_history: Mapped[list | None] = mapped_column(JSON)  # [{role, content}, ...]
     processing_status: Mapped[str | None] = mapped_column(String)  # success | error | pending
     processing_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
