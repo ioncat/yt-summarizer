@@ -93,6 +93,49 @@ def _run_ytdlp(args: list[str], cookies_path: str | None, ytdlp_path: str, timeo
     return result.stdout, result.stderr, result.returncode
 
 
+def _vtt_ts_to_seconds(ts: str) -> int:
+    """Convert VTT timestamp 'HH:MM:SS.mmm' to integer seconds."""
+    parts = ts.split(":")
+    h, m, s = int(parts[0]), int(parts[1]), float(parts[2])
+    return int(h * 3600 + m * 60 + s)
+
+
+def _parse_vtt_chapters(vtt_content: str) -> list[dict] | None:
+    """Extract chapter markers from VTT NOTE blocks.
+
+    YouTube auto-captions embed chapter boundaries as:
+
+        NOTE
+        00:00:00.000 --> 00:05:30.000 Chapter Title In Video Language
+
+    These reflect the video's actual language (unlike info["chapters"] from
+    yt-dlp JSON which may be in English for auto-generated chapters).
+    Returns a list of chapter dicts, or None if no chapter NOTEs found.
+    """
+    chapters: list[dict] = []
+    lines = vtt_content.splitlines()
+    i = 0
+    chapter_re = re.compile(
+        r'^(\d{2}:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3})\s+(.+)$'
+    )
+    while i < len(lines):
+        if lines[i].strip() == "NOTE" and i + 1 < len(lines):
+            next_line = lines[i + 1].strip()
+            m = chapter_re.match(next_line)
+            if m:
+                start_str, end_str, title = m.groups()
+                title = title.strip()
+                # Skip VTT metadata NOTEs (e.g. "align:start position:0%")
+                if title and not title.startswith("align:") and not title.startswith("position:"):
+                    chapters.append({
+                        "start_time": _vtt_ts_to_seconds(start_str),
+                        "end_time": _vtt_ts_to_seconds(end_str),
+                        "title": title,
+                    })
+        i += 1
+    return chapters if chapters else None
+
+
 def _parse_vtt_to_entries(vtt_content: str) -> list[SubtitleEntry]:
     raw: list[SubtitleEntry] = []
     seen_texts: set[str] = set()
@@ -339,6 +382,14 @@ def extract_subtitles(
                 )
 
             entries = _parse_vtt_to_entries(vtt_content)
+
+            # Override JSON chapters with VTT NOTE chapters when available.
+            # VTT NOTE blocks embed chapter titles from the subtitle stream
+            # which reflects the video's actual language, whereas info["chapters"]
+            # from yt-dlp JSON can be English for YouTube auto-generated chapters.
+            vtt_chapters = _parse_vtt_chapters(vtt_content)
+            if vtt_chapters:
+                metadata.chapters = vtt_chapters
 
             return ExtractionResult(
                 success=True,

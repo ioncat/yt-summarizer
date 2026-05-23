@@ -39,7 +39,12 @@ async def generate_mindmap(
 
     sys_prompt = (system_prompt or DEFAULT_SYSTEM_PROMPT).replace("{language}", language)
     user_tmpl = user_prompt_template or DEFAULT_USER_TEMPLATE
-    user_msg = user_tmpl.replace("{text}", text)
+    # Strip ## chapter headings — they may be in a different language than the body
+    # and cause the LLM to switch output language
+    import re
+    clean_text = re.sub(r'^## .+$', '', text, flags=re.MULTILINE).strip()
+    clean_text = re.sub(r'\n{3,}', '\n\n', clean_text)
+    user_msg = user_tmpl.replace("{text}", clean_text)
 
     payload = {
         "model": model,
