@@ -705,8 +705,6 @@ export default function ResultPage() {
             </>}
           </div>
 
-          <hr className="section-divider" />
-
           {/* ── Row 2 ── */}
           <div className="actions-row">
             {activeTab === 'subtitles' && <>
