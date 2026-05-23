@@ -31,11 +31,19 @@
 - **Центральная колонка**: транскрипт с таймстемпами, главы (Chapter headings, напр. "Introduction"), поиск по транскрипту, Copy Transcript (главная CTA), Download, Language badge, Word Count + Character count, Filter Profanity toggle, Autoscroll toggle
 - **Правая колонка — Insights**: AI-summary с буллетами, Topics tags (fitness, bodybuilding, nutrition, science), Actions panel
 
-**Actions (правая колонка)**:
-- 💬 Chat with the transcript (free Beta)
-- Key Quotes
-- Q&A
-- Flash Cards
+**Actions (правая колонка)** — полный список (8 штук, 2-колоночная сетка):
+- 💬 Chat with the transcript (free Beta) — текстовый инпут прямо в панели
+- ✦ Summarize Transcript
+- 🧠 Mindmap
+- Key Quotes | Study Guide
+- Q&A | Quiz
+- Flash Cards | Highlights
+
+**Левый sidebar** (навигация аккаунта):
+- YouTube (история?)
+- Channels
+- Extract (2 пункта)
+- API
 
 **Pricing model**:
 - Credit-based: 25 бесплатных кредитов, сброс каждые 9 дней
@@ -55,6 +63,10 @@
 | Key Quotes | ✅ | ✗ |
 | Q&A | ✅ | ✗ частично через Chat |
 | Flash Cards | ✅ | ✗ |
+| Mindmap | ✅ | ✗ |
+| Study Guide | ✅ | ✗ |
+| Quiz | ✅ | ✗ |
+| Highlights | ✅ | ✗ |
 | Filter Profanity | ✅ | ✗ |
 | API | ✅ | ✗ |
 | Bulk processing | ✅ | ✗ |
