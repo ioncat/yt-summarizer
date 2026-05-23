@@ -200,7 +200,7 @@ p{margin:0 0 12px}
       }).reverse()
   })()
 
-  const hasProcessing = runs.some(r => r.status === 'processing')
+  // runs.some(r => r.status === 'processing') — reserved for future auto-refresh
 
   return (
     <div className="benchmark-page">

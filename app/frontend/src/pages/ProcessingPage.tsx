@@ -141,7 +141,7 @@ export default function ProcessingPage() {
                     <span className="stage-icon">{stage === 'cleaning' ? <span className="tab-spinner" /> : stage === 'extracting' ? '②' : '✓'}</span>
                     <span>Cleaning with AI</span>
                   </div>
-                  <div className={`pipeline-stage ${stage === 'summarizing' ? 'active' : stage !== 'summarizing' ? 'pending' : 'done'}`}>
+                  <div className={`pipeline-stage ${stage === 'summarizing' ? 'active' : 'pending'}`}>
                     <span className="stage-icon">{stage === 'summarizing' ? <span className="tab-spinner" /> : '③'}</span>
                     <span>Summarizing</span>
                   </div>

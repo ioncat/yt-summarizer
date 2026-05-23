@@ -46,7 +46,7 @@ function splitHeadingBody(section: string): { heading: string; body: string } {
 
 export function renderText(text: string) {
   // Normalize: ensure '\n\n' before every '## ' (skip if at very start).
-  const normalized = text.replace(/(?:^|[ \t]*\n?)##\s+/g, (m, offset) =>
+  const normalized = text.replace(/(?:^|[ \t]*\n?)##\s+/g, (_m, offset) =>
     offset === 0 ? '## ' : '\n\n## '
   )
 

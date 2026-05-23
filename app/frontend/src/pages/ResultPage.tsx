@@ -905,12 +905,11 @@ export default function ResultPage() {
                 : 'No cleaned version yet. Click "✦ Clean with AI" above to start.'}
           </div>
         ) : (
-          {displayText
+          displayText
             ? markdownEnabled
               ? <MarkdownContent text={displayText} />
               : <div className="formatted-text">{renderText(displayText)}</div>
             : null
-          }
         )}
       </div>
     </div>
