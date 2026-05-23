@@ -42,6 +42,8 @@ export interface ResultResponse {
   cleanup_finished_at: string | null
   summary_finished_at: string | null
   chat_history: Array<{ role: string; content: string }> | null
+  mindmap_text: string | null
+  mindmap_status: 'processing' | 'done' | 'failed' | null
 }
 
 export interface HistoryItem {
@@ -112,6 +114,18 @@ export async function startSummary(videoId: string): Promise<void> {
 
 export async function cancelSummary(videoId: string): Promise<void> {
   await fetch(`${BASE}/result/${videoId}/summary`, { method: 'DELETE' })
+}
+
+export async function startMindmap(videoId: string): Promise<void> {
+  const res = await fetch(`${BASE}/result/${videoId}/mindmap`, { method: 'POST' })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || 'Failed to start mindmap generation')
+  }
+}
+
+export async function cancelMindmap(videoId: string): Promise<void> {
+  await fetch(`${BASE}/result/${videoId}/mindmap`, { method: 'DELETE' })
 }
 
 export async function startCleanup(videoId: string): Promise<void> {

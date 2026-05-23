@@ -15,16 +15,16 @@ export default function MindmapView({ text, title }: Props) {
 
   useEffect(() => {
     if (!svgRef.current) return
-
     const { root } = transformer.transform(text)
-
     if (mmRef.current) {
       mmRef.current.setData(root).then(() => mmRef.current?.fit())
     } else {
       const mm = Markmap.create(svgRef.current, {
         embedGlobalCSS: true,
-        fitRatio: 0.95,
+        fitRatio: 0.9,
         duration: 300,
+        maxWidth: 360,
+        initialExpandLevel: 2,
       })
       mmRef.current = mm
       mm.setData(root).then(() => mm.fit())
@@ -32,29 +32,21 @@ export default function MindmapView({ text, title }: Props) {
   }, [text])
 
   useEffect(() => {
-    return () => {
-      mmRef.current?.destroy()
-      mmRef.current = null
-    }
+    return () => { mmRef.current?.destroy(); mmRef.current = null }
   }, [])
 
   function exportSvg() {
     const svg = svgRef.current
     if (!svg) return
-
-    // Clone so we can set explicit dimensions without affecting the live view
     const clone = svg.cloneNode(true) as SVGSVGElement
     const { width, height } = svg.getBoundingClientRect()
     clone.setAttribute('width', String(Math.round(width)))
     clone.setAttribute('height', String(Math.round(height)))
-
-    // Embed a white background rect so the export isn't transparent
     const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
     bg.setAttribute('width', '100%')
     bg.setAttribute('height', '100%')
-    bg.setAttribute('fill', '#1a1d23')   // matches --bg dark theme
+    bg.setAttribute('fill', '#1a1d23')
     clone.insertBefore(bg, clone.firstChild)
-
     const blob = new Blob(
       ['<?xml version="1.0" encoding="UTF-8"?>\n' + clone.outerHTML],
       { type: 'image/svg+xml' }
@@ -74,7 +66,7 @@ export default function MindmapView({ text, title }: Props) {
         <button className="mindmap-export-btn" onClick={exportSvg} title="Download mindmap as SVG">
           ↓ Export SVG
         </button>
-        <button className="mindmap-export-btn" onClick={() => mmRef.current?.fit()} title="Reset zoom and fit to view">
+        <button className="mindmap-export-btn" onClick={() => mmRef.current?.fit()} title="Reset zoom">
           ⊡ Fit
         </button>
       </div>

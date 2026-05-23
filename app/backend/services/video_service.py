@@ -231,6 +231,8 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
             json.loads(fmt.chat_history) if fmt and isinstance(fmt.chat_history, str)
             else fmt.chat_history if fmt else None
         ),
+        "mindmap_text": fmt.mindmap_text if fmt else None,
+        "mindmap_status": fmt.mindmap_status if fmt else None,
     }
 
 
@@ -598,7 +600,9 @@ async def replace_subtitles_after_reextract(
                     summary_finished_at = NULL,
                     summary_model = NULL,
                     summary_mode = NULL,
-                    summary_chunks_count = NULL
+                    summary_chunks_count = NULL,
+                    mindmap_text = NULL,
+                    mindmap_status = NULL
                 WHERE id = :id
             """),
             {
@@ -619,6 +623,47 @@ async def replace_subtitles_after_reextract(
             processing_status="success",
         ))
 
+    await db.commit()
+
+
+async def start_mindmap_generation(db: AsyncSession, video_id: str) -> None:
+    """Mark mindmap as processing."""
+    fmt_id = await _get_fmt_id(db, video_id)
+    if not fmt_id:
+        return
+    await db.execute(
+        text("UPDATE subtitles_formatted SET mindmap_status = 'processing' WHERE id = :id"),
+        {"id": fmt_id},
+    )
+    await db.commit()
+
+
+async def finish_mindmap(db: AsyncSession, video_id: str, mindmap_text: str | None) -> None:
+    """Save mindmap result."""
+    fmt_id = await _get_fmt_id(db, video_id)
+    if not fmt_id:
+        return
+    status = "done" if mindmap_text else "failed"
+    await db.execute(
+        text("""
+            UPDATE subtitles_formatted
+            SET mindmap_status = :status, mindmap_text = :mindmap
+            WHERE id = :id
+        """),
+        {"status": status, "mindmap": mindmap_text, "id": fmt_id},
+    )
+    await db.commit()
+
+
+async def reset_mindmap_status(db: AsyncSession, video_id: str) -> None:
+    """Reset mindmap status to null on cancel. Preserves mindmap_text."""
+    fmt_id = await _get_fmt_id(db, video_id)
+    if not fmt_id:
+        return
+    await db.execute(
+        text("UPDATE subtitles_formatted SET mindmap_status = NULL WHERE id = :id"),
+        {"id": fmt_id},
+    )
     await db.commit()
 
 

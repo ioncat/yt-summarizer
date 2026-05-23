@@ -40,6 +40,8 @@ async def _migrate_db() -> None:
         ("videos", "chapters", "ALTER TABLE videos ADD COLUMN chapters TEXT"),
         ("benchmark_runs", "triggered_by", "ALTER TABLE benchmark_runs ADD COLUMN triggered_by TEXT DEFAULT 'benchmark'"),
         ("subtitles_formatted", "chat_history", "ALTER TABLE subtitles_formatted ADD COLUMN chat_history TEXT"),
+        ("subtitles_formatted", "mindmap_text", "ALTER TABLE subtitles_formatted ADD COLUMN mindmap_text TEXT"),
+        ("subtitles_formatted", "mindmap_status", "ALTER TABLE subtitles_formatted ADD COLUMN mindmap_status TEXT"),
     ]
     async with engine.begin() as conn:
         for table, column, sql in migrations:

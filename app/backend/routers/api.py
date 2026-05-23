@@ -40,12 +40,17 @@ from services.video_service import (
     update_task_failed,
     save_chat_history,
     clear_chat_history,
+    start_mindmap_generation,
+    finish_mindmap,
+    reset_mindmap_status,
 )
 from services.text_summarizer import summarize_text, extract_notes, MAP_REDUCE_THRESHOLD
+from services.text_mindmapper import generate_mindmap
 
 # In-memory cancel flags — cleared when cleanup/summary finishes or is cancelled
 _CANCEL_SET: set[str] = set()
 _SUMMARY_CANCEL_SET: set[str] = set()
+_MINDMAP_CANCEL_SET: set[str] = set()
 
 # In-memory progress: {video_id: {"done": int, "total": int}}
 _CLEANUP_PROGRESS: dict[str, dict] = {}
@@ -399,6 +404,74 @@ async def trigger_summary(
 async def cancel_summary(video_id: str):
     """Signal a running summarization to stop."""
     _SUMMARY_CANCEL_SET.add(video_id)
+    return {"status": "cancelling"}
+
+
+# ---------------------------------------------------------------------------
+# Mindmap endpoints
+# ---------------------------------------------------------------------------
+
+async def _run_mindmap(video_id: str) -> None:
+    """Background task: generate compact mindmap markdown via LLM."""
+    from models.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        result = await get_result(db, video_id)
+        if not result:
+            return
+
+        text = result.get("summary_text") or result.get("cleaned_text") or result.get("formatted_text")
+        if not text:
+            await finish_mindmap(db, video_id, None)
+            return
+
+        stage = await get_stage_settings(db, "summarization")
+        ollama_url = await get_app_setting(db, "ollama_url")
+        model = stage.model if stage else None
+
+        if not ollama_url or not model:
+            await finish_mindmap(db, video_id, None)
+            return
+
+        mindmap_md = await generate_mindmap(
+            text=text,
+            ollama_url=ollama_url,
+            model=model,
+            is_cancelled=lambda: video_id in _MINDMAP_CANCEL_SET,
+        )
+
+        if video_id in _MINDMAP_CANCEL_SET:
+            _MINDMAP_CANCEL_SET.discard(video_id)
+            await reset_mindmap_status(db, video_id)
+            return
+
+        await finish_mindmap(db, video_id, mindmap_md)
+
+
+@router.post("/result/{video_id}/mindmap")
+async def trigger_mindmap(
+    video_id: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger LLM mindmap generation. If mindmap_text already exists, returns it immediately."""
+    result = await get_result(db, video_id)
+    if not result:
+        raise HTTPException(404, "Video not found")
+
+    # Return cached result if available
+    if result.get("mindmap_text") and result.get("mindmap_status") == "done":
+        return {"status": "done", "mindmap_text": result["mindmap_text"]}
+
+    await start_mindmap_generation(db, video_id)
+    _MINDMAP_CANCEL_SET.discard(video_id)
+    background_tasks.add_task(_run_mindmap, video_id)
+    return {"status": "processing"}
+
+
+@router.delete("/result/{video_id}/mindmap")
+async def cancel_mindmap(video_id: str):
+    """Signal a running mindmap generation to stop."""
+    _MINDMAP_CANCEL_SET.add(video_id)
     return {"status": "cancelling"}
 
 

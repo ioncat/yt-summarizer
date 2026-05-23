@@ -5,6 +5,7 @@ import {
   getResult, deleteResult,
   startCleanup, cancelCleanup,
   startSummary, cancelSummary,
+  startMindmap,
   reextractSubtitles,
   saveChatHistory, clearChatHistory,
   getSettings, getModels, saveSettings,
@@ -55,6 +56,9 @@ export default function ResultPage() {
     localStorage.getItem('yt-md-enabled') === 'true'
   )
   const [mindmapEnabled, setMindmapEnabled] = useState(false)
+  const [mindmapError, setMindmapError] = useState('')
+  const mindmapPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const prevMindmapStatusRef = useRef<string | null | undefined>(undefined)
   const [reextractLang, setReextractLang] = useState('auto')
   const [cleanupModel, setCleanupModel] = useState('')
   const [summaryModel, setSummaryModel] = useState('')
@@ -119,6 +123,9 @@ export default function ResultPage() {
   function stopSummaryPolling() {
     if (summaryPollRef.current) { clearInterval(summaryPollRef.current); summaryPollRef.current = null }
   }
+  function stopMindmapPolling() {
+    if (mindmapPollRef.current) { clearInterval(mindmapPollRef.current); mindmapPollRef.current = null }
+  }
   function stopCleanupTimer() {
     if (cleanupTimerRef.current) { clearInterval(cleanupTimerRef.current); cleanupTimerRef.current = null }
   }
@@ -154,8 +161,10 @@ export default function ResultPage() {
       .then(data => {
         const prevCleanup = prevCleanupStatusRef.current
         const prevSummary = prevSummaryStatusRef.current
+        const prevMindmap = prevMindmapStatusRef.current
         prevCleanupStatusRef.current = data.cleanup_status
         prevSummaryStatusRef.current = data.summary_status
+        prevMindmapStatusRef.current = data.mindmap_status
         setResult(data)
 
         // Load chat history once on first successful fetch
@@ -208,6 +217,16 @@ export default function ResultPage() {
           startCleanupTimer()
         }
 
+        // Mindmap polling management
+        if (data.mindmap_status !== 'processing') {
+          if (prevMindmap === 'processing' && data.mindmap_status === 'done') {
+            // mindmap ready — MindmapView will re-render via result state
+          }
+          stopMindmapPolling()
+        } else if (!mindmapPollRef.current) {
+          mindmapPollRef.current = setInterval(() => loadResult(false), 3000)
+        }
+
         // Summary polling/timer management
         if (data.summary_status !== 'processing') {
           if (prevSummary === 'processing' && data.summary_status === 'done' && data.summary_duration_seconds == null) {
@@ -230,6 +249,7 @@ export default function ResultPage() {
     return () => {
       stopPolling()
       stopSummaryPolling()
+      stopMindmapPolling()
       stopCleanupTimer()
       stopSummaryTimer()
     }
@@ -844,8 +864,27 @@ export default function ResultPage() {
           {activeTab === 'summary' && result.summary_text && (
             <button
               className={`md-toggle ${mindmapEnabled ? 'md-toggle--on' : ''}`}
-              onClick={() => setMindmapEnabled(v => !v)}
-              title={mindmapEnabled ? 'Mindmap ON — click to switch to text' : 'Text view — click to show mindmap'}
+              onClick={async () => {
+                if (!mindmapEnabled) {
+                  setMindmapEnabled(true)
+                  // If no mindmap yet — trigger generation
+                  if (!result.mindmap_text && result.mindmap_status !== 'processing') {
+                    setMindmapError('')
+                    try {
+                      await startMindmap(videoId!)
+                      setResult(r => r ? { ...r, mindmap_status: 'processing' } : r)
+                      prevMindmapStatusRef.current = 'processing'
+                      stopMindmapPolling()
+                      mindmapPollRef.current = setInterval(() => loadResult(false), 3000)
+                    } catch (e: unknown) {
+                      setMindmapError(e instanceof Error ? e.message : 'Failed')
+                    }
+                  }
+                } else {
+                  setMindmapEnabled(false)
+                }
+              }}
+              title={mindmapEnabled ? 'Mindmap ON — click to switch to text' : 'Text view — click to generate mindmap'}
             >🗺</button>
           )}
           <button
@@ -870,9 +909,19 @@ export default function ResultPage() {
                     : 'No summary yet. Click "✦ Summarize" above to generate one.'}
               </div>
             ) : mindmapEnabled ? (
-              <Suspense fallback={<div className="empty">Loading mindmap…</div>}>
-                <MindmapView text={result.summary_text!} title={result.title ?? undefined} />
-              </Suspense>
+              result.mindmap_status === 'processing' ? (
+                <div className="empty"><span className="tab-spinner" /> Generating mindmap…</div>
+              ) : result.mindmap_status === 'failed' || mindmapError ? (
+                <div className="cleanup-error">
+                  {mindmapError || 'Mindmap generation failed. Check that Ollama is running and a model is selected in Settings → Summarization.'}
+                </div>
+              ) : result.mindmap_text ? (
+                <Suspense fallback={<div className="empty">Loading…</div>}>
+                  <MindmapView text={result.mindmap_text} title={result.title ?? undefined} />
+                </Suspense>
+              ) : (
+                <div className="empty">Generating mindmap…</div>
+              )
             ) : (
               <>
                 {markdownEnabled
