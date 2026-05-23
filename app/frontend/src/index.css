@@ -180,7 +180,7 @@ input[type="text"]:focus, select:focus { border-color: var(--accent); }
   white-space: pre-wrap;
 }
 
-.actions { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; }
+.actions { display: flex; flex-direction: column; gap: 0.5rem; }
 .actions-row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
 
 .history-list { list-style: none; }
@@ -412,8 +412,9 @@ input[type="text"]:focus, select:focus { border-color: var(--accent); }
 .chat-send-btn:hover:not(:disabled) { background: #4f46e5; transform: scale(1.05); }
 .chat-send-btn:disabled { background: #818cf8; cursor: not-allowed; }
 
-.result-tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 1.2rem; }
-.result-tab { padding: 0.5rem 1.4rem; background: transparent; border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; color: var(--text-faint); cursor: pointer; font-size: 0.9rem; font-weight: 500; transition: color 0.15s, border-color 0.15s; display: inline-flex; align-items: center; gap: 0.4rem; }
+.result-tabs { display: flex; gap: 0; margin-bottom: 1.2rem; }
+.result-tab { padding: 0.5rem 1.4rem; background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--text-faint); cursor: pointer; font-size: 0.9rem; font-weight: 500; transition: color 0.15s, border-color 0.15s; display: inline-flex; align-items: center; gap: 0.4rem; }
+.section-divider { border: none; border-top: 1px solid var(--border); margin: 0.75rem 0; }
 .result-tab:hover:not(.tab-unavailable) { color: var(--text); }
 .result-tab.active { color: var(--text); border-bottom-color: var(--accent); }
 .result-tab.tab-unavailable { color: #bbb; cursor: default; }

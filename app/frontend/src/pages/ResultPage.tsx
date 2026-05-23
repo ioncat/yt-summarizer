@@ -629,6 +629,8 @@ export default function ResultPage() {
           )}
         </div>
 
+        <hr className="section-divider" />
+
         <div className="actions">
           {/* ── Row 1 ── */}
           <div className="actions-row">
@@ -703,6 +705,8 @@ export default function ResultPage() {
             </>}
           </div>
 
+          <hr className="section-divider" />
+
           {/* ── Row 2 ── */}
           <div className="actions-row">
             {activeTab === 'subtitles' && <>
@@ -722,6 +726,8 @@ export default function ResultPage() {
             <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
           </div>
         </div>
+
+        <hr className="section-divider" />
 
         {activeTab === 'cleaned' && (result.cleanup_status === 'failed' || cleanupError) && (
           <div className="cleanup-error">
