@@ -153,7 +153,11 @@ All 5 epics done. Full stack running:
 - Frontend: `HomePage.tsx` — `"auto"` as first option and default in language selector
 
 #### Epic 23 ✅ — Chapter-Aware Subtitle Formatting
-- `VideoMetadata.chapters: list[dict] | None` — parsed from `info["chapters"]` in `_build_metadata()`
+- `VideoMetadata.chapters: list[dict] | None` — built in `_build_metadata()` from description timecodes (primary) or `info["chapters"]` (fallback)
+- **Chapter source priority** (subtitle_extractor.py): `_parse_description_chapters()` → `info["chapters"]` → None. YouTube API always returns `info["chapters"]` translated to English — description text is never auto-translated, always in author's language.
+- `_parse_description_chapters(description, duration)`: regex `^\s*(\d{1,2}:\d{2}(?::\d{2})?)\s+(.+)`, requires ≥2 matches, infers `end_time` from next chapter start
+- `_detect_script()` + `_expected_script()`: cyrillic/cjk/arabic/hebrew/greek/latin mapped to BCP-47 codes; mismatch between chapter title script and subtitle language → `[CHAPTER_SOURCE]` warning in log
+- `[CHAPTER_SOURCE]` log tag: fallback to YouTube chapters, count mismatch >2, or script mismatch — all surface as `logger.warning` for future admin-panel integration
 - `Video.chapters` JSON column in DB (migration in `_migrate_db()`)
 - `text_formatter.py`: two branches — `_format_with_chapters()` groups subtitles by chapter time boundaries; `_format_with_gaps()` is existing 4s gap logic
 - `format_subtitles(entries, chapters=None)` selects branch; returns `has_chapters: bool`
@@ -161,6 +165,7 @@ All 5 epics done. Full stack running:
 - Segments outside chapter boundaries assigned to nearest preceding chapter
 - Empty chapters (no subtitles) skipped — no empty headings
 - Fallback: if `chapters` is None or empty → existing gap-based formatting
+- `tools/debug_chapters.py`: diagnostic script to test YouTube chapter source behavior across yt-dlp configurations
 
 #### Epic 24 ✅ — Completion Notifications
 - `notify(title, body?)` in `ResultPage.tsx`: sets `document.title = "✓ {title}"`, reverts after 10s; fires `new Notification()` only when `document.hidden`
