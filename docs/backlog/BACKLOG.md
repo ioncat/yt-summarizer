@@ -155,6 +155,7 @@ Improve summarization quality beyond single-pass. Map-reduce or chunked approach
 | 21.05.2026 | Result meta redesign: два ряда (видео-инфо / stage-инфо), разделители `•`, hover tooltips; классы `.meta-row`, `.meta-chip`, `.meta-sep`, `.meta-label` |
 | 21.05.2026 | Result meta: `cleanup_finished_at` и `summary_finished_at` из API — timestamp последнего запуска этапа отображается в конце stage row |
 | 21.05.2026 | Date format: `DD.MM.YYYY, HH:MM` (locale-independent) вместо локализованного toLocaleString |
+| 23.05.2026 | **Known issue: chapter titles language mismatch** — yt-dlp извлекает `info["chapters"]` на языке YouTube-интерфейса пользователя (через cookies). Если интерфейс на английском, а видео на русском — заголовки глав (`## Chapter Title`) будут английскими во всём pipeline (formatted_text, cleaned_text, summary_text, mindmap). Workaround: переключить YouTube-интерфейс на язык видео перед извлечением. Потенциальный фикс: определять язык заголовков глав vs язык видео, парсить auto-chapters из VTT `NOTE` блоков как fallback (там язык не зависит от интерфейса). |
 
 ---
 
