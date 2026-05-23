@@ -12,7 +12,7 @@ import {
 } from '../api'
 import { renderText } from '../utils/renderText'
 
-type Tab = 'subtitles' | 'cleaned' | 'summary'
+type Tab = 'subtitles' | 'cleaned' | 'summary' | 'chat'
 
 function MarkdownContent({ text }: { text: string }) {
   return (
@@ -71,6 +71,7 @@ export default function ResultPage() {
   const chatEndRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const chatHistoryLoadedRef = useRef(false)
+  const autoSummarizeAfterCleanupRef = useRef(false)
   const CHAT_WARN_CHARS = 100_000
 
   // ── Notifications ──────────────────────────────────────────────────────────
@@ -169,8 +170,20 @@ export default function ResultPage() {
           else setActiveTab('subtitles')
         } else {
           if (prevCleanup === 'processing' && data.cleanup_status === 'done') {
-            setActiveTab('cleaned')
             notify('AI Cleanup complete', data.title ?? undefined)
+            if (autoSummarizeAfterCleanupRef.current) {
+              autoSummarizeAfterCleanupRef.current = false
+              // Trigger summary immediately after cleanup
+              startSummary(videoId!).then(() => {
+                prevSummaryStatusRef.current = 'processing'
+                startSummaryTimer()
+                setResult(d => d ? { ...d, summary_status: 'processing', summary_duration_seconds: null } : d)
+                stopSummaryPolling()
+                summaryPollRef.current = setInterval(() => loadResult(false), 3000)
+              }).catch(() => {})
+            } else {
+              setActiveTab('cleaned')
+            }
           }
           if (prevSummary === 'processing' && data.summary_status === 'done') {
             setActiveTab('summary')
@@ -275,11 +288,7 @@ export default function ResultPage() {
     }
   }, [result?.summary_status])
 
-  // Reset chat when summary is re-generated
-  useEffect(() => {
-    setChatHistory([])
-    ollamaMessagesRef.current = []
-  }, [result?.summary_text])
+  // Chat history is never auto-reset — user manages it manually via Clear chat
 
   // Auto-scroll to bottom after each chat message
   useEffect(() => {
@@ -353,6 +362,7 @@ export default function ResultPage() {
           { role: 'assistant' as const, content: fullResponse },
         ]
         saveChatHistory(videoId, savedHistory).catch(() => {})
+        setActiveTab('chat')
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
@@ -396,6 +406,7 @@ export default function ResultPage() {
   const displayText =
     activeTab === 'summary' ? result?.summary_text :
     activeTab === 'cleaned' ? (result?.cleaned_text ?? result?.formatted_text) :
+    activeTab === 'chat' ? null :
     result?.formatted_text
 
   async function handleCopy() {
@@ -496,6 +507,18 @@ export default function ResultPage() {
 
   async function handleSummarize() {
     if (!videoId || !result) return
+
+    // If cleanup was never run, offer to run the full pipeline first
+    if (!result.cleanup_status && !result.cleaned_text) {
+      const confirmed = window.confirm(
+        'AI Cleanup has not been run yet.\n\nTo get a quality summary, cleanup should run first.\n\nRun cleanup → summarize pipeline now?'
+      )
+      if (!confirmed) return
+      autoSummarizeAfterCleanupRef.current = true
+      await handleCleanup()
+      return
+    }
+
     requestNotifyPermission()
     try {
       setSummaryError('')
@@ -806,6 +829,14 @@ export default function ResultPage() {
               ? <><span className="tab-spinner" />Summarizing…</>
               : 'Summary'}
           </button>
+          {chatHistory.length > 0 && (
+            <button
+              className={`result-tab ${activeTab === 'chat' ? 'active' : ''}`}
+              onClick={() => setActiveTab('chat')}
+            >
+              Chat <span className="tab-count">({chatHistory.length})</span>
+            </button>
+          )}
         </div>
           <button
             className={`md-toggle ${markdownEnabled ? 'md-toggle--on' : ''}`}
@@ -835,66 +866,65 @@ export default function ResultPage() {
                   : <div className="formatted-text">{renderText(result.summary_text!)}</div>
                 }
 
-                {/* Chat thread */}
-                {chatHistory.length > 0 && (
-                  <>
-                    <div className="chat-thread-header">
-                      <button
-                        className="btn-copy-chat"
-                        onClick={() => {
-                          const text = chatHistory
-                            .filter(m => m.content)
-                            .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
-                            .join('\n\n')
-                          navigator.clipboard.writeText(text)
-                        }}
-                        title="Copy entire chat"
-                      >⎘ Copy chat</button>
-                      <button
-                        className="btn-copy-chat"
-                        onClick={handleClearChat}
-                        title="Delete entire chat history"
-                        style={{ marginLeft: '0.5rem', color: 'var(--err)' }}
-                      >🗑 Clear chat</button>
-                    </div>
-                    <div className="chat-thread">
-                      {chatHistory.map((msg, i) => (
-                        <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
-                          {msg.content
-                            ? (markdownEnabled && msg.role === 'assistant'
-                                ? <ReactMarkdown>{msg.content}</ReactMarkdown>
-                                : msg.content)
-                            : (msg.role === 'assistant' && isChatting
-                                ? (
-                                  <span className="chat-typing">
-                                    <span className="chat-typing-dot" />
-                                    <span className="chat-typing-dot" />
-                                    <span className="chat-typing-dot" />
-                                  </span>
-                                )
-                                : null)}
-                          {msg.content && (<>
-                            <button
-                              className="chat-msg-copy"
-                              onClick={() => navigator.clipboard.writeText(msg.content)}
-                              title="Copy message"
-                            >⎘</button>
-                            <button
-                              className="chat-msg-copy chat-msg-delete"
-                              onClick={() => deleteChatMessage(i)}
-                              title="Delete message"
-                            >🗑</button>
-                          </>)}
-                        </div>
-                      ))}
-                      <div ref={chatEndRef} />
-                    </div>
-                  </>
-                )}
                 {/* Spacer so content isn't hidden behind fixed input bar */}
                 <div style={{ height: '80px' }} />
               </>
             )}
+          </>
+        ) : activeTab === 'chat' ? (
+          <>
+            <div className="chat-thread-header">
+              <button
+                className="btn-copy-chat"
+                onClick={() => {
+                  const text = chatHistory
+                    .filter(m => m.content)
+                    .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+                    .join('\n\n')
+                  navigator.clipboard.writeText(text)
+                }}
+                title="Copy entire chat"
+              >⎘ Copy chat</button>
+              <button
+                className="btn-copy-chat"
+                onClick={handleClearChat}
+                title="Delete entire chat history"
+                style={{ marginLeft: '0.5rem', color: 'var(--err)' }}
+              >🗑 Clear chat</button>
+            </div>
+            <div className="chat-thread">
+              {chatHistory.map((msg, i) => (
+                <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
+                  {msg.content
+                    ? (markdownEnabled && msg.role === 'assistant'
+                        ? <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        : msg.content)
+                    : (msg.role === 'assistant' && isChatting
+                        ? (
+                          <span className="chat-typing">
+                            <span className="chat-typing-dot" />
+                            <span className="chat-typing-dot" />
+                            <span className="chat-typing-dot" />
+                          </span>
+                        )
+                        : null)}
+                  {msg.content && (<>
+                    <button
+                      className="chat-msg-copy"
+                      onClick={() => navigator.clipboard.writeText(msg.content)}
+                      title="Copy message"
+                    >⎘</button>
+                    <button
+                      className="chat-msg-copy chat-msg-delete"
+                      onClick={() => deleteChatMessage(i)}
+                      title="Delete message"
+                    >🗑</button>
+                  </>)}
+                </div>
+              ))}
+              <div ref={chatEndRef} />
+            </div>
+            <div style={{ height: '80px' }} />
           </>
         ) : activeTab === 'cleaned' && !result.cleaned_text ? (
           <div className="empty">
@@ -914,8 +944,8 @@ export default function ResultPage() {
       </div>
     </div>
 
-    {/* Fixed chat input bar — only on Summary tab when done */}
-    {activeTab === 'summary' && result.summary_status === 'done' && result.summary_text && ollamaUrl && summaryModel && (
+    {/* Fixed chat input bar — on Summary tab (start chat) and Chat tab (continue) */}
+    {(activeTab === 'summary' || activeTab === 'chat') && result.summary_status === 'done' && result.summary_text && ollamaUrl && summaryModel && (
       <div className="chat-input-bar">
         {(() => {
           const sourceLen = (result.cleaned_text ?? result.formatted_text ?? '').length

@@ -227,7 +227,10 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
         "created_at": video.created_at.isoformat(),
         "cleanup_finished_at": fmt.cleanup_finished_at.isoformat() if fmt and fmt.cleanup_finished_at else None,
         "summary_finished_at": fmt.summary_finished_at.isoformat() if fmt and fmt.summary_finished_at else None,
-        "chat_history": fmt.chat_history if fmt else None,
+        "chat_history": (
+            json.loads(fmt.chat_history) if fmt and isinstance(fmt.chat_history, str)
+            else fmt.chat_history if fmt else None
+        ),
     }
 
 

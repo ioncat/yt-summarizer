@@ -51,6 +51,8 @@ app/frontend/dist/
 app/frontend/build/
 app/frontend/.next/
 *.tsbuildinfo
+# TypeScript compiled output (JS artifacts alongside TSX sources)
+app/frontend/src/**/*.js
 
 # ========================
 # Docker

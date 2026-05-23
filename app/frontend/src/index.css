@@ -440,6 +440,7 @@ input[type="text"]:focus, select:focus { border-color: var(--accent); }
 .result-tab:hover:not(.tab-unavailable) { color: var(--text); }
 .result-tab.active { color: var(--text); border-bottom-color: var(--accent); }
 .result-tab.tab-unavailable { color: #bbb; cursor: default; }
+.tab-count { font-size: 0.78rem; color: var(--text-faint); }
 
 .tab-spinner {
   display: inline-block;
