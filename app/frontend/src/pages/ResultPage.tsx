@@ -871,7 +871,7 @@ export default function ResultPage() {
               </div>
             ) : mindmapEnabled ? (
               <Suspense fallback={<div className="empty">Loading mindmap…</div>}>
-                <MindmapView text={result.summary_text!} />
+                <MindmapView text={result.summary_text!} title={result.title ?? undefined} />
               </Suspense>
             ) : (
               <>
