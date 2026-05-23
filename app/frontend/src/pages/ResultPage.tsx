@@ -779,22 +779,44 @@ export default function ResultPage() {
 
                 {/* Chat thread */}
                 {chatHistory.length > 0 && (
-                  <div className="chat-thread">
-                    {chatHistory.map((msg, i) => (
-                      <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
-                        {msg.content || (msg.role === 'assistant' && isChatting
-                          ? (
-                            <span className="chat-typing">
-                              <span className="chat-typing-dot" />
-                              <span className="chat-typing-dot" />
-                              <span className="chat-typing-dot" />
-                            </span>
-                          )
-                          : null)}
-                      </div>
-                    ))}
-                    <div ref={chatEndRef} />
-                  </div>
+                  <>
+                    <div className="chat-thread-header">
+                      <button
+                        className="btn-copy-chat"
+                        onClick={() => {
+                          const text = chatHistory
+                            .filter(m => m.content)
+                            .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+                            .join('\n\n')
+                          navigator.clipboard.writeText(text)
+                        }}
+                        title="Copy entire chat"
+                      >⎘ Copy chat</button>
+                    </div>
+                    <div className="chat-thread">
+                      {chatHistory.map((msg, i) => (
+                        <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
+                          {msg.content || (msg.role === 'assistant' && isChatting
+                            ? (
+                              <span className="chat-typing">
+                                <span className="chat-typing-dot" />
+                                <span className="chat-typing-dot" />
+                                <span className="chat-typing-dot" />
+                              </span>
+                            )
+                            : null)}
+                          {msg.content && (
+                            <button
+                              className="chat-msg-copy"
+                              onClick={() => navigator.clipboard.writeText(msg.content)}
+                              title="Copy message"
+                            >⎘</button>
+                          )}
+                        </div>
+                      ))}
+                      <div ref={chatEndRef} />
+                    </div>
+                  </>
                 )}
                 {/* Spacer so content isn't hidden behind fixed input bar */}
                 <div style={{ height: '80px' }} />
