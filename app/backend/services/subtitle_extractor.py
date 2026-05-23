@@ -1,5 +1,6 @@
 import html
 import json
+import logging
 import os
 import re
 import subprocess
@@ -8,6 +9,8 @@ from dataclasses import dataclass
 from enum import Enum
 
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class SubtitleSourceType(str, Enum):
@@ -179,15 +182,89 @@ def _parse_vtt_to_entries(vtt_content: str) -> list[SubtitleEntry]:
     return entries
 
 
+_DESC_TS_RE = re.compile(r'^\s*(\d{1,2}:\d{2}(?::\d{2})?)\s+(.+)', re.MULTILINE)
+_MIN_DESC_CHAPTERS = 2  # single timestamp in description is likely not a chapter list
+
+# Script ranges for language-mismatch detection.
+# Key = script name, value = set of BCP-47 language codes that use that script.
+_SCRIPT_LANGUAGES: dict[str, set[str]] = {
+    "cyrillic": {"ru", "uk", "bg", "sr", "mk", "kk", "be"},
+    "cjk":      {"zh", "ja", "ko"},
+    "arabic":   {"ar", "fa", "ur"},
+    "hebrew":   {"he"},
+    "greek":    {"el"},
+}
+_SCRIPT_RE: dict[str, re.Pattern] = {
+    "cyrillic": re.compile(r'[Ѐ-ӿ]'),
+    "cjk":      re.compile(r'[一-鿿぀-ヿ가-힯]'),
+    "arabic":   re.compile(r'[؀-ۿ]'),
+    "hebrew":   re.compile(r'[֐-׿]'),
+    "greek":    re.compile(r'[Ͱ-Ͽ]'),
+}
+
+
+def _detect_script(text: str) -> str:
+    """Return dominant script name ('cyrillic', 'cjk', 'arabic', 'latin', etc.)."""
+    for name, pattern in _SCRIPT_RE.items():
+        if pattern.search(text):
+            return name
+    return "latin"
+
+
+def _expected_script(language: str) -> str | None:
+    """Return expected script name for a BCP-47 language code, or None if unknown."""
+    lang_base = language.split("-")[0].lower()
+    for script, langs in _SCRIPT_LANGUAGES.items():
+        if lang_base in langs:
+            return script
+    return None  # Latin or unknown — no strict check
+
+
+def _desc_ts_to_seconds(ts: str) -> int:
+    parts = ts.split(":")
+    if len(parts) == 3:
+        return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+    return int(parts[0]) * 60 + int(parts[1])
+
+
+def _parse_description_chapters(description: str, duration: int | None) -> list[dict] | None:
+    """Parse chapter timecodes from video description.
+
+    Authors write timestamps in their own language in the description — YouTube
+    does NOT translate description text. This makes it the only reliable source
+    for chapter titles in the video's original language.
+
+    Returns None if fewer than _MIN_DESC_CHAPTERS timecodes found (not a chapter list).
+    """
+    if not description:
+        return None
+    matches = _DESC_TS_RE.findall(description)
+    if len(matches) < _MIN_DESC_CHAPTERS:
+        return None
+
+    chapters = sorted(
+        [{"start_time": _desc_ts_to_seconds(ts), "end_time": 0, "title": title.strip()}
+         for ts, title in matches],
+        key=lambda c: c["start_time"],
+    )
+    # Infer end_time from next chapter's start; last chapter ends at video duration
+    for i in range(len(chapters) - 1):
+        chapters[i]["end_time"] = chapters[i + 1]["start_time"]
+    chapters[-1]["end_time"] = int(duration) if duration else chapters[-1]["start_time"] + 300
+
+    return chapters
+
+
 def _build_metadata(info: dict) -> VideoMetadata:
     upload_date = info.get("upload_date")
     if upload_date and len(upload_date) == 8:
         upload_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:]}"
 
+    video_id = info.get("id", "unknown")
     raw_chapters = info.get("chapters")
-    chapters: list[dict] | None = None
+    yt_chapters: list[dict] | None = None
     if raw_chapters:
-        chapters = [
+        yt_chapters = [
             {
                 "start_time": int(ch.get("start_time", 0)),
                 "end_time": int(ch.get("end_time", 0)),
@@ -195,6 +272,31 @@ def _build_metadata(info: dict) -> VideoMetadata:
             }
             for ch in raw_chapters
         ]
+
+    # Prefer description timecodes — they are in the author's original language.
+    # YouTube translates info["chapters"] to the API request language (usually English).
+    desc_chapters = _parse_description_chapters(
+        info.get("description") or "", info.get("duration")
+    )
+
+    if desc_chapters:
+        chapters = desc_chapters
+        if yt_chapters and abs(len(desc_chapters) - len(yt_chapters)) > 2:
+            logger.warning(
+                "[CHAPTER_SOURCE] video=%s: description chapters (%d) vs YouTube chapters (%d) "
+                "count mismatch >2 — description parsing may be unreliable for this video.",
+                video_id, len(desc_chapters), len(yt_chapters),
+            )
+    elif yt_chapters:
+        chapters = yt_chapters
+        logger.warning(
+            "[CHAPTER_SOURCE] video=%s: no timecodes in description, falling back to "
+            "YouTube API chapters (titles may be translated to English). "
+            "If chapter headings appear in wrong language, description parsing failed.",
+            video_id,
+        )
+    else:
+        chapters = None
 
     return VideoMetadata(
         video_id=info.get("id", ""),
@@ -390,6 +492,22 @@ def extract_subtitles(
             vtt_chapters = _parse_vtt_chapters(vtt_content)
             if vtt_chapters:
                 metadata.chapters = vtt_chapters
+
+            # Language-mismatch check: chapter title script vs subtitle language.
+            # Fires when chapter headings are in a different script than the video
+            # language — most commonly English titles on a non-Latin-script video.
+            if metadata.chapters:
+                title_text = " ".join(c["title"] for c in metadata.chapters)
+                title_script = _detect_script(title_text)
+                exp_script = _expected_script(language)
+                if exp_script and title_script != exp_script:
+                    logger.warning(
+                        "[CHAPTER_SOURCE] video=%s: chapter titles are in %s script "
+                        "but subtitle language is '%s' (expected %s script). "
+                        "Headings will appear in wrong language throughout the pipeline "
+                        "(formatted_text → cleaned_text → summary → mindmap).",
+                        metadata.video_id, title_script, language, exp_script,
+                    )
 
             return ExtractionResult(
                 success=True,
