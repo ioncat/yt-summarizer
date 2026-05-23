@@ -13,6 +13,30 @@
 
 **URL**: https://www.youtube-transcript.io/
 
+#### Главная страница — позиционирование и маркетинг
+
+| Параметр | Содержание |
+|----------|------------|
+| **Headline** | "Turn YouTube Videos into Transcripts Instantly" |
+| **Value prop** | "Easily convert a YouTube video to transcript, copy and download in one click. Get started for free with 25 tokens." |
+| **Core promise** | Скорость + простота + бесплатный старт |
+| **Целевая аудитория** | Marketers & Businesses · Content Creators & Podcasters · Journalists & Writers · Researchers & Students |
+| **Главные CTAs** | Extract transcript · Extract in Bulk/Channel · YouTube Transcript API · View plans |
+| **Social proof** | 4.6/5 (29 793 отзыва) · 2.6M+ пользователей · Scamadviser Verified · SSL |
+| **Pricing** | Free tier 25 токенов, premium планы |
+| **Заявленные фичи** | Free extraction · Fast & Reliable · Summarize with AI · Works on any public video · Easy Copy & Download · Clean output |
+
+**Маркетинговые наблюдения**:
+- Позиционирование сугубо утилитарное: "извлечь → скопировать → скачать". Не про понимание, а про получение текста.
+- AI summary — упомянута как одна из фич, не как ключевое преимущество
+- Аудитория широкая (4 сегмента) → нет фокуса, продают всем
+- 2.6M пользователей говорит о том, что рынок есть, но продукт commodity-уровня
+- "Free without sign-up" — главный крючок для top-of-funnel, монетизация через апгрейд
+
+**Позиционирование vs наше**:
+- Они: **инструмент получения текста** ("turn video into transcript")
+- Мы (потенциально): **инструмент понимания контента** ("extract meaning, not just text")
+
 **Позиционирование**: извлечение и обработка субтитров YouTube.
 
 **UX / Processing flow** (скриншот, май 2026):
