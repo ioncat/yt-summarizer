@@ -241,7 +241,7 @@ async def cancel_cleanup(video_id: str):
     return {"status": "cancelling"}
 
 
-async def _run_reextract(video_id: str) -> None:
+async def _run_reextract(video_id: str, language: str = "auto") -> None:
     """Background task: re-extract subtitles for an existing video.
     Overwrites formatted_text + chapters, invalidates cleanup/summary."""
     from models.database import AsyncSessionLocal
@@ -253,7 +253,9 @@ async def _run_reextract(video_id: str) -> None:
             if not fmt:
                 return
             url = fmt["url"]
-            language = fmt.get("language") or "ru"
+            # If caller passes "auto", fall back to previously detected language
+            if language == "auto":
+                language = fmt.get("language") or "auto"
             cookies_path = await get_app_setting(db, "cookies_path")
             ytdlp_path = await get_app_setting(db, "ytdlp_path") or "yt-dlp"
 
@@ -271,9 +273,14 @@ async def _run_reextract(video_id: str) -> None:
         _REEXTRACT_SET.discard(video_id)
 
 
+class ReextractRequest(BaseModel):
+    language: str = "auto"
+
+
 @router.post("/result/{video_id}/reextract")
 async def trigger_reextract(
     video_id: str,
+    body: ReextractRequest,
     background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -287,7 +294,7 @@ async def trigger_reextract(
         raise HTTPException(status_code=409, detail="Summarization is in progress — cancel first")
     if video_id in _REEXTRACT_SET:
         raise HTTPException(status_code=409, detail="Re-extract already in progress")
-    background_tasks.add_task(_run_reextract, video_id)
+    background_tasks.add_task(_run_reextract, video_id, body.language)
     return {"status": "reextracting"}
 
 

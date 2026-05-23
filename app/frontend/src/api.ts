@@ -121,8 +121,12 @@ export async function startCleanup(videoId: string): Promise<void> {
   }
 }
 
-export async function reextractSubtitles(videoId: string): Promise<void> {
-  const res = await fetch(`${BASE}/result/${videoId}/reextract`, { method: 'POST' })
+export async function reextractSubtitles(videoId: string, language: string = 'auto'): Promise<void> {
+  const res = await fetch(`${BASE}/result/${videoId}/reextract`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language }),
+  })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(body.detail || 'Failed to start re-extract')

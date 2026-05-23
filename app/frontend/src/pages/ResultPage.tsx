@@ -39,6 +39,7 @@ export default function ResultPage() {
   const [summaryError, setSummaryError] = useState('')
   const [copied, setCopied] = useState(false)
   const [activeTab, setActiveTab] = useState<Tab>('subtitles')
+  const [reextractLang, setReextractLang] = useState('auto')
   const [cleanupModel, setCleanupModel] = useState('')
   const [summaryModel, setSummaryModel] = useState('')
   const [models, setModels] = useState<string[]>([])
@@ -397,7 +398,7 @@ export default function ResultPage() {
     )
     if (!ok) return
     try {
-      await reextractSubtitles(videoId)
+      await reextractSubtitles(videoId, reextractLang)
       // Optimistic UI flag — polling will refresh once the backend writes new text
       setResult(prev => prev ? { ...prev, reextract_in_progress: true } : prev)
       // Force a quick first poll
@@ -679,6 +680,18 @@ export default function ResultPage() {
           <a className="btn btn-secondary" href={`/benchmark/${result.video_id}`}>
             ⚖ Benchmark
           </a>
+          <select
+            className="model-select-inline"
+            value={reextractLang}
+            onChange={e => setReextractLang(e.target.value)}
+            disabled={!!result.reextract_in_progress}
+            title="Language for subtitle re-extraction"
+          >
+            <option value="auto">Auto</option>
+            <option value="ru">Russian</option>
+            <option value="en">English</option>
+            <option value="uk">Ukrainian</option>
+          </select>
           <button
             className="btn btn-secondary"
             onClick={handleReextract}
