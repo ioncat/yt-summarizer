@@ -630,6 +630,7 @@ export default function ResultPage() {
         </div>
 
         <div className="actions">
+          {/* Row 1: main actions */}
           <button className="btn btn-secondary" onClick={handleCopy}>
             {copied ? 'Copied!' : 'Copy text'}
           </button>
@@ -680,7 +681,10 @@ export default function ResultPage() {
           <a className="btn btn-secondary" href={`/benchmark/${result.video_id}`}>
             ⚖ Benchmark
           </a>
-          {activeTab === 'subtitles' && (<>
+
+          {/* Row 2: destructive actions — full-width divider forces line break */}
+          <div className="actions-divider" />
+          {activeTab === 'subtitles' && (
             <select
               className="model-select-inline"
               value={reextractLang}
@@ -693,6 +697,8 @@ export default function ResultPage() {
               <option value="en">English</option>
               <option value="uk">Ukrainian</option>
             </select>
+          )}
+          {activeTab === 'subtitles' && (
             <button
               className="btn btn-secondary"
               onClick={handleReextract}
@@ -705,7 +711,7 @@ export default function ResultPage() {
             >
               {result.reextract_in_progress ? '↻ Re-extracting…' : '↻ Re-extract'}
             </button>
-          </>)}
+          )}
           <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
         </div>
 
