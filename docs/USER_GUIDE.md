@@ -205,7 +205,14 @@ Default in the Home page dropdown is "Auto (detect)". Picks the video's original
 
 ### Chapter-aware formatting
 
-If the video creator defined YouTube chapters, subtitles are grouped by chapter boundaries with `## Chapter Title` headings. The headings are **immutable** — they pass through cleanup and summarization unchanged.
+If the video creator defined chapters, subtitles are grouped by chapter boundaries with `## Chapter Title` headings. The headings are **immutable** — they pass through cleanup and summarization unchanged.
+
+**Chapter source priority** (important for multilingual correctness):
+
+1. **Video description timecodes** *(primary)* — the system parses timestamps the author wrote in the video description (e.g. `00:00 Название главы`). Description text is never auto-translated by YouTube, so chapter titles always appear in the author's original language.
+2. **YouTube API chapters** *(fallback)* — used only when the description has no timecodes. Note: YouTube translates these server-side to English regardless of your account language or cookies — a known platform limitation confirmed by testing across six yt-dlp configurations.
+
+If the fallback is used, a `[CHAPTER_SOURCE]` warning appears in the server log. A language mismatch (e.g. Latin-script chapter titles on a Cyrillic-language video) is also logged explicitly.
 
 ### Auto-pipeline
 

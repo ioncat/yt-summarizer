@@ -364,6 +364,26 @@ Do this BEFORE restarting the backend with new model/migration code. No exceptio
 
 ---
 
+## Documentation Update Checklist
+
+After every commit — пройти по списку и обновить релевантные файлы.
+
+| Файл | Когда обновлять |
+|------|-----------------|
+| `CLAUDE.md` | Изменилась архитектура, ключевые детали реализации, новые паттерны |
+| `docs/backlog/BACKLOG.md` | Новая фича, изменение статуса, known issue найден или закрыт |
+| `docs/backlog/epics/EPIC-NN.md` | Изменилось поведение конкретного эпика |
+| `docs/USER_GUIDE.md` | Изменилось пользовательское поведение, новые опции, новые предупреждения |
+| `docs/test-cases.md` | Новый сценарий, новый лог-тег, изменились критерии pass/fail |
+| `docs/system-behavior.md` | Изменилась логика pipeline, state machines, активность |
+| `README.md` | Изменились ключевые фичи, setup, позиционирование |
+| `docs/saas-transition.md` | Новое конкурентное наблюдение, стратегический инсайт *(gitignored)* |
+| **`docs/effort-log.md`** | **Всегда — в конце каждой сессии. Обязательно.** |
+
+**Правило**: если сомневаешься — обновляй. Документ проще поправить, чем восстанавливать контекст спустя месяц.
+
+---
+
 ## Pre-release Checklist
 
 Before shipping to production, remove all debug `console.error` calls added across the frontend pages. They were added intentionally during development to surface API errors in the browser console. Search for `console.error` in `frontend/src/pages/` and `frontend/src/api.ts` and remove or replace with proper error reporting.
