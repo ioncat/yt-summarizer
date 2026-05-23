@@ -633,10 +633,30 @@ export default function ResultPage() {
           {/* ── Row 1 ── */}
           <div className="actions-row">
             {activeTab === 'subtitles' && <>
-              <button className="btn btn-secondary" onClick={handleCopy}>
-                {copied ? 'Copied!' : 'Copy text'}
+              <select
+                className="model-select-inline"
+                value={reextractLang}
+                onChange={e => setReextractLang(e.target.value)}
+                disabled={!!result.reextract_in_progress}
+                title="Language for subtitle re-extraction"
+              >
+                <option value="auto">Auto</option>
+                <option value="ru">Russian</option>
+                <option value="en">English</option>
+                <option value="uk">Ukrainian</option>
+              </select>
+              <button
+                className="btn btn-secondary"
+                onClick={handleReextract}
+                disabled={
+                  !!result.reextract_in_progress ||
+                  result.cleanup_status === 'processing' ||
+                  result.summary_status === 'processing'
+                }
+                title="Re-fetch subtitles from YouTube. Cleanup and Summary will be cleared."
+              >
+                {result.reextract_in_progress ? '↻ Re-extracting…' : '↻ Re-extract'}
               </button>
-              <a className="btn btn-secondary" href={result.url} target="_blank" rel="noreferrer">Open video</a>
               <a className="btn btn-secondary" href={`/benchmark/${result.video_id}`}>⚖ Benchmark</a>
             </>}
 
@@ -686,30 +706,10 @@ export default function ResultPage() {
           {/* ── Row 2 ── */}
           <div className="actions-row">
             {activeTab === 'subtitles' && <>
-              <select
-                className="model-select-inline"
-                value={reextractLang}
-                onChange={e => setReextractLang(e.target.value)}
-                disabled={!!result.reextract_in_progress}
-                title="Language for subtitle re-extraction"
-              >
-                <option value="auto">Auto</option>
-                <option value="ru">Russian</option>
-                <option value="en">English</option>
-                <option value="uk">Ukrainian</option>
-              </select>
-              <button
-                className="btn btn-secondary"
-                onClick={handleReextract}
-                disabled={
-                  !!result.reextract_in_progress ||
-                  result.cleanup_status === 'processing' ||
-                  result.summary_status === 'processing'
-                }
-                title="Re-fetch subtitles from YouTube. Cleanup and Summary will be cleared."
-              >
-                {result.reextract_in_progress ? '↻ Re-extracting…' : '↻ Re-extract'}
+              <button className="btn btn-secondary" onClick={handleCopy}>
+                {copied ? 'Copied!' : 'Copy text'}
               </button>
+              <a className="btn btn-secondary" href={result.url} target="_blank" rel="noreferrer">Open video</a>
             </>}
 
             {(activeTab === 'cleaned' || activeTab === 'summary') && <>
