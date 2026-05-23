@@ -432,10 +432,17 @@ async def _run_mindmap(video_id: str) -> None:
             await finish_mindmap(db, video_id, None)
             return
 
+        # Resolve language code → full name for the prompt
+        lang_code = result.get("language") or "ru"
+        lang_map = {"ru": "Russian", "en": "English", "uk": "Ukrainian", "de": "German",
+                    "fr": "French", "es": "Spanish", "zh": "Chinese", "ja": "Japanese"}
+        language = lang_map.get(lang_code.lower(), lang_code)
+
         mindmap_md = await generate_mindmap(
             text=text,
             ollama_url=ollama_url,
             model=model,
+            language=language,
             is_cancelled=lambda: video_id in _MINDMAP_CANCEL_SET,
         )
 
@@ -452,14 +459,15 @@ async def trigger_mindmap(
     video_id: str,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    force: bool = False,
 ):
-    """Trigger LLM mindmap generation. If mindmap_text already exists, returns it immediately."""
+    """Trigger LLM mindmap generation. Returns cached result unless force=true."""
     result = await get_result(db, video_id)
     if not result:
         raise HTTPException(404, "Video not found")
 
-    # Return cached result if available
-    if result.get("mindmap_text") and result.get("mindmap_status") == "done":
+    # Return cached result if available and not forced
+    if not force and result.get("mindmap_text") and result.get("mindmap_status") == "done":
         return {"status": "done", "mindmap_text": result["mindmap_text"]}
 
     await start_mindmap_generation(db, video_id)

@@ -116,8 +116,11 @@ export async function cancelSummary(videoId: string): Promise<void> {
   await fetch(`${BASE}/result/${videoId}/summary`, { method: 'DELETE' })
 }
 
-export async function startMindmap(videoId: string): Promise<void> {
-  const res = await fetch(`${BASE}/result/${videoId}/mindmap`, { method: 'POST' })
+export async function startMindmap(videoId: string, force = false): Promise<void> {
+  const url = force
+    ? `${BASE}/result/${videoId}/mindmap?force=true`
+    : `${BASE}/result/${videoId}/mindmap`
+  const res = await fetch(url, { method: 'POST' })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(body.detail || 'Failed to start mindmap generation')

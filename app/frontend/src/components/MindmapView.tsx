@@ -7,9 +7,10 @@ const transformer = new Transformer()
 interface Props {
   text: string
   title?: string
+  onRegenerate?: () => void
 }
 
-export default function MindmapView({ text, title }: Props) {
+export default function MindmapView({ text, title, onRegenerate }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const mmRef = useRef<Markmap | null>(null)
 
@@ -69,6 +70,11 @@ export default function MindmapView({ text, title }: Props) {
         <button className="mindmap-export-btn" onClick={() => mmRef.current?.fit()} title="Reset zoom">
           ⊡ Fit
         </button>
+        {onRegenerate && (
+          <button className="mindmap-export-btn" onClick={onRegenerate} title="Re-generate mindmap via LLM">
+            ↺ Re-generate
+          </button>
+        )}
       </div>
       <svg ref={svgRef} className="mindmap-svg" />
     </div>

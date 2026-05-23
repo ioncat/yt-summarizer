@@ -917,7 +917,22 @@ export default function ResultPage() {
                 </div>
               ) : result.mindmap_text ? (
                 <Suspense fallback={<div className="empty">Loading…</div>}>
-                  <MindmapView text={result.mindmap_text} title={result.title ?? undefined} />
+                  <MindmapView
+                    text={result.mindmap_text}
+                    title={result.title ?? undefined}
+                    onRegenerate={async () => {
+                      setMindmapError('')
+                      try {
+                        await startMindmap(videoId!, true)
+                        setResult(r => r ? { ...r, mindmap_status: 'processing', mindmap_text: null } : r)
+                        prevMindmapStatusRef.current = 'processing'
+                        stopMindmapPolling()
+                        mindmapPollRef.current = setInterval(() => loadResult(false), 3000)
+                      } catch (e: unknown) {
+                        setMindmapError(e instanceof Error ? e.message : 'Failed')
+                      }
+                    }}
+                  />
                 </Suspense>
               ) : (
                 <div className="empty">Generating mindmap…</div>

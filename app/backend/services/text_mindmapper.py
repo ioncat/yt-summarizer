@@ -13,7 +13,7 @@ Rules:
 - Structure: # (single root topic), ## (main branches, 4-7 items), - bullet points (2-4 per branch)
 - Maximum 3 levels deep
 - Each node: short phrase only (3-7 words), NO full sentences, NO punctuation at end
-- Preserve the original language of the text
+- CRITICAL: write ALL output in {language} — do not switch to any other language
 - Do not include details, examples, or elaborations — only key concepts"""
 
 DEFAULT_USER_TEMPLATE = "Generate a mindmap hierarchy for this text:\n\n{text}"
@@ -25,6 +25,7 @@ async def generate_mindmap(
     text: str,
     ollama_url: str,
     model: str,
+    language: str = "Russian",
     system_prompt: str | None = None,
     user_prompt_template: str | None = None,
     is_cancelled: callable = lambda: False,
@@ -36,7 +37,7 @@ async def generate_mindmap(
     if is_cancelled():
         return None
 
-    sys_prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
+    sys_prompt = (system_prompt or DEFAULT_SYSTEM_PROMPT).replace("{language}", language)
     user_tmpl = user_prompt_template or DEFAULT_USER_TEMPLATE
     user_msg = user_tmpl.replace("{text}", text)
 
