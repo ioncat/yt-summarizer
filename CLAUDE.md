@@ -364,6 +364,28 @@ Do this BEFORE restarting the backend with new model/migration code. No exceptio
 
 ---
 
+## Diagnostic Tools
+
+### `tools/debug_chapters.py`
+
+**Назначение**: проверить, на каком языке YouTube отдаёт заголовки глав через разные конфигурации yt-dlp, и подтвердить что описание видео является корректным источником.
+
+**Контекст**: создан в мае 2026 для диагностики проблемы — YouTube API всегда возвращает `info["chapters"]` на английском, независимо от кук, заголовков Accept-Language и player_client. Инструмент прогнал 6 конфигураций и подтвердил: description-таймкоды — единственный надёжный источник оригинального языка.
+
+**Когда использовать**:
+- Регрессия: заголовки глав снова на английском после обновления yt-dlp или изменений в YouTube
+- Новое гео/язык: проверить поведение для нового языка перед добавлением в систему
+- Отладка `[CHAPTER_SOURCE]` предупреждений в логе
+
+```bash
+python tools/debug_chapters.py "VIDEO_URL"
+python tools/debug_chapters.py "VIDEO_URL" "app/data/cookies.txt"
+```
+
+**Ожидаемый результат** для неанглоязычного видео: все 6 конфигураций → английские заголовки; блок "Description timecodes" → оригинальный язык.
+
+---
+
 ## Documentation Update Checklist
 
 After every commit — пройти по списку и обновить релевантные файлы.

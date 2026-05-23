@@ -1,11 +1,47 @@
 """
-Diagnostic: test how YouTube returns chapter titles under different yt-dlp configurations.
+Diagnostic tool: verify chapter title language source for a YouTube video.
 
-Usage:
+--- WHY THIS EXISTS ---
+
+YouTube API always returns chapter titles translated to English, regardless of:
+- the video's original language
+- the user's account language / interface language
+- cookies exported from a Russian-language YouTube session
+- Accept-Language headers sent to yt-dlp
+- yt-dlp player_client setting (web, android, etc.)
+
+This was confirmed by running 6 yt-dlp configurations against a Russian video
+with author-defined chapters. All 6 returned English titles via info["chapters"].
+
+The fix: parse timecodes from info["description"] instead — video descriptions
+are never auto-translated by YouTube, so chapter titles stay in the author's
+original language. This tool was built to confirm the diagnosis and verify
+the fix works correctly.
+
+--- WHAT IT TESTS ---
+
+Runs 6 yt-dlp configurations and prints chapter titles for each:
+  1. Baseline (no extra headers)
+  2. Accept-Language: ru
+  3. Accept-Language: ru-RU,ru;q=0.9 (full browser-style header)
+  4. player_client=web
+  5. player_client=web + Accept-Language: ru
+  6. No cookies (isolate cookie effect)
+
+Then separately parses description timecodes — the correct source.
+
+Expected result for a Russian video with author chapters:
+  configs 1-6 → English titles (platform behavior, not a bug)
+  Description timecodes → Russian titles (use this as chapter source)
+
+--- USAGE ---
+
     python tools/debug_chapters.py VIDEO_URL [COOKIES_PATH]
 
 Example:
     python tools/debug_chapters.py "https://www.youtube.com/watch?v=RagM_T1HCuo" "app/data/cookies.txt"
+
+Run from the project root. Cookies default to app/data/cookies.txt if not specified.
 """
 
 import json
