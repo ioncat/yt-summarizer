@@ -680,30 +680,32 @@ export default function ResultPage() {
           <a className="btn btn-secondary" href={`/benchmark/${result.video_id}`}>
             ⚖ Benchmark
           </a>
-          <select
-            className="model-select-inline"
-            value={reextractLang}
-            onChange={e => setReextractLang(e.target.value)}
-            disabled={!!result.reextract_in_progress}
-            title="Language for subtitle re-extraction"
-          >
-            <option value="auto">Auto</option>
-            <option value="ru">Russian</option>
-            <option value="en">English</option>
-            <option value="uk">Ukrainian</option>
-          </select>
-          <button
-            className="btn btn-secondary"
-            onClick={handleReextract}
-            disabled={
-              !!result.reextract_in_progress ||
-              result.cleanup_status === 'processing' ||
-              result.summary_status === 'processing'
-            }
-            title="Re-fetch subtitles from YouTube. Cleanup and Summary will be cleared."
-          >
-            {result.reextract_in_progress ? '↻ Re-extracting…' : '↻ Re-extract'}
-          </button>
+          {activeTab === 'subtitles' && (<>
+            <select
+              className="model-select-inline"
+              value={reextractLang}
+              onChange={e => setReextractLang(e.target.value)}
+              disabled={!!result.reextract_in_progress}
+              title="Language for subtitle re-extraction"
+            >
+              <option value="auto">Auto</option>
+              <option value="ru">Russian</option>
+              <option value="en">English</option>
+              <option value="uk">Ukrainian</option>
+            </select>
+            <button
+              className="btn btn-secondary"
+              onClick={handleReextract}
+              disabled={
+                !!result.reextract_in_progress ||
+                result.cleanup_status === 'processing' ||
+                result.summary_status === 'processing'
+              }
+              title="Re-fetch subtitles from YouTube. Cleanup and Summary will be cleared."
+            >
+              {result.reextract_in_progress ? '↻ Re-extracting…' : '↻ Re-extract'}
+            </button>
+          </>)}
           <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
         </div>
 
