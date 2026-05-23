@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import {
@@ -11,6 +11,8 @@ import {
   ResultResponse,
 } from '../api'
 import { renderText } from '../utils/renderText'
+
+const MindmapView = lazy(() => import('../components/MindmapView'))
 
 type Tab = 'subtitles' | 'cleaned' | 'summary' | 'chat'
 
@@ -52,6 +54,7 @@ export default function ResultPage() {
   const [markdownEnabled, setMarkdownEnabled] = useState(() =>
     localStorage.getItem('yt-md-enabled') === 'true'
   )
+  const [mindmapEnabled, setMindmapEnabled] = useState(false)
   const [reextractLang, setReextractLang] = useState('auto')
   const [cleanupModel, setCleanupModel] = useState('')
   const [summaryModel, setSummaryModel] = useState('')
@@ -838,6 +841,13 @@ export default function ResultPage() {
             </button>
           )}
         </div>
+          {activeTab === 'summary' && result.summary_text && (
+            <button
+              className={`md-toggle ${mindmapEnabled ? 'md-toggle--on' : ''}`}
+              onClick={() => setMindmapEnabled(v => !v)}
+              title={mindmapEnabled ? 'Mindmap ON — click to switch to text' : 'Text view — click to show mindmap'}
+            >🗺</button>
+          )}
           <button
             className={`md-toggle ${markdownEnabled ? 'md-toggle--on' : ''}`}
             onClick={() => {
@@ -859,6 +869,10 @@ export default function ResultPage() {
                     ? 'Summary failed. Click "↺ Re-run summary" to try again.'
                     : 'No summary yet. Click "✦ Summarize" above to generate one.'}
               </div>
+            ) : mindmapEnabled ? (
+              <Suspense fallback={<div className="empty">Loading mindmap…</div>}>
+                <MindmapView text={result.summary_text!} />
+              </Suspense>
             ) : (
               <>
                 {markdownEnabled
