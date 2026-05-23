@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import ReactMarkdown from 'react-markdown'
 import {
   getResult, deleteResult,
   startCleanup, cancelCleanup,
@@ -12,6 +13,14 @@ import {
 import { renderText } from '../utils/renderText'
 
 type Tab = 'subtitles' | 'cleaned' | 'summary'
+
+function MarkdownContent({ text }: { text: string }) {
+  return (
+    <div className="formatted-text markdown-content">
+      <ReactMarkdown>{text}</ReactMarkdown>
+    </div>
+  )
+}
 
 function formatDuration(seconds: number | null): string {
   if (seconds === 0) return '0:00'
@@ -40,6 +49,9 @@ export default function ResultPage() {
   const [summaryError, setSummaryError] = useState('')
   const [copied, setCopied] = useState(false)
   const [activeTab, setActiveTab] = useState<Tab>('subtitles')
+  const [markdownEnabled, setMarkdownEnabled] = useState(() =>
+    localStorage.getItem('yt-md-enabled') === 'true'
+  )
   const [reextractLang, setReextractLang] = useState('auto')
   const [cleanupModel, setCleanupModel] = useState('')
   const [summaryModel, setSummaryModel] = useState('')
@@ -770,6 +782,7 @@ export default function ResultPage() {
           </div>
         )}
 
+        <div className="result-tabs-bar">
         <div className="result-tabs">
           <button
             className={`result-tab ${activeTab === 'subtitles' ? 'active' : ''}`}
@@ -794,6 +807,16 @@ export default function ResultPage() {
               : 'Summary'}
           </button>
         </div>
+          <button
+            className={`md-toggle ${markdownEnabled ? 'md-toggle--on' : ''}`}
+            onClick={() => {
+              const next = !markdownEnabled
+              setMarkdownEnabled(next)
+              localStorage.setItem('yt-md-enabled', String(next))
+            }}
+            title={markdownEnabled ? 'Markdown rendering ON — click to switch to plain text' : 'Plain text — click to enable Markdown rendering'}
+          >MD</button>
+        </div>
 
         {activeTab === 'summary' ? (
           <>
@@ -807,7 +830,10 @@ export default function ResultPage() {
               </div>
             ) : (
               <>
-                <div className="formatted-text">{result.summary_text}</div>
+                {markdownEnabled
+                  ? <MarkdownContent text={result.summary_text!} />
+                  : <div className="formatted-text">{renderText(result.summary_text!)}</div>
+                }
 
                 {/* Chat thread */}
                 {chatHistory.length > 0 && (
@@ -834,15 +860,19 @@ export default function ResultPage() {
                     <div className="chat-thread">
                       {chatHistory.map((msg, i) => (
                         <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
-                          {msg.content || (msg.role === 'assistant' && isChatting
-                            ? (
-                              <span className="chat-typing">
-                                <span className="chat-typing-dot" />
-                                <span className="chat-typing-dot" />
-                                <span className="chat-typing-dot" />
-                              </span>
-                            )
-                            : null)}
+                          {msg.content
+                            ? (markdownEnabled && msg.role === 'assistant'
+                                ? <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                : msg.content)
+                            : (msg.role === 'assistant' && isChatting
+                                ? (
+                                  <span className="chat-typing">
+                                    <span className="chat-typing-dot" />
+                                    <span className="chat-typing-dot" />
+                                    <span className="chat-typing-dot" />
+                                  </span>
+                                )
+                                : null)}
                           {msg.content && (<>
                             <button
                               className="chat-msg-copy"
@@ -875,7 +905,12 @@ export default function ResultPage() {
                 : 'No cleaned version yet. Click "✦ Clean with AI" above to start.'}
           </div>
         ) : (
-          <div className="formatted-text">{displayText ? renderText(displayText) : null}</div>
+          {displayText
+            ? markdownEnabled
+              ? <MarkdownContent text={displayText} />
+              : <div className="formatted-text">{renderText(displayText)}</div>
+            : null
+          }
         )}
       </div>
     </div>
