@@ -13,7 +13,7 @@ Rules:
 - Structure: # (single root topic), ## (main branches, 4-7 items), - bullet points (2-4 per branch)
 - Maximum 3 levels deep
 - Each node: short phrase only (3-7 words), NO full sentences, NO punctuation at end
-- CRITICAL: write ALL output in {language} — do not switch to any other language
+- Mandatory: answer in {language}.
 - Do not include details, examples, or elaborations — only key concepts"""
 
 DEFAULT_USER_TEMPLATE = "Generate a mindmap hierarchy for this text:\n\n{text}"
