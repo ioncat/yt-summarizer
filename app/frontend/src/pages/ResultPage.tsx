@@ -630,89 +630,97 @@ export default function ResultPage() {
         </div>
 
         <div className="actions">
-          {/* Row 1: main actions */}
-          <button className="btn btn-secondary" onClick={handleCopy}>
-            {copied ? 'Copied!' : 'Copy text'}
-          </button>
-
-          {activeTab === 'cleaned' && (<>
-            <select
-              className="model-select-inline"
-              value={cleanupModel}
-              onChange={e => handleCleanupModelChange(e.target.value)}
-              disabled={models.length === 0}
-              title={models.length === 0 ? 'Ollama offline — cannot load models' : 'Model for AI cleanup'}
-            >
-              <option value="">— cleanup model —</option>
-              {models.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-            {result.cleanup_status === 'processing' ? (
-              <button className="btn btn-secondary" onClick={handleCancelCleanup}>✕ Stop</button>
-            ) : (
-              <button className="btn btn-ai" onClick={handleCleanup}>
-                {result.cleanup_status === 'done' ? '↺ Re-run AI cleanup' : '✦ Clean with AI'}
+          {/* ── Row 1 ── */}
+          <div className="actions-row">
+            {activeTab === 'subtitles' && <>
+              <button className="btn btn-secondary" onClick={handleCopy}>
+                {copied ? 'Copied!' : 'Copy text'}
               </button>
-            )}
-          </>)}
+              <a className="btn btn-secondary" href={result.url} target="_blank" rel="noreferrer">Open video</a>
+              <a className="btn btn-secondary" href={`/benchmark/${result.video_id}`}>⚖ Benchmark</a>
+            </>}
 
-          {activeTab === 'summary' && (<>
-            <select
-              className="model-select-inline"
-              value={summaryModel}
-              onChange={e => handleSummaryModelChange(e.target.value)}
-              disabled={models.length === 0}
-              title={models.length === 0 ? 'Ollama offline — cannot load models' : 'Model for summarization'}
-            >
-              <option value="">— summary model —</option>
-              {models.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-            {result.summary_status === 'processing' ? (
-              <button className="btn btn-secondary" onClick={handleCancelSummary}>✕ Stop</button>
-            ) : (
-              <button className="btn btn-ai" onClick={handleSummarize}>
-                {result.summary_status === 'done' ? '↺ Re-run summary' : '✦ Summarize'}
+            {activeTab === 'cleaned' && <>
+              <select
+                className="model-select-inline"
+                value={cleanupModel}
+                onChange={e => handleCleanupModelChange(e.target.value)}
+                disabled={models.length === 0}
+                title={models.length === 0 ? 'Ollama offline — cannot load models' : 'Model for AI cleanup'}
+              >
+                <option value="">— cleanup model —</option>
+                {models.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+              {result.cleanup_status === 'processing' ? (
+                <button className="btn btn-secondary" onClick={handleCancelCleanup}>✕ Stop</button>
+              ) : (
+                <button className="btn btn-ai" onClick={handleCleanup}>
+                  {result.cleanup_status === 'done' ? '↺ Re-run AI cleanup' : '✦ Clean with AI'}
+                </button>
+              )}
+              <a className="btn btn-secondary" href={`/benchmark/${result.video_id}`}>⚖ Benchmark</a>
+            </>}
+
+            {activeTab === 'summary' && <>
+              <select
+                className="model-select-inline"
+                value={summaryModel}
+                onChange={e => handleSummaryModelChange(e.target.value)}
+                disabled={models.length === 0}
+                title={models.length === 0 ? 'Ollama offline — cannot load models' : 'Model for summarization'}
+              >
+                <option value="">— summary model —</option>
+                {models.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+              {result.summary_status === 'processing' ? (
+                <button className="btn btn-secondary" onClick={handleCancelSummary}>✕ Stop</button>
+              ) : (
+                <button className="btn btn-ai" onClick={handleSummarize}>
+                  {result.summary_status === 'done' ? '↺ Re-run summary' : '✦ Summarize'}
+                </button>
+              )}
+              <a className="btn btn-secondary" href={`/benchmark/${result.video_id}`}>⚖ Benchmark</a>
+            </>}
+          </div>
+
+          {/* ── Row 2 ── */}
+          <div className="actions-row">
+            {activeTab === 'subtitles' && <>
+              <select
+                className="model-select-inline"
+                value={reextractLang}
+                onChange={e => setReextractLang(e.target.value)}
+                disabled={!!result.reextract_in_progress}
+                title="Language for subtitle re-extraction"
+              >
+                <option value="auto">Auto</option>
+                <option value="ru">Russian</option>
+                <option value="en">English</option>
+                <option value="uk">Ukrainian</option>
+              </select>
+              <button
+                className="btn btn-secondary"
+                onClick={handleReextract}
+                disabled={
+                  !!result.reextract_in_progress ||
+                  result.cleanup_status === 'processing' ||
+                  result.summary_status === 'processing'
+                }
+                title="Re-fetch subtitles from YouTube. Cleanup and Summary will be cleared."
+              >
+                {result.reextract_in_progress ? '↻ Re-extracting…' : '↻ Re-extract'}
               </button>
-            )}
-          </>)}
+            </>}
 
-          <a className="btn btn-secondary" href={result.url} target="_blank" rel="noreferrer">
-            Open video
-          </a>
-          <a className="btn btn-secondary" href={`/benchmark/${result.video_id}`}>
-            ⚖ Benchmark
-          </a>
+            {(activeTab === 'cleaned' || activeTab === 'summary') && <>
+              <button className="btn btn-secondary" onClick={handleCopy}>
+                {copied ? 'Copied!' : 'Copy text'}
+              </button>
+              <a className="btn btn-secondary" href={result.url} target="_blank" rel="noreferrer">Open video</a>
+            </>}
 
-          {/* Row 2: destructive actions — full-width divider forces line break */}
-          <div className="actions-divider" />
-          {activeTab === 'subtitles' && (
-            <select
-              className="model-select-inline"
-              value={reextractLang}
-              onChange={e => setReextractLang(e.target.value)}
-              disabled={!!result.reextract_in_progress}
-              title="Language for subtitle re-extraction"
-            >
-              <option value="auto">Auto</option>
-              <option value="ru">Russian</option>
-              <option value="en">English</option>
-              <option value="uk">Ukrainian</option>
-            </select>
-          )}
-          {activeTab === 'subtitles' && (
-            <button
-              className="btn btn-secondary"
-              onClick={handleReextract}
-              disabled={
-                !!result.reextract_in_progress ||
-                result.cleanup_status === 'processing' ||
-                result.summary_status === 'processing'
-              }
-              title="Re-fetch subtitles from YouTube. Cleanup and Summary will be cleared."
-            >
-              {result.reextract_in_progress ? '↻ Re-extracting…' : '↻ Re-extract'}
-            </button>
-          )}
-          <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
+            <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
+          </div>
         </div>
 
         {activeTab === 'cleaned' && (result.cleanup_status === 'failed' || cleanupError) && (
