@@ -173,7 +173,7 @@ All 5 epics done. Full stack running:
 - **chat_history bug fix**: `video_service.get_result()` now explicitly `json.loads()` if `fmt.chat_history` is a string (SQLAlchemy JSON column bypassed by raw SQL write in `save_chat_history`)
 - **Chat auto-reset removed**: `useEffect([summary_text])` that cleared chatHistory on every summary_text change removed; user controls chat lifetime via Clear chat only
 - **Pipeline guard in handleSummarize**: if `cleanup_status` is null and `cleaned_text` is absent → `confirm()` dialog "Run cleanup → summarize pipeline?"; on confirm → `handleCleanup()` + `autoSummarizeAfterCleanupRef = true`; when cleanup reaches `done` → auto-starts summary without switching to Cleaned tab
-- **Behavior docs**: `docs/behavior.md` — Mermaid diagrams: Activity (full pipeline), StateDiagram × 3 (Task / Cleanup / Summary), StateDiagram (ResultPage UI), dependency graph
+- **Behavior docs**: `docs/system-behavior.md` — Mermaid diagrams: Activity (full pipeline), StateDiagram × 3 (Task / Cleanup / Summary), StateDiagram (ResultPage UI), dependency graph
 
 #### Epic 25 ✅ — Chapter Heading Preservation & Rendering
 - `text_cleaner.py`: paragraphs starting with `## ` → bypass LLM entirely, pass through unchanged
