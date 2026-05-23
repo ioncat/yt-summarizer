@@ -13,18 +13,20 @@ export default function App() {
   return (
     <>
       <nav>
-        <div className="nav-left">
-          <NavLink to="/" className="logo">YT Summarizer</NavLink>
-        </div>
-        <div className="nav-center">
-          <NavLink to="/">+ New</NavLink>
-          <NavLink to="/history">◷ History</NavLink>
-          <NavLink to="/benchmarks">⚖ Benchmarks</NavLink>
-          <NavLink to="/settings">Settings ⚙</NavLink>
-        </div>
-        <div className="nav-right">
-          <ThemeToggle />
-          <StatusBar />
+        <div className="nav-inner">
+          <div className="nav-left">
+            <NavLink to="/" className="logo">YT Summarizer</NavLink>
+          </div>
+          <div className="nav-center">
+            <NavLink to="/">+ New</NavLink>
+            <NavLink to="/history">◷ History</NavLink>
+            <NavLink to="/benchmarks">⚖ Benchmarks</NavLink>
+            <NavLink to="/settings">Settings ⚙</NavLink>
+          </div>
+          <div className="nav-right">
+            <ThemeToggle />
+            <StatusBar />
+          </div>
         </div>
       </nav>
       <Routes>

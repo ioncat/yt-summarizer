@@ -1,4 +1,4 @@
-# Поведенческая модель — YT Summarizer
+# System Behavior — YT Summarizer
 
 Документ описывает **как работает система**: пайплайн обработки, жизненный цикл сущностей и логику интерфейса. Для понимания **из чего состоит система** — см. `CLAUDE.md`.
 
@@ -10,18 +10,18 @@
 
 ```mermaid
 flowchart TD
-    A([Пользователь вводит URL]) --> B{Автопайплайн\nвключён?}
+    A([Пользователь вводит URL]) --> B{"Автопайплайн включён?"}
 
     B -->|Нет| C[Запуск: Extract]
-    B -->|Да| PRE{Предварительная\nпроверка}
+    B -->|Да| PRE{"Предварительная проверка"}
 
-    PRE -->|Ollama offline\nили модель не задана| ERR_PRE[Блокировка:\nпоказать список проблем]
+    PRE -->|"Ollama offline / модель не задана"| ERR_PRE["Блокировка: показать список проблем"]
     PRE -->|OK| C
 
     C --> EXTRACT{Результат}
 
-    EXTRACT -->|Успех| FT[(formatted_text\nсохранён в БД)]
-    EXTRACT -->|Язык недоступен| LANG[Показать доступные языки\nПользователь выбирает]
+    EXTRACT -->|Успех| FT[("formatted_text сохранён в БД")]
+    EXTRACT -->|Язык недоступен| LANG["Показать доступные языки — пользователь выбирает"]
     EXTRACT -->|Другая ошибка| ERR_EX[Показать ошибку]
     LANG --> C
 
@@ -30,13 +30,13 @@ flowchart TD
     AP -->|Да| CL[Запуск: Cleanup]
 
     CL --> CL_R{Результат}
-    CL_R -->|Успех| CT[(cleaned_text\nсохранён в БД)]
-    CL_R -->|Fail / Ollama упал| RP
+    CL_R -->|Успех| CT[("cleaned_text сохранён в БД")]
+    CL_R -->|"Fail / Ollama упал"| RP
 
     CT --> SM[Запуск: Summary]
 
     SM --> SM_R{Результат}
-    SM_R -->|Успех| ST[(summary_text\nсохранён в БД)]
+    SM_R -->|Успех| ST[("summary_text сохранён в БД")]
     SM_R -->|Fail| RP
 
     ST --> RP
@@ -53,7 +53,7 @@ stateDiagram-v2
     [*] --> pending : POST /api/process
     pending --> processing : воркер подхватил
     processing --> completed : субтитры извлечены
-    processing --> failed : ошибка yt-dlp\nили язык недоступен
+    processing --> failed : ошибка yt-dlp / язык недоступен
     completed --> [*]
     failed --> [*] : пользователь видит ошибку
 ```
@@ -66,12 +66,12 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> null : видео обработано,\ncleanup не запускался
+    [*] --> null : видео обработано, cleanup не запускался
 
     null --> processing : POST /cleanup
 
     processing --> done : все параграфы обработаны
-    processing --> failed : Ollama недоступен\nили модель не задана
+    processing --> failed : Ollama недоступен / модель не задана
     processing --> null : пользователь нажал Stop
 
     done --> processing : ↺ Re-run AI cleanup
@@ -93,17 +93,17 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> null : cleanup завершён,\nsummary не запускался
+    [*] --> null : cleanup завершён, summary не запускался
 
-    null --> pipeline_confirm : ✦ Summarize\n[cleanup не выполнен]
+    null --> pipeline_confirm : ✦ Summarize — cleanup не выполнен
     pipeline_confirm --> cleanup_then_summary : пользователь подтвердил
     pipeline_confirm --> null : пользователь отказался
 
-    cleanup_then_summary --> processing : cleanup done →\naвто-старт summary
+    cleanup_then_summary --> processing : cleanup done → авто-старт summary
 
-    null --> processing : ✦ Summarize\n[cleanup уже done]
+    null --> processing : ✦ Summarize — cleanup уже done
     processing --> done : summary_text сохранён
-    processing --> failed : Ollama недоступен\nили таймаут
+    processing --> failed : Ollama недоступен / таймаут
     processing --> null : пользователь нажал Stop
 
     done --> processing : ↺ Re-run summary
@@ -128,7 +128,7 @@ stateDiagram-v2
     state "Subtitles tab" as SUB {
         [*] --> sub_ready : formatted_text есть
         sub_ready --> reextracting : ↻ Re-extract
-        reextracting --> sub_ready : завершено\n(cleanup + summary сброшены)
+        reextracting --> sub_ready : завершено (cleanup + summary сброшены)
     }
 
     state "Cleaned tab" as CLN {
@@ -143,8 +143,8 @@ stateDiagram-v2
 
     state "Summary tab" as SUM {
         [*] --> sum_empty : summary не запускался
-        sum_empty --> sum_pipeline : ✦ Summarize\n[cleanup не done]\n→ confirm dialog
-        sum_empty --> sum_processing : ✦ Summarize\n[cleanup done]
+        sum_empty --> sum_pipeline : ✦ Summarize — cleanup не done → confirm dialog
+        sum_empty --> sum_processing : ✦ Summarize — cleanup done
         sum_pipeline --> sum_processing : авто после cleanup
         sum_processing --> sum_done : успех
         sum_processing --> sum_failed : ошибка
@@ -154,10 +154,10 @@ stateDiagram-v2
     }
 
     state "Chat tab" as CHT {
-        [*] --> chat_hidden : chatHistory пустой\n(вкладка не видна)
+        [*] --> chat_hidden : chatHistory пустой (вкладка не видна)
         chat_hidden --> chat_visible : первый обмен завершён
         chat_visible --> chat_hidden : Clear chat
-        chat_visible --> chat_visible : отправить вопрос\nудалить сообщение
+        chat_visible --> chat_visible : отправить вопрос / удалить сообщение
     }
 ```
 
@@ -167,11 +167,11 @@ stateDiagram-v2
 
 ```mermaid
 flowchart LR
-    EX[Extract\nformatted_text] -->|обязательно| CL[Cleanup\ncleaned_text]
-    CL -->|рекомендуется| SM[Summary\nsummary_text]
+    EX["Extract — formatted_text"] -->|обязательно| CL["Cleanup — cleaned_text"]
+    CL -->|рекомендуется| SM["Summary — summary_text"]
     SM -->|требуется| CH[Chat]
 
-    EX -.->|fallback если\ncleanup пропущен| SM
+    EX -.->|"fallback если cleanup пропущен"| SM
 
     style EX fill:#1e3a5f,color:#fff
     style CL fill:#1e3a5f,color:#fff

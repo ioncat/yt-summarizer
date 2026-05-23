@@ -19,7 +19,8 @@ YT Summarizer gives you a short AI summary of any YouTube video, so you can:
 The goal: turn a watch-or-skip guess into a fast, informed decision.
 
 → **[Quick Start Guide](docs/quick-start-guide.md)** — minimal setup to try it out  
-→ **[User Guide](docs/USER_GUIDE.md)** — features, settings, troubleshooting, FAQ
+→ **[User Guide](docs/USER_GUIDE.md)** — features, settings, troubleshooting, FAQ  
+→ **[System Behavior](docs/system-behavior.md)** — pipeline activity diagram + state diagrams (Mermaid)
 
 ---
 
