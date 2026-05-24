@@ -18,10 +18,15 @@ function compressionLabel(input: number, output: number | null): string {
   return '0% change'
 }
 
-function modeBadge(mode: string, chunks?: number | null): string {
-  if (mode === 'full_extract') return `Full Extract${chunks ? ` · ${chunks} ch` : ''}`
-  if (mode === 'map_reduce') return `Map-Reduce`
+function modeBadge(mode: string): string {
+  if (mode === 'full_extract') return 'Full Extract'
+  if (mode === 'map_reduce') return 'Map-Reduce'
   return 'Single-pass'
+}
+
+function formatChars(n: number | null): string {
+  if (n == null) return '—'
+  return n.toLocaleString('ru-RU') + ' chars'
 }
 
 const MODE_OPTIONS = [
@@ -43,6 +48,8 @@ export default function BenchmarkPage() {
   const [runs, setRuns] = useState<BenchmarkRun[]>([])
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // stats panel: Set of run IDs where panel is CLOSED; empty = all open
+  const [statsClosed, setStatsClosed] = useState<Set<number>>(new Set())
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Synchronized scroll
@@ -97,10 +104,17 @@ export default function BenchmarkPage() {
 
   function toggleModel(model: string) {
     setSelectedModels(prev =>
-      prev.includes(model)
-        ? prev.filter(m => m !== model)
-        : prev.length < 4 ? [...prev, model] : prev
+      prev.includes(model) ? prev.filter(m => m !== model) : [...prev, model]
     )
+  }
+
+  function toggleStats(runId: number) {
+    setStatsClosed(prev => {
+      const next = new Set(prev)
+      if (next.has(runId)) next.delete(runId)
+      else next.add(runId)
+      return next
+    })
   }
 
   async function handleRun() {
@@ -228,7 +242,7 @@ p{margin:0 0 12px}
           </select>
         </div>
         <div className="benchmark-model-selector">
-          <label>Models (select up to 4):</label>
+          <label>Models:</label>
           <div className="model-chips">
             {availableModels.map(m => (
               <button
@@ -281,61 +295,86 @@ p{margin:0 0 12px}
           className="benchmark-grid"
           style={{ gridTemplateColumns: `repeat(${displayRuns.length}, 1fr)` }}
         >
-          {displayRuns.map((run, idx) => (
-            <div key={run.id} className={`benchmark-col benchmark-col--${run.status}`}>
-              <div className="benchmark-col-header">
-                <strong className="benchmark-model-name">{run.model}</strong>
-                {run.triggered_by === 'main' && (
-                  <span className="benchmark-badge benchmark-badge-original" title="From Result page (primary pipeline)">📌 Original</span>
-                )}
-                <span className="benchmark-badge">{modeBadge(run.mode)}</span>
-                {run.status === 'done' && (
-                  <>
-                    <span className="benchmark-meta">{formatDuration(run.duration_seconds)}</span>
-                    {run.output_chars && (
-                      <span className="benchmark-meta">
-                        {compressionLabel(run.input_chars, run.output_chars)}
-                      </span>
-                    )}
-                  </>
-                )}
-                {run.status === 'queued' && (
-                  <span className="benchmark-meta queued">⏸ queued</span>
-                )}
-                {run.status === 'processing' && (
-                  <span className="benchmark-meta processing">⏳ processing…</span>
-                )}
-                {run.status === 'failed' && (
-                  <span className="benchmark-meta failed">❌ failed</span>
-                )}
-                <button
-                  type="button"
-                  className="benchmark-col-close"
-                  aria-label="Delete this run"
-                  title="Delete this run"
-                  onClick={() => handleDeleteRun(run)}
+          {displayRuns.map((run, idx) => {
+            const statsOpen = !statsClosed.has(run.id)
+            const compression = run.output_chars
+              ? compressionLabel(run.input_chars, run.output_chars)
+              : null
+            return (
+              <div key={run.id} className={`benchmark-col benchmark-col--${run.status}`}>
+                {/* Header */}
+                <div className="benchmark-col-header">
+                  <strong className="benchmark-model-name">{run.model}</strong>
+                  {run.triggered_by === 'main' && (
+                    <span className="benchmark-badge benchmark-badge-original" title="From Result page (primary pipeline)">📌 Original</span>
+                  )}
+                  <span className="benchmark-badge">{modeBadge(run.mode)}</span>
+                  {run.status === 'queued' && <span className="benchmark-meta queued">⏸ queued</span>}
+                  {run.status === 'processing' && <span className="benchmark-meta processing">⏳ processing…</span>}
+                  {run.status === 'failed' && <span className="benchmark-meta failed">❌ failed</span>}
+                  <button
+                    type="button"
+                    className="benchmark-col-close"
+                    aria-label="Delete this run"
+                    title="Delete this run"
+                    onClick={() => handleDeleteRun(run)}
+                  >×</button>
+                </div>
+
+                {/* Stats panel */}
+                <div className="benchmark-stats">
+                  <button
+                    className="benchmark-stats-toggle"
+                    onClick={() => toggleStats(run.id)}
+                  >
+                    {statsOpen ? '▾' : '▸'} Stats
+                  </button>
+                  {statsOpen && (
+                    <div className="benchmark-stats-body">
+                      <div className="benchmark-stat-row">
+                        <span className="benchmark-stat-label">Duration</span>
+                        <span className="benchmark-stat-value">{formatDuration(run.duration_seconds)}</span>
+                      </div>
+                      <div className="benchmark-stat-row">
+                        <span className="benchmark-stat-label">Input</span>
+                        <span className="benchmark-stat-value">{formatChars(run.input_chars)}</span>
+                      </div>
+                      <div className="benchmark-stat-row">
+                        <span className="benchmark-stat-label">Output</span>
+                        <span className="benchmark-stat-value">{formatChars(run.output_chars ?? null)}</span>
+                      </div>
+                      {compression && (
+                        <div className="benchmark-stat-row">
+                          <span className="benchmark-stat-label">Compression</span>
+                          <span className="benchmark-stat-value">{compression}</span>
+                        </div>
+                      )}
+                      <div className="benchmark-stat-row">
+                        <span className="benchmark-stat-label">Stage</span>
+                        <span className="benchmark-stat-value">{run.stage === 'summary' ? 'Summary' : 'Cleanup'}</span>
+                      </div>
+                      <div className="benchmark-stat-row">
+                        <span className="benchmark-stat-label">Source</span>
+                        <span className="benchmark-stat-value">{run.triggered_by === 'main' ? 'Main pipeline' : 'Benchmark'}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Text body */}
+                <div
+                  className="benchmark-col-body formatted-text"
+                  ref={el => { columnRefs.current[idx] = el }}
+                  onScroll={() => handleColumnScroll(idx)}
                 >
-                  ×
-                </button>
+                  {run.status === 'failed' && <p className="benchmark-error">Model failed or timed out.</p>}
+                  {run.status === 'queued' && <p className="benchmark-queued">Waiting for previous runs to finish…</p>}
+                  {run.status === 'processing' && <p className="benchmark-processing">Processing…</p>}
+                  {run.status === 'done' && run.output_text && renderText(run.output_text)}
+                </div>
               </div>
-              <div
-                className="benchmark-col-body formatted-text"
-                ref={el => { columnRefs.current[idx] = el }}
-                onScroll={() => handleColumnScroll(idx)}
-              >
-                {run.status === 'failed' && (
-                  <p className="benchmark-error">Model failed or timed out.</p>
-                )}
-                {run.status === 'queued' && (
-                  <p className="benchmark-queued">Waiting for previous runs to finish…</p>
-                )}
-                {run.status === 'processing' && (
-                  <p className="benchmark-processing">Processing…</p>
-                )}
-                {run.status === 'done' && run.output_text && renderText(run.output_text)}
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
