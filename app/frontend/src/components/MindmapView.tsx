@@ -25,7 +25,7 @@ export default function MindmapView({ text, title, onRegenerate }: Props) {
         fitRatio: 0.9,
         duration: 300,
         maxWidth: 360,
-        initialExpandLevel: 2,
+        initialExpandLevel: 3,
       })
       mmRef.current = mm
       mm.setData(root).then(() => mm.fit())

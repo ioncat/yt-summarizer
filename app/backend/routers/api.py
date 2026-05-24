@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import Annotated
 
 import os
+
+logger = logging.getLogger("api.mindmap")
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
@@ -413,22 +416,27 @@ async def cancel_summary(video_id: str):
 
 async def _run_mindmap(video_id: str) -> None:
     """Background task: generate compact mindmap markdown via LLM."""
+    logger.info("[mindmap] _run_mindmap started for video_id=%s", video_id)
     from models.database import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
         result = await get_result(db, video_id)
         if not result:
+            logger.warning("[mindmap] video_id=%s not found in DB", video_id)
             return
 
         text = result.get("summary_text") or result.get("cleaned_text") or result.get("formatted_text")
         if not text:
+            logger.warning("[mindmap] no text for video_id=%s", video_id)
             await finish_mindmap(db, video_id, None)
             return
 
         stage = await get_stage_settings(db, "summarization")
         ollama_url = await get_app_setting(db, "ollama_url")
-        model = stage.model if stage else None
+        model = stage.get("model") if stage else None
+        logger.info("[mindmap] ollama_url=%s model=%s text_len=%d", ollama_url, model, len(text))
 
         if not ollama_url or not model:
+            logger.warning("[mindmap] missing ollama_url or model, failing")
             await finish_mindmap(db, video_id, None)
             return
 
@@ -437,6 +445,7 @@ async def _run_mindmap(video_id: str) -> None:
         lang_map = {"ru": "Russian", "en": "English", "uk": "Ukrainian", "de": "German",
                     "fr": "French", "es": "Spanish", "zh": "Chinese", "ja": "Japanese"}
         language = lang_map.get(lang_code.lower(), lang_code)
+        logger.info("[mindmap] language=%s, calling generate_mindmap...", language)
 
         mindmap_md = await generate_mindmap(
             text=text,
@@ -446,12 +455,15 @@ async def _run_mindmap(video_id: str) -> None:
             is_cancelled=lambda: video_id in _MINDMAP_CANCEL_SET,
         )
 
+        logger.info("[mindmap] generate_mindmap returned: %s", "None" if mindmap_md is None else f"{len(mindmap_md)} chars")
+
         if video_id in _MINDMAP_CANCEL_SET:
             _MINDMAP_CANCEL_SET.discard(video_id)
             await reset_mindmap_status(db, video_id)
             return
 
         await finish_mindmap(db, video_id, mindmap_md)
+        logger.info("[mindmap] finish_mindmap done for video_id=%s", video_id)
 
 
 @router.post("/result/{video_id}/mindmap")

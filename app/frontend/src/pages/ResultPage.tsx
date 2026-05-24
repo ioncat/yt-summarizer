@@ -5,7 +5,7 @@ import {
   getResult, deleteResult,
   startCleanup, cancelCleanup,
   startSummary, cancelSummary,
-  startMindmap,
+  startMindmap, cancelMindmap,
   reextractSubtitles,
   saveChatHistory, clearChatHistory,
   getSettings, getModels, saveSettings,
@@ -910,7 +910,18 @@ export default function ResultPage() {
               </div>
             ) : mindmapEnabled ? (
               result.mindmap_status === 'processing' ? (
-                <div className="empty"><span className="tab-spinner" /> Generating mindmap…</div>
+                <div className="empty">
+                  <span className="tab-spinner" /> Generating mindmap…
+                  <button
+                    className="cancel-btn"
+                    style={{ marginLeft: '1rem' }}
+                    onClick={async () => {
+                      await cancelMindmap(videoId!)
+                      stopMindmapPolling()
+                      setResult(r => r ? { ...r, mindmap_status: null } : r)
+                    }}
+                  >✕ Stop</button>
+                </div>
               ) : result.mindmap_status === 'failed' || mindmapError ? (
                 <div className="cleanup-error">
                   {mindmapError || 'Mindmap generation failed. Check that Ollama is running and a model is selected in Settings → Summarization.'}
