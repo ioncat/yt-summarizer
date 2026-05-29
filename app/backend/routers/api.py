@@ -874,6 +874,14 @@ async def clear_queue_pending(db: Annotated[AsyncSession, Depends(get_db)]):
     return {"cleared": count}
 
 
+@router.delete("/queue/failed")
+async def clear_queue_failed(db: Annotated[AsyncSession, Depends(get_db)]):
+    """Clear all failed queue items."""
+    from services.queue_service import clear_failed
+    count = await clear_failed(db)
+    return {"cleared": count}
+
+
 @router.delete("/queue/{item_id}")
 async def delete_queue_item(item_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
     """Delete a single pending queue item."""

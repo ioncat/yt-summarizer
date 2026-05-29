@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { getQueue, deleteQueueItem, clearQueuePending, QueueItem } from '../api'
+import { getQueue, deleteQueueItem, clearQueuePending, clearQueueFailed, QueueItem } from '../api'
 
 const STATUS_ICON: Record<string, string> = {
   pending: '⏸',
@@ -91,7 +91,18 @@ export default function QueuePage() {
     }
   }
 
+  async function handleClearFailed() {
+    if (!confirm('Remove all failed items?')) return
+    try {
+      const res = await clearQueueFailed()
+      if (res.cleared > 0) setItems(prev => prev.filter(i => i.status !== 'failed'))
+    } catch {
+      // ignore
+    }
+  }
+
   const pendingCount = items.filter(i => i.status === 'pending').length
+  const failedCount = items.filter(i => i.status === 'failed').length
   const processingItem = items.find(i => i.status === 'processing')
 
   return (
@@ -100,6 +111,11 @@ export default function QueuePage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
           <h2 style={{ margin: 0 }}>⏱ Processing Queue</h2>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {failedCount > 0 && (
+              <button className="btn btn-danger btn-sm" onClick={handleClearFailed}>
+                Clean failed ({failedCount})
+              </button>
+            )}
             {pendingCount > 0 && (
               <button className="btn btn-secondary btn-sm" onClick={handleClearPending}>
                 Clear pending ({pendingCount})

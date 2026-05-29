@@ -150,6 +150,15 @@ async def clear_pending(db: AsyncSession) -> int:
     return result.rowcount
 
 
+async def clear_failed(db: AsyncSession) -> int:
+    """Delete all failed items. Returns deleted count."""
+    result = await db.execute(
+        text("DELETE FROM processing_queue WHERE status = 'failed'")
+    )
+    await db.commit()
+    return result.rowcount
+
+
 # ---------------------------------------------------------------------------
 # Worker helpers
 # ---------------------------------------------------------------------------

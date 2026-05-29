@@ -383,3 +383,9 @@ export async function clearQueuePending(): Promise<{ cleared: number }> {
   if (!res.ok) throw new Error('Failed to clear queue')
   return res.json()
 }
+
+export async function clearQueueFailed(): Promise<{ cleared: number }> {
+  const res = await fetch(`${BASE}/queue/failed`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to clear failed items')
+  return res.json()
+}
