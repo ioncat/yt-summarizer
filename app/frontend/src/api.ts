@@ -335,7 +335,7 @@ export interface QueueItem {
 export async function queueBulkAdd(
   urls: string[],
   pipeline_stages?: string[],
-): Promise<{ added: number; ids: number[]; invalid: string[] }> {
+): Promise<{ added: number; ids: number[]; invalid: string[]; duplicates: string[] }> {
   const res = await fetch(`${BASE}/queue/bulk`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

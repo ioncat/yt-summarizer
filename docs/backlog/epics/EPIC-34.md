@@ -61,14 +61,19 @@
 | DELETE | `/api/queue` | Очищает только `pending` items (не трогает processing/done/failed) |
 
 **Notes for Engineering:**
-- Validation: каждый URL прогоняется через `extract_video_id()` при добавлении — невалидные отклоняются сразу с указанием строки
+- Validation: каждый URL прогоняется через `extract_video_id()` при добавлении — невалидные отклоняются сразу
+- Dedup: URL считается дублём если его `video_id` уже есть в `videos` (обработан ранее) или в `processing_queue` со статусом `pending`/`processing` (уже в очереди). Дубли пропускаются, не добавляются.
 - `pipeline_stages` default если не передан: читать из `app_settings` (`queue_default_pipeline`, seed = `["extract"]`)
 - `GET /api/queue` включает поля для UI: `id`, `url`, `video_id`, `status`, `error_message`, `added_at`, `started_at`, `finished_at`
+- Ответ `POST /api/queue/bulk`: `{added, ids, invalid: [url], duplicates: [url]}`
 
 **Out of Scope:** pagination для GET /api/queue (при разумном числе видео не нужно)
 
 **Edge Cases:**
 - POST с пустым массивом URL → 400
+- Все URL невалидны → 400
+- Все URL — дубли → 200, `added: 0`, `duplicates: [...]` (не ошибка — пользователь видит почему ничего не добавлено)
+- Часть дублей, часть новых → добавить только новые, `duplicates: [...]` показать в UI
 - DELETE processing item → 409 Conflict
 
 ---
@@ -94,6 +99,8 @@
 **Edge Cases:**
 - Все URL невалидны → показать ошибки inline под textarea
 - Часть валидны, часть нет → добавить валидные, показать список невалидных
+- Все URL — дубли → `added: 0`, показать сообщение "All N URLs already processed" + список
+- Часть дублей → добавить уникальные, показать "N added, M duplicates skipped" + список дублей
 
 ---
 

@@ -763,34 +763,58 @@ async def queue_bulk_add(
     body: BulkQueueRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Add multiple URLs to the processing queue."""
-    from services.queue_service import add_items
+    """Add multiple URLs to the processing queue. Skips duplicates (already processed or in queue)."""
+    from services.queue_service import add_items, get_duplicate_video_ids
+    import json as _json
 
     if not body.urls:
         raise HTTPException(status_code=400, detail="No URLs provided")
 
-    # Validate each URL and collect valid ones
-    valid_urls: list[str] = []
+    # Step 1: validate + deduplicate within batch
+    seen_video_ids: set[str] = set()
+    valid_urls: list[str] = []      # URL → (url, video_id)
+    valid_vid_ids: list[str] = []
     invalid: list[str] = []
-    for url in body.urls:
-        if extract_video_id(url.strip()):
-            valid_urls.append(url.strip())
+    for raw_url in body.urls:
+        url = raw_url.strip()
+        if not url:
+            continue
+        vid = extract_video_id(url)
+        if not vid:
+            invalid.append(url)
+        elif vid in seen_video_ids:
+            invalid.append(url)  # intra-batch duplicate → treat as invalid
         else:
-            invalid.append(url.strip())
+            seen_video_ids.add(vid)
+            valid_urls.append(url)
+            valid_vid_ids.append(vid)
 
     if not valid_urls:
         raise HTTPException(status_code=400, detail={"message": "No valid YouTube URLs", "invalid": invalid})
 
-    # Determine pipeline_stages
+    # Step 2: check against DB (already processed or already in queue)
+    duplicate_vids = await get_duplicate_video_ids(db, valid_vid_ids)
+    new_urls: list[str] = []
+    duplicates: list[str] = []
+    for url, vid in zip(valid_urls, valid_vid_ids):
+        if vid in duplicate_vids:
+            duplicates.append(url)
+        else:
+            new_urls.append(url)
+
+    # Step 3: determine pipeline_stages
     if body.pipeline_stages is not None:
         stages = body.pipeline_stages
     else:
         raw = await get_app_setting(db, "queue_default_pipeline")
-        import json as _json
         stages = _json.loads(raw) if raw else ["extract"]
 
-    ids = await add_items(db, valid_urls, stages)
-    return {"added": len(ids), "ids": ids, "invalid": invalid}
+    # Step 4: add only new
+    ids: list[int] = []
+    if new_urls:
+        ids = await add_items(db, new_urls, stages)
+
+    return {"added": len(ids), "ids": ids, "invalid": invalid, "duplicates": duplicates}
 
 
 @router.get("/queue")

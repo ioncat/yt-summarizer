@@ -32,7 +32,7 @@ export default function HomePage() {
   const [bulkText, setBulkText] = useState('')
   const [bulkPipeline, setBulkPipeline] = useState('extract')
   const [bulkLoading, setBulkLoading] = useState(false)
-  const [bulkResult, setBulkResult] = useState<{ added: number; invalid: string[] } | null>(null)
+  const [bulkResult, setBulkResult] = useState<{ added: number; invalid: string[]; duplicates: string[] } | null>(null)
   const [bulkError, setBulkError] = useState('')
 
   const navigate = useNavigate()
@@ -100,7 +100,7 @@ export default function HomePage() {
       const preset = PIPELINE_PRESETS.find(p => p.value === bulkPipeline)
       const stages = preset?.stages ?? ['extract']
       const res = await queueBulkAdd(bulkUrls, stages)
-      setBulkResult({ added: res.added, invalid: res.invalid })
+      setBulkResult({ added: res.added, invalid: res.invalid, duplicates: res.duplicates ?? [] })
       if (res.added > 0) {
         setBulkText('')
       }
@@ -202,7 +202,17 @@ export default function HomePage() {
             {bulkError && <div className="error-box" style={{ marginBottom: '0.75rem' }}>{bulkError}</div>}
             {bulkResult && (
               <div className={`bulk-result ${bulkResult.added > 0 ? 'bulk-result--ok' : 'bulk-result--warn'}`}>
-                {bulkResult.added > 0 && <span>✓ {bulkResult.added} video{bulkResult.added !== 1 ? 's' : ''} added to queue. <Link to="/queue">View queue →</Link></span>}
+                {bulkResult.added > 0 && (
+                  <div>✓ {bulkResult.added} video{bulkResult.added !== 1 ? 's' : ''} added to queue. <Link to="/queue">View queue →</Link></div>
+                )}
+                {bulkResult.added === 0 && bulkResult.duplicates.length > 0 && (
+                  <div>All URLs already processed — nothing added.</div>
+                )}
+                {bulkResult.duplicates.length > 0 && (
+                  <div style={{ marginTop: '0.25rem', fontSize: '0.8rem', opacity: 0.85 }}>
+                    Already processed ({bulkResult.duplicates.length}): {bulkResult.duplicates.join(', ')}
+                  </div>
+                )}
                 {bulkResult.invalid.length > 0 && (
                   <div style={{ marginTop: '0.25rem', fontSize: '0.8rem', opacity: 0.8 }}>
                     Invalid ({bulkResult.invalid.length}): {bulkResult.invalid.join(', ')}

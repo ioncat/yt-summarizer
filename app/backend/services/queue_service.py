@@ -29,21 +29,56 @@ _WORKER_STOP = False
 # CRUD
 # ---------------------------------------------------------------------------
 
+async def get_duplicate_video_ids(db: AsyncSession, video_ids: list[str]) -> set[str]:
+    """Return subset of video_ids that are already processed or pending in queue."""
+    if not video_ids:
+        return set()
+
+    placeholders = ", ".join(f":vid{i}" for i in range(len(video_ids)))
+    params = {f"vid{i}": v for i, v in enumerate(video_ids)}
+
+    # Already processed (exists in videos table, not a pending placeholder)
+    done = await db.execute(
+        text(
+            f"SELECT video_id FROM videos WHERE video_id IN ({placeholders}) "
+            f"AND url NOT LIKE '__pending__%%'"
+        ),
+        params,
+    )
+    found: set[str] = {row[0] for row in done.fetchall()}
+
+    # Already in queue with pending/processing status
+    in_queue = await db.execute(
+        text(
+            f"SELECT video_id FROM processing_queue "
+            f"WHERE video_id IN ({placeholders}) AND status IN ('pending','processing')"
+        ),
+        params,
+    )
+    found.update(row[0] for row in in_queue.fetchall() if row[0])
+
+    return found
+
+
 async def add_items(db: AsyncSession, urls: list[str], pipeline_stages: list[str]) -> list[int]:
-    """Insert queue items. Returns list of inserted IDs."""
+    """Insert queue items. Returns list of inserted IDs.
+    video_id (YouTube ID) is stored at insert time for dedup checks.
+    """
+    from services.subtitle_extractor import extract_video_id as _extract_video_id
+
     stages_json = json.dumps(pipeline_stages)
-    # Determine max sort_order
     result = await db.execute(text("SELECT COALESCE(MAX(sort_order), 0) FROM processing_queue"))
     max_order = result.scalar() or 0
 
     ids: list[int] = []
     for i, url in enumerate(urls):
+        vid = _extract_video_id(url)  # always valid here (caller already validated)
         res = await db.execute(
             text(
-                "INSERT INTO processing_queue (url, status, pipeline_stages, added_at, sort_order) "
-                "VALUES (:url, 'pending', :stages, datetime('now'), :order)"
+                "INSERT INTO processing_queue (url, video_id, status, pipeline_stages, added_at, sort_order) "
+                "VALUES (:url, :vid, 'pending', :stages, datetime('now'), :order)"
             ),
-            {"url": url, "stages": stages_json, "order": max_order + i + 1},
+            {"url": url, "vid": vid, "stages": stages_json, "order": max_order + i + 1},
         )
         ids.append(res.lastrowid)
 
