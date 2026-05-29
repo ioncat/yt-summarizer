@@ -254,7 +254,8 @@ async def _run_extract(url: str, language: str = "auto") -> dict[str, Any]:
         cookies_path = await get_app_setting(db, "cookies_path")
         ytdlp_path = await get_app_setting(db, "ytdlp_path") or "yt-dlp"
         # Create a pending task so complete_task works
-        task_id, _ = await create_pending_task(db, url, yt_video_id)
+        task = await create_pending_task(db, url, yt_video_id)
+        task_id = task.id
 
     extraction = await _asyncio.to_thread(
         extract_subtitles, url, language, cookies_path, ytdlp_path
