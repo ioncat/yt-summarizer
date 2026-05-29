@@ -207,26 +207,39 @@ export default function HomePage() {
               </select>
             </div>
             {bulkError && <div className="error-box" style={{ marginBottom: '0.75rem' }}>{bulkError}</div>}
-            {bulkResult && (
-              <div className={`bulk-result ${bulkResult.added > 0 ? 'bulk-result--ok' : 'bulk-result--warn'}`}>
-                {bulkResult.added > 0 && (
-                  <div>✓ {bulkResult.added} video{bulkResult.added !== 1 ? 's' : ''} added to queue. <Link to="/queue">View queue →</Link></div>
-                )}
-                {bulkResult.added === 0 && bulkResult.duplicates.length > 0 && (
-                  <div>All URLs already processed — nothing added.</div>
-                )}
-                {bulkResult.duplicates.length > 0 && (
-                  <div style={{ marginTop: '0.25rem', fontSize: '0.8rem', opacity: 0.85 }}>
-                    Already processed ({bulkResult.duplicates.length}): {bulkResult.duplicates.join(', ')}
+            {bulkResult && (() => {
+              const skipped = [
+                ...bulkResult.duplicates.map(u => ({ url: u, reason: 'duplicate' })),
+                ...bulkResult.invalid.map(u => ({ url: u, reason: 'invalid' })),
+              ]
+              const hasAdded = bulkResult.added > 0
+              const hasSkipped = skipped.length > 0
+              return (
+                <div className={`bulk-result ${hasAdded ? 'bulk-result--ok' : 'bulk-result--warn'}`}>
+                  <div className="bulk-report-line">
+                    {hasAdded
+                      ? <span>✓ Added to queue: <strong>{bulkResult.added}</strong>. <Link to="/queue">View queue →</Link></span>
+                      : <span>Nothing added to queue.</span>
+                    }
+                    {hasSkipped && (
+                      <span style={{ marginLeft: '0.75rem', opacity: 0.75 }}>
+                        Skipped: <strong>{skipped.length}</strong>
+                      </span>
+                    )}
                   </div>
-                )}
-                {bulkResult.invalid.length > 0 && (
-                  <div style={{ marginTop: '0.25rem', fontSize: '0.8rem', opacity: 0.8 }}>
-                    Invalid ({bulkResult.invalid.length}): {bulkResult.invalid.join(', ')}
-                  </div>
-                )}
-              </div>
-            )}
+                  {hasSkipped && (
+                    <ul className="bulk-skipped-list">
+                      {skipped.map(({ url, reason }, i) => (
+                        <li key={i}>
+                          <span className="bulk-skipped-url">{url}</span>
+                          <span className="bulk-skipped-reason">{reason}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )
+            })()}
             <button
               className="btn btn-primary"
               type="submit"
