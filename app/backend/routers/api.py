@@ -692,7 +692,9 @@ async def upload_cookies(
     """Upload a cookies.txt file and save it to the data directory."""
     cookies_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data"))
     os.makedirs(cookies_dir, exist_ok=True)
-    save_path = os.path.join(cookies_dir, "www.youtube.com_cookies.txt")
+    # Use original filename, fallback to cookies.txt
+    filename = file.filename if file.filename else "cookies.txt"
+    save_path = os.path.join(cookies_dir, filename)
     content = await file.read()
     with open(save_path, "wb") as f:
         f.write(content)
