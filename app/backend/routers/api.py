@@ -120,6 +120,14 @@ async def process_video(
     if not video_id:
         raise HTTPException(status_code=400, detail="Invalid YouTube URL")
 
+    # Dedup: if video already processed, redirect to existing result
+    existing = await get_result(db, video_id)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": "Video already processed", "video_id": video_id},
+        )
+
     task = await create_pending_task(db, body.url, video_id)
     background_tasks.add_task(_run_processing, task.id, body.url, body.language)
     return {"task_id": task.id, "video_id": video_id}

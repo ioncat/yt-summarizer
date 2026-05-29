@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { processVideo, getSettings, getHealth, AllSettings, queueBulkAdd } from '../api'
+import { processVideo, getSettings, getHealth, AllSettings, queueBulkAdd, VideoAlreadyExistsError } from '../api'
 
 const LANGUAGES = [
   { value: 'auto', label: 'Auto (detect)' },
@@ -79,6 +79,10 @@ export default function HomePage() {
         { state: { autoPipeline } }
       )
     } catch (err) {
+      if (err instanceof VideoAlreadyExistsError) {
+        navigate(`/result/${err.videoId}`)
+        return
+      }
       console.error('[Home] processVideo failed:', err)
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {

@@ -63,6 +63,12 @@ export interface HistoryResponse {
   items: HistoryItem[]
 }
 
+export class VideoAlreadyExistsError extends Error {
+  constructor(public readonly videoId: string) {
+    super('Video already processed')
+  }
+}
+
 export async function processVideo(
   url: string,
   language: string,
@@ -73,6 +79,10 @@ export async function processVideo(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, language, enable_cleanup: enableCleanup }),
   })
+  if (res.status === 409) {
+    const body = await res.json()
+    throw new VideoAlreadyExistsError(body.detail?.video_id ?? body.detail)
+  }
   if (!res.ok) throw new Error((await res.json()).detail || 'Error')
   return res.json()
 }
