@@ -784,6 +784,7 @@ async def chat_proxy(body: ChatRequest, db: Annotated[AsyncSession, Depends(get_
 class BulkQueueRequest(BaseModel):
     urls: list[str]
     pipeline_stages: list[str] | None = None  # defaults to app_settings queue_default_pipeline
+    force: bool = False  # skip dedup check (e.g. re-run stages on already-processed videos)
 
 
 @router.post("/queue/bulk")
@@ -823,15 +824,18 @@ async def queue_bulk_add(
     if not valid_urls:
         raise HTTPException(status_code=400, detail={"message": "No valid YouTube URLs", "invalid": invalid})
 
-    # Step 2: check against DB (already processed or already in queue)
-    duplicate_vids = await get_duplicate_video_ids(db, valid_vid_ids)
+    # Step 2: check against DB (skip if force=True — re-run mode from History)
     new_urls: list[str] = []
     duplicates: list[str] = []
-    for url, vid in zip(valid_urls, valid_vid_ids):
-        if vid in duplicate_vids:
-            duplicates.append(url)
-        else:
-            new_urls.append(url)
+    if body.force:
+        new_urls = valid_urls  # no dedup — user explicitly re-queuing
+    else:
+        duplicate_vids = await get_duplicate_video_ids(db, valid_vid_ids)
+        for url, vid in zip(valid_urls, valid_vid_ids):
+            if vid in duplicate_vids:
+                duplicates.append(url)
+            else:
+                new_urls.append(url)
 
     # Step 3: determine pipeline_stages
     if body.pipeline_stages is not None:

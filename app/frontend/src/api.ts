@@ -345,11 +345,12 @@ export interface QueueItem {
 export async function queueBulkAdd(
   urls: string[],
   pipeline_stages?: string[],
+  force = false,
 ): Promise<{ added: number; ids: number[]; invalid: string[]; duplicates: string[] }> {
   const res = await fetch(`${BASE}/queue/bulk`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ urls, pipeline_stages: pipeline_stages ?? null }),
+    body: JSON.stringify({ urls, pipeline_stages: pipeline_stages ?? null, force }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))

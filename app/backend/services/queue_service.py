@@ -409,16 +409,25 @@ async def queue_worker() -> None:
         await _set_processing(item_id)
 
         try:
-            # Stage 1: extract (always first)
-            extract_result = await _run_extract(url)
-            yt_video_id = extract_result["video_id"]
-            db_video_id = extract_result["db_video_id"]
+            # Stage 1: extract (only if requested — skip for already-processed videos)
+            if "extract" in pipeline_stages:
+                extract_result = await _run_extract(url)
+                yt_video_id = extract_result["video_id"]
+                db_video_id = extract_result["db_video_id"]
+            else:
+                # Stages-only mode: video already extracted, derive video_id from URL
+                from services.subtitle_extractor import extract_video_id as _extract_video_id
+                yt_video_id = _extract_video_id(url)
+                db_video_id = None
+                if not yt_video_id:
+                    raise ValueError(f"Cannot extract video_id from URL: {url}")
+                logger.info("Queue worker: skipping extract for item %d (stages-only mode)", item_id)
 
             # Stage 2: cleanup (optional)
             if "cleanup" in pipeline_stages:
                 await _run_cleanup_stage(yt_video_id)
 
-            # Stage 3: summary (optional, implies cleanup was run)
+            # Stage 3: summary (optional)
             if "summary" in pipeline_stages:
                 await _run_summary_stage(yt_video_id)
 

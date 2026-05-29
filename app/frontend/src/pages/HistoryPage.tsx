@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { getHistory, deleteResult, deleteResultsBulk, HistoryItem } from '../api'
+import { useNavigate, Link } from 'react-router-dom'
+import { getHistory, deleteResult, deleteResultsBulk, queueBulkAdd, HistoryItem } from '../api'
 import { classifyVideo } from '../utils/videoType'
+
+const HISTORY_PIPELINE_PRESETS = [
+  { value: 'cleanup', label: 'Cleanup', stages: ['cleanup'] },
+  { value: 'summary', label: 'Summary', stages: ['summary'] },
+  { value: 'cleanup_summary', label: 'Cleanup + Summary', stages: ['cleanup', 'summary'] },
+]
 
 export default function HistoryPage() {
   const [items, setItems] = useState<HistoryItem[]>([])
@@ -11,6 +17,8 @@ export default function HistoryPage() {
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
+  const [queuePipeline, setQueuePipeline] = useState('cleanup_summary')
+  const [queueMsg, setQueueMsg] = useState<string | null>(null)
   const navigate = useNavigate()
 
   async function load(p: number) {
@@ -30,6 +38,7 @@ export default function HistoryPage() {
   function toggleSelectMode() {
     setSelectMode(m => !m)
     setSelected(new Set())
+    setQueueMsg(null)
   }
 
   function toggleItem(id: string) {
@@ -55,6 +64,25 @@ export default function HistoryPage() {
       setItems(prev => prev.filter(i => i.video_id !== videoId))
     } catch (err) {
       console.error('[History] deleteResult failed:', err)
+    }
+  }
+
+  async function handleBulkQueue() {
+    const ids = Array.from(selected)
+    if (!ids.length) return
+    const preset = HISTORY_PIPELINE_PRESETS.find(p => p.value === queuePipeline)
+    const stages = preset?.stages ?? ['cleanup', 'summary']
+    // Get URLs for selected video_ids
+    const urls = items
+      .filter(i => selected.has(i.video_id))
+      .map(i => `https://www.youtube.com/watch?v=${i.video_id}`)
+    try {
+      const res = await queueBulkAdd(urls, stages, true) // force=true skips dedup
+      setQueueMsg(`Added ${res.added} video${res.added !== 1 ? 's' : ''} to queue`)
+      setSelected(new Set())
+      setSelectMode(false)
+    } catch (err) {
+      setQueueMsg('Failed to add to queue')
     }
   }
 
@@ -94,6 +122,25 @@ export default function HistoryPage() {
                 <button className="btn btn-secondary btn-sm" onClick={allSelected ? deselectAll : selectAll}>
                   {allSelected ? 'Deselect all' : 'Select all'}
                 </button>
+                <select
+                  className="btn-sm"
+                  style={{ padding: '0.3rem 0.5rem', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)' }}
+                  value={queuePipeline}
+                  onChange={e => setQueuePipeline(e.target.value)}
+                  disabled={selected.size === 0}
+                >
+                  {HISTORY_PIPELINE_PRESETS.map(p => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </select>
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={selected.size === 0}
+                  onClick={handleBulkQueue}
+                  title="Add selected to processing queue"
+                >
+                  ⏱ Queue ({selected.size})
+                </button>
                 <button
                   className="btn btn-danger btn-sm"
                   disabled={selected.size === 0 || deleting}
@@ -109,6 +156,12 @@ export default function HistoryPage() {
             )}
           </div>
         </div>
+
+        {queueMsg && (
+          <div className="bulk-result bulk-result--ok" style={{ marginBottom: '0.75rem' }}>
+            {queueMsg} — <Link to="/queue">View queue →</Link>
+          </div>
+        )}
 
         {items.length === 0 ? (
           <div className="empty">No videos processed yet.</div>
