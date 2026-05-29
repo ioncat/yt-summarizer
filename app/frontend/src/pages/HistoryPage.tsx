@@ -122,14 +122,6 @@ export default function HistoryPage() {
                   key={item.video_id}
                   className={`history-item${isSelected ? ' history-item--selected' : ''}`}
                 >
-                  {selectMode && (
-                    <input
-                      type="checkbox"
-                      className="history-checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleItem(item.video_id)}
-                    />
-                  )}
                   <div
                     className="history-info"
                     onClick={() => selectMode ? toggleItem(item.video_id) : navigate(`/result/${item.video_id}`)}
@@ -166,6 +158,14 @@ export default function HistoryPage() {
                     >
                       Delete
                     </button>
+                  )}
+                  {selectMode && (
+                    <input
+                      type="checkbox"
+                      className="history-checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleItem(item.video_id)}
+                    />
                   )}
                 </li>
               )
