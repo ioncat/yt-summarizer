@@ -366,7 +366,7 @@ def _detect_language(info: dict) -> str:
 def _fetch_metadata(url: str, cookies_path: str | None, ytdlp_path: str) -> tuple[dict | None, str]:
     """Lightweight metadata-only yt-dlp call (no subtitle download)."""
     stdout, stderr, code = _run_ytdlp(
-        ["--skip-download", "--print-json", url],
+        ["--no-playlist", "--skip-download", "--print-json", url],
         cookies_path, ytdlp_path=ytdlp_path, timeout=30,
     )
     if not stdout.strip():
@@ -413,6 +413,7 @@ def extract_subtitles(
         with tempfile.TemporaryDirectory() as tmpdir:
             stdout, stderr, code = _run_ytdlp(
                 [
+                    "--no-playlist",
                     "--skip-download",
                     "--print-json",
                     "--write-subs",
