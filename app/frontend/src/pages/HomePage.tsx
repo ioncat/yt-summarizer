@@ -37,9 +37,16 @@ export default function HomePage() {
 
   const navigate = useNavigate()
 
+  // Extract URL from each line — handles "URL | title", "title - URL", trailing punctuation, etc.
+  function extractUrlFromLine(line: string): string {
+    const match = line.match(/https?:\/\/[^\s|"'<>]+/)
+    if (!match) return line.trim()
+    return match[0].replace(/[,;.:!?]+$/, '')  // strip trailing punctuation, keep slashes
+  }
+
   const bulkUrls = bulkText
     .split('\n')
-    .map(l => l.trim())
+    .map(l => extractUrlFromLine(l.trim()))
     .filter(l => l.length > 0)
   const bulkCount = bulkUrls.length
 

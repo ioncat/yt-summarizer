@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from typing import Annotated
 
 import os
@@ -49,6 +50,10 @@ from services.video_service import (
 )
 from services.text_summarizer import summarize_text, extract_notes, MAP_REDUCE_THRESHOLD
 from services.text_mindmapper import generate_mindmap
+
+# URL extraction helpers for bulk input parsing
+_URL_RE = re.compile(r'https?://[^\s|"\'<>]+')
+_TRAIL_RE = re.compile(r'[,;.:!?]+$')
 
 # In-memory cancel flags — cleared when cleanup/summary finishes or is cancelled
 _CANCEL_SET: set[str] = set()
@@ -776,9 +781,12 @@ async def queue_bulk_add(
     valid_vid_ids: list[str] = []
     invalid: list[str] = []
     for raw_url in body.urls:
-        url = raw_url.strip()
-        if not url:
+        raw = raw_url.strip()
+        if not raw:
             continue
+        # Extract URL from line — handles "URL | title", trailing punctuation, etc.
+        m = _URL_RE.search(raw)
+        url = _TRAIL_RE.sub('', m.group(0)) if m else raw
         vid = extract_video_id(url)
         if not vid:
             invalid.append(url)
