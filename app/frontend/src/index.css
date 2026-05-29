@@ -200,6 +200,8 @@ input[type="text"]:focus, select:focus { border-color: var(--accent); }
   gap: 1rem;
 }
 .history-item:last-child { border-bottom: none; }
+.history-item--selected { background: var(--ai-soft); border-radius: 6px; padding-left: 0.5rem; padding-right: 0.5rem; }
+.history-checkbox { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; accent-color: var(--ai); }
 .history-info { flex: 1; min-width: 0; }
 .history-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .history-meta { font-size: 0.82rem; color: var(--text-faint); margin-top: 0.2rem; }

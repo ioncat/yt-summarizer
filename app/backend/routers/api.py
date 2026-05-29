@@ -616,6 +616,29 @@ async def delete_result(video_id: str, db: Annotated[AsyncSession, Depends(get_d
     return {"deleted": True}
 
 
+class BulkDeleteRequest(BaseModel):
+    video_ids: list[str]
+
+
+@router.post("/history/delete-bulk")
+async def delete_results_bulk(
+    body: BulkDeleteRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Delete multiple videos by video_id. Returns counts of deleted and not found."""
+    if not body.video_ids:
+        raise HTTPException(status_code=400, detail="No video_ids provided")
+    deleted = 0
+    not_found = 0
+    for vid in body.video_ids:
+        ok = await delete_video(db, vid)
+        if ok:
+            deleted += 1
+        else:
+            not_found += 1
+    return {"deleted": deleted, "not_found": not_found}
+
+
 # ---------------------------------------------------------------------------
 # Settings endpoints
 # ---------------------------------------------------------------------------

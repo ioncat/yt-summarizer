@@ -110,6 +110,16 @@ export async function deleteResult(videoId: string): Promise<void> {
   if (!res.ok) throw new Error('Failed to delete')
 }
 
+export async function deleteResultsBulk(videoIds: string[]): Promise<{ deleted: number; not_found: number }> {
+  const res = await fetch(`${BASE}/history/delete-bulk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ video_ids: videoIds }),
+  })
+  if (!res.ok) throw new Error('Failed to bulk delete')
+  return res.json()
+}
+
 export async function cancelCleanup(videoId: string): Promise<void> {
   await fetch(`${BASE}/result/${videoId}/cleanup`, { method: 'DELETE' })
 }
