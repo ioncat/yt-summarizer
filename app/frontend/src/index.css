@@ -91,7 +91,7 @@ nav {
 }
 
 nav .logo { font-weight: 700; font-size: 1.1rem; color: var(--accent); text-decoration: none; }
-nav a { color: var(--text-muted); text-decoration: none; font-size: 0.95rem; }
+nav a { color: var(--text-muted); text-decoration: none; font-size: 0.95rem; white-space: nowrap; display: inline-flex; align-items: center; }
 nav a:hover { color: var(--link-hover); }
 
 .nav-left { display: flex; align-items: center; gap: 2rem; flex: 1; }
@@ -606,7 +606,7 @@ input.input-missing:focus, select.input-missing:focus { border-color: var(--acce
    ============================================================ */
 
 /* Nav badge */
-.queue-nav-link { position: relative; display: inline-flex; align-items: center; gap: 0.25rem; }
+.queue-nav-link { display: inline-flex; align-items: center; gap: 0.25rem; }
 .queue-badge {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 18px; height: 18px; padding: 0 5px;
