@@ -271,13 +271,15 @@ yt-summarizer/
 │   │   ├── config.py                    # Settings via pydantic-settings (.env)
 │   │   ├── models/
 │   │   │   ├── database.py              # Async engine, session factory, init_db()
-│   │   │   └── models.py                # ORM: Video, SubtitleRaw, SubtitleFormatted, PipelineSettings, AppSetting, ProcessingTask
+│   │   │   └── models.py                # ORM: Video, SubtitleRaw, SubtitleFormatted, PipelineSettings, AppSetting, ProcessingTask, BenchmarkRun, ProcessingQueueItem
 │   │   ├── routers/api.py               # REST endpoints
 │   │   └── services/
 │   │       ├── subtitle_extractor.py    # yt-dlp wrapper, VTT parser, error classification
 │   │       ├── text_formatter.py        # Overlap dedup + time-gap paragraph splitting
 │   │       ├── text_cleaner.py          # Ollama HTTP client, paragraph-by-paragraph LLM cleanup
 │   │       ├── text_summarizer.py       # Ollama HTTP client, single-pass + map-reduce + full_extract (extract_notes)
+│   │       ├── text_mindmapper.py       # Ollama HTTP client, LLM mindmap generation (streaming)
+│   │       ├── queue_service.py         # processing_queue CRUD + asyncio worker (sequential, stuck-item recovery)
 │   │       └── video_service.py         # DB CRUD, task lifecycle, pipeline settings CRUD
 │   ├── frontend/
 │   │   ├── src/
@@ -285,7 +287,8 @@ yt-summarizer/
 │   │   │   ├── App.tsx                  # Routes
 │   │   │   ├── index.css                # All styles
 │   │   │   ├── components/StatusBar.tsx # Backend + Ollama health dots in nav
-│   │   │   └── pages/                   # HomePage, ProcessingPage, ResultPage, HistoryPage, SettingsPage
+│   │   │   ├── components/QueueBadge.tsx # Nav queue badge with active-count polling
+│   │   │   └── pages/                   # HomePage, ProcessingPage, ResultPage, HistoryPage, SettingsPage, QueuePage, BenchmarkPage, BenchmarksIndexPage
 │   │   ├── vite.config.ts               # Port 3000, proxy /api → localhost:8000
 │   │   └── Dockerfile                   # Multi-stage: Node builder → nginx
 │   └── data/
@@ -329,6 +332,13 @@ yt-summarizer/
 | DELETE | `/api/settings/{stage}` | Reset stage to hardcoded defaults |
 | GET | `/api/models` | Available Ollama models (live from Ollama) |
 | POST | `/api/settings/upload-cookies` | Upload cookies.txt file |
+| POST | `/api/history/delete-bulk` | Delete multiple videos by video_id list |
+| POST | `/api/queue/bulk` | Add URLs to processing queue (dedup, URL extraction from free-form lines) |
+| GET | `/api/queue` | All queue items ordered by sort_order + added_at |
+| GET | `/api/queue/counts` | Active item counts for nav badge |
+| DELETE | `/api/queue/all` | Clear all pending items |
+| DELETE | `/api/queue/failed` | Clear all failed items |
+| DELETE | `/api/queue/{id}` | Delete single pending item (409 if processing) |
 
 ---
 
@@ -361,6 +371,12 @@ Do this BEFORE restarting the backend with new model/migration code. No exceptio
 **No model default**: `text_cleaner.py` has no fallback model. If model is null → cleanup returns None → status `failed`. User must select a model in Settings → AI Cleanup.
 
 **Cancel preserves text**: `reset_cleanup_status` / `reset_summary_status` reset only `status`, `started_at`, `finished_at`. `cleaned_text` / `summary_text` are never nulled on cancel — previous result stays visible.
+
+**Dedup on submit**: `POST /api/process` returns 409 `{video_id}` if video already processed — frontend redirects to `/result/{video_id}` silently. Bulk queue (`POST /api/queue/bulk`) checks both `videos` table and `processing_queue` (pending/processing) before insert; skips duplicates, returns `{added, invalid, duplicates}`.
+
+**URL extraction from free-form lines**: Both single and bulk endpoints strip surrounding text from each line using `https?://[^\s|"'<>]+` + trailing punctuation strip `[,;.:!?]+$`. Handles "URL | title", "title — URL", clipboard pastes from YouTube.
+
+**Queue worker**: `queue_service.py` — asyncio task started in `lifespan()`. Polls every 5s for `pending` items. Processes one item at a time (Ollama can't handle parallel heavy requests). On backend restart, items stuck in `processing` are reset to `pending`. `video_id` (YouTube ID) stored at queue insert time — used for dedup without waiting for extraction to complete. Per-item cancel is Out of Scope; no cancel set in worker (`is_cancelled=lambda: False`).
 
 ---
 
