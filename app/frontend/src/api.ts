@@ -303,3 +303,63 @@ export async function getAllBenchmarks(): Promise<BenchmarkGroup[]> {
   const data = await res.json()
   return data.groups ?? []
 }
+
+// ---------------------------------------------------------------------------
+// Queue (Epic 34)
+// ---------------------------------------------------------------------------
+
+export interface QueueItem {
+  id: number
+  url: string
+  video_id: string | null
+  db_video_id: string | null
+  status: 'pending' | 'processing' | 'done' | 'failed' | 'skipped'
+  pipeline_stages: string[]
+  error_message: string | null
+  added_at: string
+  started_at: string | null
+  finished_at: string | null
+  sort_order: number
+}
+
+export async function queueBulkAdd(
+  urls: string[],
+  pipeline_stages?: string[],
+): Promise<{ added: number; ids: number[]; invalid: string[] }> {
+  const res = await fetch(`${BASE}/queue/bulk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ urls, pipeline_stages: pipeline_stages ?? null }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail?.message || body.detail || 'Failed to add to queue')
+  }
+  return res.json()
+}
+
+export async function getQueue(): Promise<{ items: QueueItem[]; count: number }> {
+  const res = await fetch(`${BASE}/queue`)
+  if (!res.ok) throw new Error('Failed to load queue')
+  return res.json()
+}
+
+export async function getQueueCounts(): Promise<{ pending: number; processing: number; active: number }> {
+  const res = await fetch(`${BASE}/queue/counts`)
+  if (!res.ok) return { pending: 0, processing: 0, active: 0 }
+  return res.json()
+}
+
+export async function deleteQueueItem(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/queue/${id}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || 'Failed to delete')
+  }
+}
+
+export async function clearQueuePending(): Promise<{ cleared: number }> {
+  const res = await fetch(`${BASE}/queue/all`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to clear queue')
+  return res.json()
+}

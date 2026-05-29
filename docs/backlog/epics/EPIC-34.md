@@ -1,6 +1,6 @@
 # Epic 34: Bulk URL Queue
 
-**Status:** 🔵 Planned  
+**Status:** ✅ Done  
 **Phase:** 2 — Summarization Quality  
 **Depends on:** —  
 **Blocks:** Epic 35 (Playlist Import)

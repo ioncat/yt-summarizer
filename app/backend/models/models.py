@@ -126,6 +126,23 @@ class ProcessingTask(Base):
     video: Mapped["Video"] = relationship(back_populates="tasks")
 
 
+class ProcessingQueueItem(Base):
+    """Queue for bulk URL processing. One item = one video URL to process."""
+    __tablename__ = "processing_queue"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    url: Mapped[str] = mapped_column(String, nullable=False)
+    video_id: Mapped[str | None] = mapped_column(String)          # YouTube video_id (e.g. "dQw4w9WgXcQ"), filled after extract
+    db_video_id: Mapped[str | None] = mapped_column(String)       # FK to videos.id (UUID)
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | processing | done | failed | skipped
+    pipeline_stages: Mapped[str] = mapped_column(Text, default='["extract"]')  # JSON array
+    error_message: Mapped[str | None] = mapped_column(Text)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class BenchmarkRun(Base):
     """One model's result in a benchmark comparison run."""
     __tablename__ = "benchmark_runs"

@@ -26,7 +26,8 @@ _console_handler.setFormatter(_log_fmt)
 # Attach handlers directly to our service loggers — bypasses uvicorn's root config
 for _name in ("services.text_summarizer", "services.text_cleaner", "services.subtitle_extractor",
                "services.video_service", "services.benchmark_service", "routers.api",
-               "services.text_mindmapper", "mindmapper", "api.mindmap"):
+               "services.text_mindmapper", "mindmapper", "api.mindmap",
+               "queue_service"):
     _lg = logging.getLogger(_name)
     _lg.setLevel(logging.INFO)
     _lg.propagate = False  # не пробрасывать в root (uvicorn не перехватит)
@@ -41,8 +42,16 @@ for _name in ("sqlalchemy.engine", "sqlalchemy.engine.Engine", "sqlalchemy.pool"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
+    from services.queue_service import queue_worker
     await init_db()
+    worker_task = asyncio.create_task(queue_worker())
     yield
+    worker_task.cancel()
+    try:
+        await worker_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(

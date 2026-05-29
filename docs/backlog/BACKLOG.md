@@ -138,7 +138,7 @@ Improve summarization quality beyond single-pass. Map-reduce or chunked approach
 | Epic 28: Processing Mode Management | Mode picker UI (auto-detect + manual override); unified mode selection across single-pass / map-reduce / full-extract / hierarchical | 🔵 Planned |
 | [Epic 29: Parallel MAP Processing](./epics/EPIC-29.md) | Parallel paragraph/chunk/section processing via asyncio.gather() + Semaphore; preserves order via index; configurable workers matching OLLAMA_NUM_PARALLEL | ✅ Done |
 | [Epic 33: Benchmark Metrics Enhancement](./epics/EPIC-33.md) | Capture real token counts and tok/s from Ollama done-message; add `prompt_tokens`, `completion_tokens`, `tokens_per_second`, `chunks_count` to BenchmarkRun; compute `compression_ratio` from existing chars; display all metrics per model column in BenchmarkPage | 🔵 Planned |
-| [Epic 34: Bulk URL Queue](./epics/EPIC-34.md) | Bulk URL input on HomePage (textarea, one per line); `processing_queue` DB table; asyncio queue worker (sequential, one video at a time); configurable pipeline stages per batch (extract / +cleanup / full); Queue status page `/queue` with per-item status | 🔵 Planned |
+| [Epic 34: Bulk URL Queue](./epics/EPIC-34.md) | Bulk URL input on HomePage (textarea, one per line); `processing_queue` DB table; asyncio queue worker (sequential, one video at a time); configurable pipeline stages per batch (extract / +cleanup / full); Queue status page `/queue` with per-item status | ✅ Done |
 | [Epic 35: Playlist Import](./epics/EPIC-35.md) | Paste YouTube playlist URL → yt-dlp flat-playlist extract → preview list with checkboxes → add selected to queue (Epic 34); auto-detect playlist URL in Bulk Add panel; 200-video limit | 🔵 Planned — depends on Epic 34 |
 
 ---

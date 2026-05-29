@@ -739,3 +739,85 @@ async def chat_proxy(body: ChatRequest, db: Annotated[AsyncSession, Depends(get_
             yield json.dumps({"error": str(exc)}).encode()
 
     return StreamingResponse(stream_ollama(), media_type="application/x-ndjson")
+
+
+# ---------------------------------------------------------------------------
+# Queue endpoints (Epic 34)
+# ---------------------------------------------------------------------------
+
+class BulkQueueRequest(BaseModel):
+    urls: list[str]
+    pipeline_stages: list[str] | None = None  # defaults to app_settings queue_default_pipeline
+
+
+@router.post("/queue/bulk")
+async def queue_bulk_add(
+    body: BulkQueueRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Add multiple URLs to the processing queue."""
+    from services.queue_service import add_items
+
+    if not body.urls:
+        raise HTTPException(status_code=400, detail="No URLs provided")
+
+    # Validate each URL and collect valid ones
+    valid_urls: list[str] = []
+    invalid: list[str] = []
+    for url in body.urls:
+        if extract_video_id(url.strip()):
+            valid_urls.append(url.strip())
+        else:
+            invalid.append(url.strip())
+
+    if not valid_urls:
+        raise HTTPException(status_code=400, detail={"message": "No valid YouTube URLs", "invalid": invalid})
+
+    # Determine pipeline_stages
+    if body.pipeline_stages is not None:
+        stages = body.pipeline_stages
+    else:
+        raw = await get_app_setting(db, "queue_default_pipeline")
+        import json as _json
+        stages = _json.loads(raw) if raw else ["extract"]
+
+    ids = await add_items(db, valid_urls, stages)
+    return {"added": len(ids), "ids": ids, "invalid": invalid}
+
+
+@router.get("/queue")
+async def get_queue_items(db: Annotated[AsyncSession, Depends(get_db)]):
+    """Return all queue items ordered by sort_order + added_at."""
+    from services.queue_service import get_queue
+    items = await get_queue(db)
+    return {"items": items, "count": len(items)}
+
+
+@router.get("/queue/counts")
+async def get_queue_status_counts(db: Annotated[AsyncSession, Depends(get_db)]):
+    """Return item counts per status — for nav badge."""
+    from services.queue_service import get_queue_counts
+    counts = await get_queue_counts(db)
+    pending = counts.get("pending", 0)
+    processing = counts.get("processing", 0)
+    return {"pending": pending, "processing": processing, "active": pending + processing, "counts": counts}
+
+
+@router.delete("/queue/all")
+async def clear_queue_pending(db: Annotated[AsyncSession, Depends(get_db)]):
+    """Clear all pending queue items (does not touch processing/done/failed)."""
+    from services.queue_service import clear_pending
+    count = await clear_pending(db)
+    return {"cleared": count}
+
+
+@router.delete("/queue/{item_id}")
+async def delete_queue_item(item_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Delete a single pending queue item."""
+    from services.queue_service import delete_item
+    result = await delete_item(db, item_id)
+    if result == "not_found":
+        raise HTTPException(status_code=404, detail="Item not found")
+    if result == "conflict":
+        raise HTTPException(status_code=409, detail="Cannot delete a processing item")
+    return {"deleted": item_id}

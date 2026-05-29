@@ -61,6 +61,7 @@ async def _seed_app_settings() -> None:
         "cookies_path": cfg.cookies_path,
         "force_map_reduce": "false",
         "parallel_workers": "1",
+        "queue_default_pipeline": '["extract"]',
     }
     async with AsyncSessionLocal() as session:
         for key, value in defaults.items():

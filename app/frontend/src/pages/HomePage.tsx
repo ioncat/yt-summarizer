@@ -1,12 +1,18 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { processVideo, getSettings, getHealth, AllSettings } from '../api'
+import { processVideo, getSettings, getHealth, AllSettings, queueBulkAdd } from '../api'
 
 const LANGUAGES = [
   { value: 'auto', label: 'Auto (detect)' },
   { value: 'ru', label: 'Russian' },
   { value: 'en', label: 'English' },
   { value: 'uk', label: 'Ukrainian' },
+]
+
+const PIPELINE_PRESETS = [
+  { value: 'extract', label: 'Extract only', stages: ['extract'] },
+  { value: 'cleanup', label: 'Extract + Cleanup', stages: ['extract', 'cleanup'] },
+  { value: 'full', label: 'Full pipeline', stages: ['extract', 'cleanup', 'summary'] },
 ]
 
 export default function HomePage() {
@@ -20,7 +26,22 @@ export default function HomePage() {
     () => localStorage.getItem('yt_summarizer_auto_pipeline') === 'true'
   )
   const [ollamaOnline, setOllamaOnline] = useState(false)
+
+  // Bulk Add panel state
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const [bulkText, setBulkText] = useState('')
+  const [bulkPipeline, setBulkPipeline] = useState('extract')
+  const [bulkLoading, setBulkLoading] = useState(false)
+  const [bulkResult, setBulkResult] = useState<{ added: number; invalid: string[] } | null>(null)
+  const [bulkError, setBulkError] = useState('')
+
   const navigate = useNavigate()
+
+  const bulkUrls = bulkText
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 0)
+  const bulkCount = bulkUrls.length
 
   useEffect(() => {
     Promise.all([getSettings(), getHealth()])
@@ -62,6 +83,27 @@ export default function HomePage() {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleBulkSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (!bulkCount) return
+    setBulkLoading(true)
+    setBulkError('')
+    setBulkResult(null)
+    try {
+      const preset = PIPELINE_PRESETS.find(p => p.value === bulkPipeline)
+      const stages = preset?.stages ?? ['extract']
+      const res = await queueBulkAdd(bulkUrls, stages)
+      setBulkResult({ added: res.added, invalid: res.invalid })
+      if (res.added > 0) {
+        setBulkText('')
+      }
+    } catch (err) {
+      setBulkError(err instanceof Error ? err.message : 'Failed to add to queue')
+    } finally {
+      setBulkLoading(false)
     }
   }
 
@@ -116,11 +158,64 @@ export default function HomePage() {
             </p>
           </div>
           {error && <div className="error-box" style={{ marginBottom: '1rem', whiteSpace: 'pre-line' }}>{error}</div>}
-          <button className="btn btn-primary" type="submit" disabled={loading || !url.trim()}>
-            {loading ? 'Submitting…' : 'Extract subtitles'}
-          </button>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <button className="btn btn-primary" type="submit" disabled={loading || !url.trim()}>
+              {loading ? 'Submitting…' : 'Extract subtitles'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => { setBulkOpen(o => !o); setBulkResult(null); setBulkError('') }}
+            >
+              {bulkOpen ? '✕ Cancel' : '⏱ Bulk add'}
+            </button>
+          </div>
         </form>
       </div>
+
+      {bulkOpen && (
+        <div className="card bulk-panel">
+          <h3 style={{ marginTop: 0 }}>Bulk Add to Queue</h3>
+          <form onSubmit={handleBulkSubmit}>
+            <div className="form-group">
+              <label>URLs (one per line)</label>
+              <textarea
+                className="bulk-textarea"
+                placeholder="https://www.youtube.com/watch?v=...&#10;https://youtu.be/..."
+                value={bulkText}
+                onChange={e => { setBulkText(e.target.value); setBulkResult(null) }}
+                rows={6}
+              />
+            </div>
+            <div className="form-group">
+              <label>Pipeline</label>
+              <select value={bulkPipeline} onChange={e => setBulkPipeline(e.target.value)}>
+                {PIPELINE_PRESETS.map(p => (
+                  <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+              </select>
+            </div>
+            {bulkError && <div className="error-box" style={{ marginBottom: '0.75rem' }}>{bulkError}</div>}
+            {bulkResult && (
+              <div className={`bulk-result ${bulkResult.added > 0 ? 'bulk-result--ok' : 'bulk-result--warn'}`}>
+                {bulkResult.added > 0 && <span>✓ {bulkResult.added} video{bulkResult.added !== 1 ? 's' : ''} added to queue. <Link to="/queue">View queue →</Link></span>}
+                {bulkResult.invalid.length > 0 && (
+                  <div style={{ marginTop: '0.25rem', fontSize: '0.8rem', opacity: 0.8 }}>
+                    Invalid ({bulkResult.invalid.length}): {bulkResult.invalid.join(', ')}
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              className="btn btn-primary"
+              type="submit"
+              disabled={bulkLoading || bulkCount === 0}
+            >
+              {bulkLoading ? 'Adding…' : `Add to queue (${bulkCount} URL${bulkCount !== 1 ? 's' : ''})`}
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   )
 }
