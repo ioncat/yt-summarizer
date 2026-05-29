@@ -215,27 +215,27 @@ export default function HomePage() {
               const hasAdded = bulkResult.added > 0
               const hasSkipped = skipped.length > 0
               return (
-                <div className={`bulk-result ${hasAdded ? 'bulk-result--ok' : 'bulk-result--warn'}`}>
-                  <div className="bulk-report-line">
-                    {hasAdded
-                      ? <span>✓ Added to queue: <strong>{bulkResult.added}</strong>. <Link to="/queue">View queue →</Link></span>
-                      : <span>Nothing added to queue.</span>
-                    }
-                    {hasSkipped && (
-                      <span style={{ marginLeft: '0.75rem', opacity: 0.75 }}>
-                        Skipped: <strong>{skipped.length}</strong>
-                      </span>
-                    )}
-                  </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.75rem' }}>
+                  {hasAdded && (
+                    <div className="bulk-result bulk-result--ok">
+                      ✓ Added to queue: <strong>{bulkResult.added}</strong>. <Link to="/queue">View queue →</Link>
+                    </div>
+                  )}
                   {hasSkipped && (
-                    <ul className="bulk-skipped-list">
-                      {skipped.map(({ url, reason }, i) => (
-                        <li key={i}>
-                          <span className="bulk-skipped-url">{url}</span>
-                          <span className="bulk-skipped-reason">{reason}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="bulk-result bulk-result--err">
+                      <div className="bulk-report-line">Skipped: <strong>{skipped.length}</strong></div>
+                      <ul className="bulk-skipped-list">
+                        {skipped.map(({ url, reason }, i) => (
+                          <li key={i}>
+                            <span className="bulk-skipped-url">{url}</span>
+                            <span className="bulk-skipped-reason">{reason}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {!hasAdded && !hasSkipped && (
+                    <div className="bulk-result bulk-result--warn">Nothing added to queue.</div>
                   )}
                 </div>
               )
