@@ -3,12 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import {
   getResult, deleteResult,
-  startCleanup, cancelCleanup,
-  startSummary, cancelSummary,
-  startMindmap, cancelMindmap,
+  cancelCleanup,
+  cancelSummary,
+  cancelMindmap,
   reextractSubtitles,
   saveChatHistory, clearChatHistory,
   getSettings, getModels, saveSettings,
+  queueBulkAdd, toggleFavorite,
   ResultResponse,
 } from '../api'
 import { renderText } from '../utils/renderText'
@@ -79,6 +80,7 @@ export default function ResultPage() {
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const chatHistoryLoadedRef = useRef(false)
   const autoSummarizeAfterCleanupRef = useRef(false)
+  const [queuedMsg, setQueuedMsg] = useState<string | null>(null)
   const CHAT_WARN_CHARS = 100_000
 
   // ── Notifications ──────────────────────────────────────────────────────────
@@ -514,11 +516,9 @@ export default function ResultPage() {
     requestNotifyPermission()
     try {
       setCleanupError('')
-      await startCleanup(videoId)
-      setLocalCleanupDuration(null)
-      prevCleanupStatusRef.current = 'processing'
-      startCleanupTimer()
-      setResult({ ...result, cleanup_status: 'processing', cleanup_duration_seconds: null })
+      await queueBulkAdd([result.url], ['cleanup'])
+      setQueuedMsg('cleanup')
+      // Start polling — worker will update cleanup_status in DB
       stopPolling()
       pollRef.current = setInterval(() => loadResult(false), 3000)
     } catch (err: unknown) {
@@ -537,25 +537,49 @@ export default function ResultPage() {
         'AI Cleanup has not been run yet.\n\nTo get a quality summary, cleanup should run first.\n\nRun cleanup → summarize pipeline now?'
       )
       if (!confirmed) return
-      autoSummarizeAfterCleanupRef.current = true
-      await handleCleanup()
+      // Queue both stages together
+      try {
+        setSummaryError('')
+        await queueBulkAdd([result.url], ['cleanup', 'summary'])
+        setQueuedMsg('cleanup+summary')
+        stopPolling()
+        pollRef.current = setInterval(() => loadResult(false), 3000)
+      } catch (err: unknown) {
+        console.error('[Pipeline] failed:', err)
+        setSummaryError(err instanceof Error ? err.message : 'Unknown error')
+      }
       return
     }
 
     requestNotifyPermission()
     try {
       setSummaryError('')
-      await startSummary(videoId)
-      setLocalSummaryDuration(null)
-      prevSummaryStatusRef.current = 'processing'
-      startSummaryTimer()
-      setResult({ ...result, summary_status: 'processing', summary_duration_seconds: null })
+      await queueBulkAdd([result.url], ['summary'])
+      setQueuedMsg('summary')
       stopSummaryPolling()
       summaryPollRef.current = setInterval(() => loadResult(false), 3000)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       console.error('[Summary] failed:', err)
       setSummaryError(msg)
+    }
+  }
+
+  async function handleMindmap(force = false) {
+    if (!videoId || !result) return
+    try {
+      setMindmapError('')
+      if (force) {
+        // Reset mindmap_text optimistically so UI shows generating state
+        setResult(r => r ? { ...r, mindmap_text: null, mindmap_status: null } : r)
+      }
+      await queueBulkAdd([result.url], ['mindmap'])
+      setQueuedMsg('mindmap')
+      stopMindmapPolling()
+      mindmapPollRef.current = setInterval(() => loadResult(false), 3000)
+    } catch (err: unknown) {
+      console.error('[Mindmap] failed:', err)
+      setMindmapError(err instanceof Error ? err.message : 'Unknown error')
     }
   }
 
@@ -577,7 +601,31 @@ export default function ResultPage() {
     <>
     <div className="container">
       <div className="card">
-        <h2>{result.title ?? 'Untitled'}</h2>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+          <h2 style={{ margin: 0, flex: 1 }}>{result.title ?? 'Untitled'}</h2>
+          <button
+            onClick={async () => {
+              const r = await toggleFavorite(videoId!)
+              setResult(prev => prev ? { ...prev, is_favorite: r.is_favorite } : prev)
+            }}
+            title={result.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.4rem', lineHeight: 1, padding: '0.1rem 0.2rem', color: result.is_favorite ? '#f5a623' : 'var(--text-muted)', flexShrink: 0 }}
+          >
+            {result.is_favorite ? '★' : '☆'}
+          </button>
+        </div>
+        {queuedMsg && (
+          <div className="bulk-result bulk-result--ok" style={{ marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            ⏱ Added to queue
+            {queuedMsg === 'cleanup+summary' ? ' (cleanup → summary)' : queuedMsg === 'cleanup' ? ' (cleanup)' : queuedMsg === 'summary' ? ' (summary)' : ' (mindmap)'}
+            {' · '}
+            <a href="/queue" style={{ color: 'inherit', textDecoration: 'underline' }}>View queue →</a>
+            <button
+              onClick={() => setQueuedMsg(null)}
+              style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6, fontSize: '1rem' }}
+            >✕</button>
+          </div>
+        )}
         <div className="meta">
           {/* ── Row 1: video info ── */}
           <div className="meta-row">
@@ -867,18 +915,9 @@ export default function ResultPage() {
               onClick={async () => {
                 if (!mindmapEnabled) {
                   setMindmapEnabled(true)
-                  // If no mindmap yet — trigger generation
+                  // If no mindmap yet — add to queue
                   if (!result.mindmap_text && result.mindmap_status !== 'processing') {
-                    setMindmapError('')
-                    try {
-                      await startMindmap(videoId!)
-                      setResult(r => r ? { ...r, mindmap_status: 'processing' } : r)
-                      prevMindmapStatusRef.current = 'processing'
-                      stopMindmapPolling()
-                      mindmapPollRef.current = setInterval(() => loadResult(false), 3000)
-                    } catch (e: unknown) {
-                      setMindmapError(e instanceof Error ? e.message : 'Failed')
-                    }
+                    await handleMindmap()
                   }
                 } else {
                   setMindmapEnabled(false)
@@ -931,18 +970,7 @@ export default function ResultPage() {
                   <MindmapView
                     text={result.mindmap_text}
                     title={result.title ?? undefined}
-                    onRegenerate={async () => {
-                      setMindmapError('')
-                      try {
-                        await startMindmap(videoId!, true)
-                        setResult(r => r ? { ...r, mindmap_status: 'processing', mindmap_text: null } : r)
-                        prevMindmapStatusRef.current = 'processing'
-                        stopMindmapPolling()
-                        mindmapPollRef.current = setInterval(() => loadResult(false), 3000)
-                      } catch (e: unknown) {
-                        setMindmapError(e instanceof Error ? e.message : 'Failed')
-                      }
-                    }}
+                    onRegenerate={() => handleMindmap(true)}
                   />
                 </Suspense>
               ) : (

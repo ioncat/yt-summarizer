@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { getHistory, deleteResult, deleteResultsBulk, queueBulkAdd, HistoryItem } from '../api'
+import { getHistory, deleteResult, deleteResultsBulk, queueBulkAdd, toggleFavorite, HistoryItem } from '../api'
 import { classifyVideo } from '../utils/videoType'
 
 const HISTORY_PIPELINE_PRESETS = [
@@ -19,11 +19,15 @@ export default function HistoryPage() {
   const [deleting, setDeleting] = useState(false)
   const [queuePipeline, setQueuePipeline] = useState('cleanup_summary')
   const [queueMsg, setQueueMsg] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [favoritesOnly, setFavoritesOnly] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const navigate = useNavigate()
 
-  async function load(p: number) {
+  async function load(p: number, q?: string, favs?: boolean) {
     try {
-      const res = await getHistory(p)
+      const res = await getHistory(p, q ?? search, favs ?? favoritesOnly)
       setItems(prev => p === 1 ? res.items : [...prev, ...res.items])
       setHasMore(res.items.length === 20)
       setPage(p)
@@ -33,7 +37,34 @@ export default function HistoryPage() {
     }
   }
 
-  useEffect(() => { load(1) }, [])
+  useEffect(() => { load(1) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleSearchChange(val: string) {
+    setSearchInput(val)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setSearch(val)
+      load(1, val)
+    }, 350)
+  }
+
+  function toggleFavoritesFilter() {
+    const next = !favoritesOnly
+    setFavoritesOnly(next)
+    load(1, search, next)
+  }
+
+  async function handleToggleFavorite(e: React.MouseEvent, videoId: string) {
+    e.stopPropagation()
+    try {
+      const r = await toggleFavorite(videoId)
+      if (favoritesOnly && !r.is_favorite) {
+        setItems(prev => prev.filter(i => i.video_id !== videoId))
+      } else {
+        setItems(prev => prev.map(i => i.video_id === videoId ? { ...i, is_favorite: r.is_favorite } : i))
+      }
+    } catch { /* ignore */ }
+  }
 
   function toggleSelectMode() {
     setSelectMode(m => !m)
@@ -114,8 +145,25 @@ export default function HistoryPage() {
   return (
     <div className="container">
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
           <h2 style={{ margin: 0 }}>History</h2>
+          <input
+            type="search"
+            placeholder="Search by title or channel…"
+            value={searchInput}
+            onChange={e => handleSearchChange(e.target.value)}
+            style={{ flex: '1', minWidth: '200px', maxWidth: '360px', padding: '0.35rem 0.7rem', fontSize: '0.9rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)' }}
+          />
+          <button
+            className={`btn btn-secondary btn-sm${favoritesOnly ? ' btn-active' : ''}`}
+            onClick={toggleFavoritesFilter}
+            title={favoritesOnly ? 'Show all videos' : 'Show favorites only'}
+            style={{ flexShrink: 0, color: favoritesOnly ? '#f5a623' : undefined }}
+          >
+            {favoritesOnly ? '★ Favorites' : '☆ Favorites'}
+          </button>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '1rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             {selectMode && (
               <>
@@ -180,7 +228,16 @@ export default function HistoryPage() {
                     onClick={() => selectMode ? toggleItem(item.video_id) : navigate(`/result/${item.video_id}`)}
                     style={{ cursor: 'pointer' }}
                   >
-                    <div className="history-title">{item.title ?? 'Untitled'}</div>
+                    <div className="history-title">
+                      {!selectMode && (
+                        <button
+                          onClick={e => handleToggleFavorite(e, item.video_id)}
+                          title={item.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: '0 0.3rem 0 0', color: item.is_favorite ? '#f5a623' : 'var(--text-muted)', verticalAlign: 'middle' }}
+                        >{item.is_favorite ? '★' : '☆'}</button>
+                      )}
+                      {item.title ?? 'Untitled'}
+                    </div>
                     <div className="history-meta">
                       {item.author && <>{item.author} · </>}
                       {new Date(item.created_at).toLocaleDateString()}

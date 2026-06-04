@@ -18,6 +18,15 @@ const STATUS_CLASS: Record<string, string> = {
   skipped: 'queue-status--skipped',
 }
 
+/** Derive active stage from progress string. */
+function activeStage(progress: string | null): string | null {
+  if (!progress) return null
+  if (progress.startsWith('extracting')) return 'extract'
+  if (progress.startsWith('cleanup')) return 'cleanup'
+  if (progress.startsWith('summary')) return 'summary'
+  return null
+}
+
 function shortUrl(url: string) {
   try {
     const u = new URL(url)
@@ -55,22 +64,10 @@ export default function QueuePage() {
 
   useEffect(() => {
     load()
-    pollRef.current = setInterval(() => {
-      const hasActive = items.some(i => i.status === 'pending' || i.status === 'processing')
-      if (hasActive) load()
-    }, 3000)
+    // Always poll: 3s when active items present, 5s when idle (picks up new items added externally)
+    pollRef.current = setInterval(load, 3000)
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Re-register poll when items change (to pick up new active state)
-  useEffect(() => {
-    if (pollRef.current) clearInterval(pollRef.current)
-    const hasActive = items.some(i => i.status === 'pending' || i.status === 'processing')
-    if (hasActive) {
-      pollRef.current = setInterval(load, 3000)
-    }
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [items])
 
   async function handleDelete(id: number) {
     try {
@@ -104,6 +101,14 @@ export default function QueuePage() {
   const pendingCount = items.filter(i => i.status === 'pending').length
   const failedCount = items.filter(i => i.status === 'failed').length
   const processingItem = items.find(i => i.status === 'processing')
+
+  const STATUS_ORDER: Record<string, number> = { processing: 0, pending: 1, failed: 2, done: 3, skipped: 4 }
+  const sortedItems = [...items].sort((a, b) => {
+    const sd = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)
+    if (sd !== 0) return sd
+    // Within same status: newest first
+    return new Date(b.added_at).getTime() - new Date(a.added_at).getTime()
+  })
 
   return (
     <div className="container">
@@ -142,6 +147,11 @@ export default function QueuePage() {
                     {processingItem.pipeline_stages.join(' → ')}
                   </span>
                 )}
+                {processingItem.progress && (
+                  <span className="meta-chip" style={{ marginLeft: '0.5rem', opacity: 0.85 }}>
+                    {processingItem.progress}
+                  </span>
+                )}
               </div>
             )}
 
@@ -157,7 +167,7 @@ export default function QueuePage() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, idx) => (
+                {sortedItems.map((item, idx) => (
                   <>
                     <tr key={item.id} className={`queue-row queue-row--${item.status}`}>
                       <td className="queue-cell-num">{idx + 1}</td>
@@ -169,12 +179,37 @@ export default function QueuePage() {
                         )}
                       </td>
                       <td className="queue-cell-pipeline">
-                        {item.pipeline_stages.join(' → ')}
+                        {item.status === 'processing' ? (
+                          <span>
+                            {item.pipeline_stages.map((s, i) => {
+                              const cur = activeStage(item.progress)
+                              const isActive = cur === s
+                              const isDone = cur ? item.pipeline_stages.indexOf(cur) > i : false
+                              return (
+                                <span key={s}>
+                                  {i > 0 && <span style={{ opacity: 0.4 }}> → </span>}
+                                  <span style={{
+                                    fontWeight: isActive ? 700 : undefined,
+                                    color: isActive ? 'var(--accent)' : isDone ? 'var(--ok)' : undefined,
+                                    opacity: (!isActive && !isDone) ? 0.5 : undefined,
+                                  }}>{s}</span>
+                                </span>
+                              )
+                            })}
+                          </span>
+                        ) : (
+                          item.pipeline_stages.join(' → ')
+                        )}
                       </td>
                       <td className="queue-cell-status">
                         <span className={`queue-status ${STATUS_CLASS[item.status] ?? ''}`}>
                           {STATUS_ICON[item.status] ?? item.status} {item.status}
                         </span>
+                        {item.status === 'processing' && item.progress && (
+                          <span style={{ display: 'block', fontSize: '0.78rem', opacity: 0.7, marginTop: '2px' }}>
+                            {item.progress}
+                          </span>
+                        )}
                         {item.status === 'failed' && item.error_message && (
                           <button
                             className="queue-error-toggle"

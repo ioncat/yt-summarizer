@@ -30,6 +30,7 @@ class Video(Base):
     language_detected: Mapped[str | None] = mapped_column(String)
     has_subtitles: Mapped[bool | None] = mapped_column(Boolean)
     subtitles_type: Mapped[str | None] = mapped_column(String)
+    is_favorite: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow

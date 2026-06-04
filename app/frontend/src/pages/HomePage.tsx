@@ -66,34 +66,55 @@ export default function HomePage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError('')
+    const trimmedUrl = url.trim()
 
-    if (autoPipeline && allSettings) {
-      const issues: string[] = []
-      if (!allSettings.app.ollama_url) issues.push('Ollama URL not configured (Settings → General)')
-      if (!allSettings.cleanup.model) issues.push('AI Cleanup model not selected (Settings → AI Cleanup)')
-      if (!allSettings.summarization.model) issues.push('Summarization model not selected (Settings → Summarization)')
-      if (issues.length) {
-        setError('Auto-pipeline is not ready:\n• ' + issues.join('\n• '))
-        return
+    if (autoPipeline) {
+      // Full pipeline → always goes through queue for durability
+      if (allSettings) {
+        const issues: string[] = []
+        if (!allSettings.app.ollama_url) issues.push('Ollama URL not configured (Settings → General)')
+        if (!allSettings.cleanup.model) issues.push('AI Cleanup model not selected (Settings → AI Cleanup)')
+        if (!allSettings.summarization.model) issues.push('Summarization model not selected (Settings → Summarization)')
+        if (issues.length) {
+          setError('Auto-pipeline is not ready:\n• ' + issues.join('\n• '))
+          return
+        }
       }
-    }
-
-    setLoading(true)
-    try {
-      const res = await processVideo(url.trim(), language)
-      navigate(
-        `/processing/${res.task_id}/${res.video_id}?url=${encodeURIComponent(url.trim())}`,
-        { state: { autoPipeline } }
-      )
-    } catch (err) {
-      if (err instanceof VideoAlreadyExistsError) {
-        navigate(`/result/${err.videoId}`)
-        return
+      setLoading(true)
+      try {
+        const res = await queueBulkAdd([trimmedUrl], ['extract', 'cleanup', 'summary'])
+        if (res.duplicates?.length) {
+          // Already processed — navigate directly to result
+          const vid = res.duplicates[0].replace(/.*[?&]v=/, '').replace(/[&?].*/, '')
+          navigate(`/result/${vid}`)
+          return
+        }
+        navigate('/queue')
+      } catch (err) {
+        console.error('[Home] queueBulkAdd failed:', err)
+        setError(err instanceof Error ? err.message : 'Failed to add to queue')
+      } finally {
+        setLoading(false)
       }
-      console.error('[Home] processVideo failed:', err)
-      setError(err instanceof Error ? err.message : 'Unknown error')
-    } finally {
-      setLoading(false)
+    } else {
+      // Extraction only — direct flow (no LLM, no queue needed)
+      setLoading(true)
+      try {
+        const res = await processVideo(trimmedUrl, language)
+        navigate(
+          `/processing/${res.task_id}/${res.video_id}?url=${encodeURIComponent(trimmedUrl)}`,
+          { state: { autoPipeline: false } }
+        )
+      } catch (err) {
+        if (err instanceof VideoAlreadyExistsError) {
+          navigate(`/result/${err.videoId}`)
+          return
+        }
+        console.error('[Home] processVideo failed:', err)
+        setError(err instanceof Error ? err.message : 'Unknown error')
+      } finally {
+        setLoading(false)
+      }
     }
   }
 
@@ -162,16 +183,16 @@ export default function HomePage() {
                   localStorage.setItem('yt_summarizer_auto_pipeline', String(e.target.checked))
                 }}
               />
-              Run AI cleanup automatically
+              Run full pipeline (Extract → Cleanup → Summary)
             </label>
             <p className="field-hint">
-              {ollamaOnline ? 'Runs after extraction. Requires Ollama.' : 'Ollama offline — unavailable.'}
+              {ollamaOnline ? 'Adds to queue. Processes sequentially — nothing gets lost on restart.' : 'Ollama offline — unavailable.'}
             </p>
           </div>
           {error && <div className="error-box" style={{ marginBottom: '1rem', whiteSpace: 'pre-line' }}>{error}</div>}
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
             <button className="btn btn-primary" type="submit" disabled={loading || !url.trim()}>
-              {loading ? 'Submitting…' : 'Extract subtitles'}
+              {loading ? 'Submitting…' : autoPipeline ? '⏱ Add to queue' : 'Extract subtitles'}
             </button>
             <button
               type="button"

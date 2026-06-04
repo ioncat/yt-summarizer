@@ -47,6 +47,7 @@ from services.video_service import (
     start_mindmap_generation,
     finish_mindmap,
     reset_mindmap_status,
+    toggle_favorite,
 )
 from services.text_summarizer import summarize_text, extract_notes, MAP_REDUCE_THRESHOLD
 from services.text_mindmapper import generate_mindmap
@@ -188,8 +189,19 @@ async def get_video_result(video_id: str, db: Annotated[AsyncSession, Depends(ge
 async def list_history(
     db: Annotated[AsyncSession, Depends(get_db)],
     page: int = 1,
+    search: str | None = None,
+    favorites_only: bool = False,
 ):
-    return await get_history(db, page=page)
+    return await get_history(db, page=page, search=search or None, favorites_only=favorites_only)
+
+
+@router.post("/result/{video_id}/favorite")
+async def favorite_video(
+    video_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    new_state = await toggle_favorite(db, video_id)
+    return {"video_id": video_id, "is_favorite": new_state}
 
 
 async def _run_cleanup(video_id: str) -> None:

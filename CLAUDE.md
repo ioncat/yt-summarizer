@@ -376,7 +376,9 @@ Do this BEFORE restarting the backend with new model/migration code. No exceptio
 
 **URL extraction from free-form lines**: Both single and bulk endpoints strip surrounding text from each line using `https?://[^\s|"'<>]+` + trailing punctuation strip `[,;.:!?]+$`. Handles "URL | title", "title — URL", clipboard pastes from YouTube.
 
-**Queue worker**: `queue_service.py` — asyncio task started in `lifespan()`. Polls every 5s for `pending` items. Processes one item at a time (Ollama can't handle parallel heavy requests). On backend restart, items stuck in `processing` are reset to `pending`. `video_id` (YouTube ID) stored at queue insert time — used for dedup without waiting for extraction to complete. Per-item cancel is Out of Scope; no cancel set in worker (`is_cancelled=lambda: False`).
+**Queue as sole LLM path**: ALL LLM operations go through the queue — HomePage autoPipeline → `queueBulkAdd(["extract","cleanup","summary"])`; ResultPage buttons (Clean with AI / Summarize / Mind Map / pipeline guard) → `queueBulkAdd([url], [stage])`. Benchmark is the only exception. Ensures durability: restart resumes pending tasks automatically.
+
+**Queue worker**: `queue_service.py` — asyncio task started in `lifespan()`. Polls every 5s for `pending` items. Processes one item at a time. Supported stages: `extract`, `cleanup`, `summary`, `mindmap`. On restart, stuck `processing` items reset to `pending`. `video_id` stored at insert time for dedup. `_QUEUE_PROGRESS[item_id]` stores live progress text ("cleanup: paragraph 3/12") — returned via `get_queue()`, displayed in QueuePage banner + table row with active-stage highlighting. Per-item cancel Out of Scope; worker uses `is_cancelled=lambda: False`.
 
 ---
 

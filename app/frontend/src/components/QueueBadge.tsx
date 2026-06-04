@@ -15,7 +15,7 @@ export default function QueueBadge() {
     }
 
     check()
-    const interval = setInterval(check, 8000)
+    const interval = setInterval(check, 4000)
     return () => { mounted = false; clearInterval(interval) }
   }, [])
 

@@ -233,18 +233,25 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
         ),
         "mindmap_text": fmt.mindmap_text if fmt else None,
         "mindmap_status": fmt.mindmap_status if fmt else None,
+        "is_favorite": bool(video.is_favorite),
     }
 
 
-async def get_history(db: AsyncSession, page: int = 1, page_size: int = 20) -> dict:
+async def get_history(
+    db: AsyncSession,
+    page: int = 1,
+    page_size: int = 20,
+    search: str | None = None,
+    favorites_only: bool = False,
+) -> dict:
     offset = (page - 1) * page_size
-    stmt = (
-        select(Video)
-        .where(~Video.url.startswith("__pending__"))
-        .order_by(Video.created_at.desc())
-        .offset(offset)
-        .limit(page_size)
-    )
+    base = select(Video).where(~Video.url.startswith("__pending__"))
+    if search:
+        q = f"%{search}%"
+        base = base.where(Video.title.ilike(q) | Video.author.ilike(q))
+    if favorites_only:
+        base = base.where(Video.is_favorite == True)  # noqa: E712
+    stmt = base.order_by(Video.created_at.desc()).offset(offset).limit(page_size)
     rows = (await db.execute(stmt)).scalars().all()
 
     items = []
@@ -264,10 +271,25 @@ async def get_history(db: AsyncSession, page: int = 1, page_size: int = 20) -> d
             "has_chapters": bool(v.chapters),
             "has_cleaned": bool(fmt and fmt.cleaned_text),
             "has_summary": bool(fmt and fmt.summary_text),
+            "is_favorite": bool(v.is_favorite),
             "created_at": v.created_at.isoformat(),
         })
 
     return {"page": page, "items": items}
+
+
+async def toggle_favorite(db: AsyncSession, video_id: str) -> bool:
+    """Toggle is_favorite for a video. Returns new state."""
+    stmt = select(Video).where(
+        Video.video_id == video_id,
+        ~Video.url.startswith("__pending__"),
+    )
+    video = (await db.execute(stmt)).scalars().first()
+    if not video:
+        return False
+    video.is_favorite = not bool(video.is_favorite)
+    await db.commit()
+    return bool(video.is_favorite)
 
 
 async def get_formatted_subtitle(db: AsyncSession, video_id: str) -> SubtitleFormatted | None:

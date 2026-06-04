@@ -24,6 +24,9 @@ logger = logging.getLogger("queue_service")
 # Global stop flag — set to True to gracefully stop the worker loop
 _WORKER_STOP = False
 
+# In-memory progress per item_id: "paragraph 3/12", "chunk 5/20", etc.
+_QUEUE_PROGRESS: dict[int, str] = {}
+
 
 # ---------------------------------------------------------------------------
 # CRUD
@@ -109,6 +112,7 @@ async def get_queue(db: AsyncSession) -> list[dict]:
             "started_at": r[8],
             "finished_at": r[9],
             "sort_order": r[10],
+            "progress": _QUEUE_PROGRESS.get(r[0]),
         }
         for r in rows
     ]
@@ -212,6 +216,7 @@ async def _set_processing(item_id: int) -> None:
 
 
 async def _set_done(item_id: int, video_id: str | None, db_video_id: str | None) -> None:
+    _QUEUE_PROGRESS.pop(item_id, None)
     async with AsyncSessionLocal() as db:
         await db.execute(
             text(
@@ -224,6 +229,7 @@ async def _set_done(item_id: int, video_id: str | None, db_video_id: str | None)
 
 
 async def _set_failed(item_id: int, error_message: str) -> None:
+    _QUEUE_PROGRESS.pop(item_id, None)
     async with AsyncSessionLocal() as db:
         await db.execute(
             text(
@@ -275,13 +281,13 @@ async def _run_extract(url: str, language: str = "auto") -> dict[str, Any]:
     return {"video_id": yt_video_id, "db_video_id": db_video_id}
 
 
-async def _run_cleanup_stage(yt_video_id: str) -> None:
+async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
     """Run LLM cleanup for a video (already extracted)."""
     from datetime import datetime as _dt
     from services.text_cleaner import clean_text
     from services.video_service import (
         get_result, get_stage_settings, get_app_setting,
-        set_cleanup_processing, finish_cleanup, reset_cleanup_status,
+        set_cleanup_processing, finish_cleanup,
     )
 
     async with AsyncSessionLocal() as db:
@@ -299,6 +305,9 @@ async def _run_cleanup_stage(yt_video_id: str) -> None:
             return
         await set_cleanup_processing(db, yt_video_id, model=model)
 
+    def on_cleanup_progress(done: int, total: int) -> None:
+        _QUEUE_PROGRESS[item_id] = f"cleanup: paragraph {done}/{total}"
+
     started_at = _dt.utcnow()
     cleaned = await clean_text(
         formatted_text,
@@ -306,8 +315,8 @@ async def _run_cleanup_stage(yt_video_id: str) -> None:
         user_prompt_template=stage.get("user_prompt_template"),
         model=model,
         ollama_url=ollama_url,
-        is_cancelled=lambda: False,  # no per-item cancel for queue
-        on_progress=None,
+        is_cancelled=lambda: False,
+        on_progress=on_cleanup_progress,
         parallel_workers=parallel_workers,
     )
 
@@ -315,13 +324,13 @@ async def _run_cleanup_stage(yt_video_id: str) -> None:
         await finish_cleanup(db, yt_video_id, cleaned, started_at=started_at)
 
 
-async def _run_summary_stage(yt_video_id: str) -> None:
+async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
     """Run LLM summarization for a video."""
     from datetime import datetime as _dt
     from services.text_summarizer import summarize_text, extract_notes, MAP_REDUCE_THRESHOLD
     from services.video_service import (
         get_result, get_stage_settings, get_app_setting,
-        set_summary_processing, finish_summary, reset_summary_status,
+        set_summary_processing, finish_summary,
     )
 
     async with AsyncSessionLocal() as db:
@@ -351,6 +360,10 @@ async def _run_summary_stage(yt_video_id: str) -> None:
         and len(source_text) >= MAP_REDUCE_THRESHOLD
     )
 
+    def on_summary_progress(done: int, total: int) -> None:
+        label = "chapter" if use_full_extract else "chunk"
+        _QUEUE_PROGRESS[item_id] = f"summary: {label} {done}/{total}"
+
     started_at = _dt.utcnow()
     if use_full_extract:
         summary, mode, chunks_count = await extract_notes(
@@ -358,7 +371,7 @@ async def _run_summary_stage(yt_video_id: str) -> None:
             model=model,
             ollama_url=ollama_url,
             is_cancelled=lambda: False,
-            on_progress=None,
+            on_progress=on_summary_progress,
             language=language,
             parallel_workers=parallel_workers,
         )
@@ -373,7 +386,7 @@ async def _run_summary_stage(yt_video_id: str) -> None:
             force_map_reduce=force_map_reduce,
             extract_prompt=extract_stage.get("user_prompt_template"),
             combine_prompt=combine_stage.get("user_prompt_template"),
-            on_progress=None,
+            on_progress=on_summary_progress,
             language=language,
             parallel_workers=parallel_workers,
         )
@@ -383,6 +396,48 @@ async def _run_summary_stage(yt_video_id: str) -> None:
             db, yt_video_id, summary, mode=mode,
             chunks_count=chunks_count, started_at=started_at,
         )
+
+
+async def _run_mindmap_stage(yt_video_id: str, item_id: int) -> None:
+    """Run mindmap generation for a video."""
+    from services.text_mindmapper import generate_mindmap
+    from services.video_service import (
+        get_result, get_stage_settings, get_app_setting,
+        start_mindmap_generation, finish_mindmap,
+    )
+
+    async with AsyncSessionLocal() as db:
+        result = await get_result(db, yt_video_id)
+        if not result:
+            logger.warning("Queue mindmap: video %s not found", yt_video_id)
+            return
+        text = result.get("summary_text") or result.get("cleaned_text") or result.get("formatted_text")
+        if not text:
+            logger.warning("Queue mindmap: no text for %s, skipping", yt_video_id)
+            return
+        stage = await get_stage_settings(db, "summarization")
+        ollama_url = await get_app_setting(db, "ollama_url")
+        model = stage.get("model") if stage else None
+        if not ollama_url or not model:
+            logger.warning("Queue mindmap: missing ollama_url or model, skipping for %s", yt_video_id)
+            return
+        lang_code = result.get("language") or "ru"
+        lang_map = {"ru": "Russian", "en": "English", "uk": "Ukrainian", "de": "German",
+                    "fr": "French", "es": "Spanish", "zh": "Chinese", "ja": "Japanese"}
+        language = lang_map.get(lang_code.lower(), lang_code)
+        await start_mindmap_generation(db, yt_video_id)
+
+    _QUEUE_PROGRESS[item_id] = "mindmap: generating…"
+    mindmap_md = await generate_mindmap(
+        text=text,
+        ollama_url=ollama_url,
+        model=model,
+        language=language,
+        is_cancelled=lambda: False,
+    )
+
+    async with AsyncSessionLocal() as db:
+        await finish_mindmap(db, yt_video_id, mindmap_md)
 
 
 # ---------------------------------------------------------------------------
@@ -411,6 +466,7 @@ async def queue_worker() -> None:
         try:
             # Stage 1: extract (only if requested — skip for already-processed videos)
             if "extract" in pipeline_stages:
+                _QUEUE_PROGRESS[item_id] = "extracting subtitles…"
                 extract_result = await _run_extract(url)
                 yt_video_id = extract_result["video_id"]
                 db_video_id = extract_result["db_video_id"]
@@ -425,11 +481,15 @@ async def queue_worker() -> None:
 
             # Stage 2: cleanup (optional)
             if "cleanup" in pipeline_stages:
-                await _run_cleanup_stage(yt_video_id)
+                await _run_cleanup_stage(yt_video_id, item_id)
 
             # Stage 3: summary (optional)
             if "summary" in pipeline_stages:
-                await _run_summary_stage(yt_video_id)
+                await _run_summary_stage(yt_video_id, item_id)
+
+            # Stage 4: mindmap (optional)
+            if "mindmap" in pipeline_stages:
+                await _run_mindmap_stage(yt_video_id, item_id)
 
             await _set_done(item_id, yt_video_id, db_video_id)
             logger.info("Queue worker: item %d done video_id=%s", item_id, yt_video_id)

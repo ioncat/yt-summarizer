@@ -44,6 +44,7 @@ export interface ResultResponse {
   chat_history: Array<{ role: string; content: string }> | null
   mindmap_text: string | null
   mindmap_status: 'processing' | 'done' | 'failed' | null
+  is_favorite: boolean
 }
 
 export interface HistoryItem {
@@ -55,6 +56,7 @@ export interface HistoryItem {
   has_chapters?: boolean
   has_cleaned?: boolean
   has_summary?: boolean
+  is_favorite?: boolean
   created_at: string
 }
 
@@ -99,9 +101,18 @@ export async function getResult(videoId: string): Promise<ResultResponse> {
   return res.json()
 }
 
-export async function getHistory(page = 1): Promise<HistoryResponse> {
-  const res = await fetch(`${BASE}/history?page=${page}`)
+export async function getHistory(page = 1, search?: string, favoritesOnly = false): Promise<HistoryResponse> {
+  const params = new URLSearchParams({ page: String(page) })
+  if (search) params.set('search', search)
+  if (favoritesOnly) params.set('favorites_only', 'true')
+  const res = await fetch(`${BASE}/history?${params}`)
   if (!res.ok) throw new Error('Failed to load history')
+  return res.json()
+}
+
+export async function toggleFavorite(videoId: string): Promise<{ is_favorite: boolean }> {
+  const res = await fetch(`${BASE}/result/${videoId}/favorite`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to toggle favorite')
   return res.json()
 }
 
@@ -340,6 +351,7 @@ export interface QueueItem {
   started_at: string | null
   finished_at: string | null
   sort_order: number
+  progress: string | null
 }
 
 export async function queueBulkAdd(
