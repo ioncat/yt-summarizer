@@ -1,6 +1,6 @@
 # YT Summarizer
 
-Turn YouTube videos into scannable text so you can decide what to watch, save, or skip.
+AI tool for YouTube: extract, clean, summarize video content — and chat with the content.
 
 ## Watch or Skip
 
