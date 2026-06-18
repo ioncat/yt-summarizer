@@ -74,7 +74,6 @@ export default function ResultPage() {
   const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
   const [chatInput, setChatInput] = useState('')
   const [isChatting, setIsChatting] = useState(false)
-  const [chatCopied, setChatCopied] = useState(false)
   const ollamaMessagesRef = useRef<Array<{ role: string; content: string }>>([])
   const chatEndRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
@@ -415,19 +414,6 @@ export default function ResultPage() {
     if (videoId) clearChatHistory(videoId).catch(() => {})
   }
 
-  function copyChat() {
-    if (!result || chatHistory.length === 0) return
-    const lines = [
-      `Video: ${result.title ?? ''}`,
-      `\nSummary:\n${result.summary_text ?? ''}`,
-      ...chatHistory.map(m => `\n${m.role === 'user' ? 'Q' : 'A'}: ${m.content}`),
-    ].join('\n')
-    navigator.clipboard.writeText(lines).then(() => {
-      setChatCopied(true)
-      setTimeout(() => setChatCopied(false), 2000)
-    })
-  }
-
   const displayText =
     activeTab === 'summary' ? result?.summary_text :
     activeTab === 'cleaned' ? (result?.cleaned_text ?? result?.formatted_text) :
@@ -584,197 +570,172 @@ export default function ResultPage() {
   }
 
   if (error) return (
-    <div className="container">
-      <div className="card"><div className="error-box">{error}</div></div>
+    <div className="p-6 md:p-gutter max-w-[1200px] mx-auto w-full">
+      <div className="bg-error-container text-on-error-container rounded-xl px-6 py-4 text-body-md">{error}</div>
     </div>
   )
   if (!result) return (
-    <div className="container">
-      <div className="card"><div className="status-box"><div className="spinner" /></div></div>
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <span className="material-symbols-outlined text-secondary animate-spin" style={{ fontSize: '36px', animation: 'spin 1.2s linear infinite' }}>progress_activity</span>
     </div>
   )
 
   const cleanupDuration = result.cleanup_duration_seconds ?? localCleanupDuration
   const summaryDuration = result.summary_duration_seconds ?? localSummaryDuration
 
+  // Compression %
+  const compressionPct = (() => {
+    const inputLen = result.cleaned_text?.length ?? result.formatted_text?.length ?? null
+    const outputLen = result.summary_text?.length ?? null
+    if (!inputLen || !outputLen || outputLen >= inputLen) return null
+    return Math.round((1 - outputLen / inputLen) * 100)
+  })()
+
+  // Active tab char count
+  const displayCharCount = (() => {
+    const subtitlesCount = result.char_count ?? result.formatted_text?.length ?? null
+    const cleanedCount = result.cleaned_text?.length ?? null
+    const summaryCount = result.summary_text?.length ?? null
+    return activeTab === 'summary' ? summaryCount : activeTab === 'cleaned' ? cleanedCount : subtitlesCount
+  })()
+
+  // Stage ribbon content
+  const showCleanupRibbon = activeTab === 'cleaned' && (
+    (result.cleanup_status === 'processing' && cleanupElapsedSeconds != null) || cleanupDuration != null
+  )
+  const showSummaryRibbon = activeTab === 'summary' && (
+    (result.summary_status === 'processing' && summaryElapsedSeconds != null) || summaryDuration != null
+  )
+
+  function tabClass(tab: Tab) {
+    return activeTab === tab
+      ? 'px-1 py-3 text-primary font-bold text-label-md border-b-2 border-primary transition-colors'
+      : 'px-1 py-3 text-on-surface-variant text-label-md hover:text-on-surface transition-colors border-b-2 border-transparent'
+  }
+
+  function actionBtn(primary: boolean, danger = false) {
+    if (danger) return 'flex items-center gap-2 px-4 py-2 bg-surface-container-lowest text-error border border-error/30 rounded-lg text-label-md hover:bg-error/5 active:scale-95 transition-all'
+    if (primary) return 'flex items-center gap-2 px-5 py-2 bg-primary-container text-on-primary-container rounded-lg text-label-md font-semibold active:scale-95 transition-all shadow-sm hover:opacity-90'
+    return 'flex items-center gap-2 px-4 py-2 bg-surface-container-high text-on-surface-variant border border-outline-variant rounded-lg text-label-md hover:bg-surface-container-highest active:scale-95 transition-all'
+  }
+
+  const metaSep = <span className="w-1 h-1 rounded-full bg-outline-variant flex-shrink-0" />
+
   return (
-    <>
-    <div className="container">
-      <div className="card">
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-          <h2 style={{ margin: 0, flex: 1 }}>{result.title ?? 'Untitled'}</h2>
-          <button
-            onClick={async () => {
-              const r = await toggleFavorite(videoId!)
-              setResult(prev => prev ? { ...prev, is_favorite: r.is_favorite } : prev)
-            }}
-            title={result.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.4rem', lineHeight: 1, padding: '0.1rem 0.2rem', color: result.is_favorite ? '#f5a623' : 'var(--text-muted)', flexShrink: 0 }}
-          >
-            {result.is_favorite ? '★' : '☆'}
-          </button>
-        </div>
-        {queuedMsg && (
-          <div className="bulk-result bulk-result--ok" style={{ marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            ⏱ Added to queue
-            {queuedMsg === 'cleanup+summary' ? ' (cleanup → summary)' : queuedMsg === 'cleanup' ? ' (cleanup)' : queuedMsg === 'summary' ? ' (summary)' : ' (mindmap)'}
-            {' · '}
-            <a href="/queue" style={{ color: 'inherit', textDecoration: 'underline' }}>View queue →</a>
+    <div className="p-6 md:p-gutter max-w-[1200px] mx-auto w-full pb-32 space-y-6">
+
+      {/* ── Main card ── */}
+      <section className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden">
+
+        {/* Card header: title + star */}
+        <div className="p-6 border-b border-outline-variant">
+          <div className="flex justify-between items-start mb-4 gap-4">
+            <h2 className="text-headline-xl text-on-surface leading-tight">{result.title ?? 'Untitled'}</h2>
             <button
-              onClick={() => setQueuedMsg(null)}
-              style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6, fontSize: '1rem' }}
-            >✕</button>
+              className={`material-symbols-outlined flex-shrink-0 transition-colors mt-1 ${result.is_favorite ? 'text-amber-400' : 'text-on-surface-variant hover:text-amber-400'}`}
+              style={{ fontSize: '28px', fontVariationSettings: result.is_favorite ? "'FILL' 1" : "'FILL' 0", background: 'none', border: 'none', cursor: 'pointer' }}
+              onClick={async () => {
+                const r = await toggleFavorite(videoId!)
+                setResult(prev => prev ? { ...prev, is_favorite: r.is_favorite } : prev)
+              }}
+              title={result.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+            >star</button>
+          </div>
+
+          {/* Meta row 1: video info */}
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-secondary text-body-sm">
+            {result.author && (
+              <div className="flex items-center gap-1">
+                <span className="font-semibold text-on-surface">Channel:</span> {result.author}
+              </div>
+            )}
+            {result.author && metaSep}
+            <div className="flex items-center gap-1">
+              <span className="font-semibold text-on-surface">Duration:</span> {formatDuration(result.duration)}
+            </div>
+            {result.language && <>{metaSep}<div><span className="font-semibold text-on-surface">Language:</span> {result.language.toUpperCase()}</div></>}
+            {displayCharCount != null && <>{metaSep}<div><span className="font-semibold text-on-surface">Characters:</span> {displayCharCount.toLocaleString()}</div></>}
+            {metaSep}
+            <div><span className="font-semibold text-on-surface">Saved:</span> {formatDate(result.created_at)}</div>
+          </div>
+        </div>
+
+        {/* Queued notification banner */}
+        {queuedMsg && (
+          <div className="px-6 py-3 bg-secondary-container/30 border-b border-outline-variant flex items-center gap-3 text-body-sm text-on-surface">
+            <span className="material-symbols-outlined text-secondary" style={{ fontSize: '16px' }}>schedule</span>
+            Added to queue
+            {queuedMsg === 'cleanup+summary' ? ' (cleanup → summary)' : queuedMsg === 'cleanup' ? ' (cleanup)' : queuedMsg === 'summary' ? ' (summary)' : ' (mindmap)'}
+            <a href="/queue" className="text-primary hover:underline underline-offset-2 ml-1">View queue →</a>
+            <button onClick={() => setQueuedMsg(null)} className="ml-auto text-on-surface-variant hover:text-on-surface transition-colors">
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>close</span>
+            </button>
           </div>
         )}
-        <div className="meta">
-          {/* ── Row 1: video info ── */}
-          <div className="meta-row">
-            {result.author && <>
-              <span className="meta-chip" title="YouTube channel">
-                <span className="meta-label">Channel:</span> {result.author}
-              </span>
-              <span className="meta-sep">•</span>
-            </>}
-            <span className="meta-chip" title="Video duration">
-              <span className="meta-label">Duration</span> {formatDuration(result.duration)}
-            </span>
-            {result.language && <>
-              <span className="meta-sep">•</span>
-              <span className="meta-chip" title="Detected language">
-                <span className="meta-label">Language</span> {result.language.toUpperCase()}
-              </span>
-            </>}
-            {(() => {
-              const subtitlesCount = result.char_count ?? result.formatted_text?.length ?? null
-              const cleanedCount = result.cleaned_text?.length ?? null
-              const summaryCount = result.summary_text?.length ?? null
-              const displayCount =
-                activeTab === 'summary' ? summaryCount :
-                activeTab === 'cleaned' ? cleanedCount :
-                subtitlesCount
-              return displayCount != null ? <>
-                <span className="meta-sep">•</span>
-                <span className="meta-chip" title="Character count for current tab">
-                  <span className="meta-label">Characters</span> {displayCount.toLocaleString()}
-                </span>
-              </> : null
-            })()}
-            <span className="meta-sep">•</span>
-            <span className="meta-chip" title="Date added to history">
-              <span className="meta-label">Saved:</span> {formatDate(result.created_at)}
-            </span>
+
+        {/* Stage metadata ribbon — shown for Cleaned + Summary tabs when data available */}
+        {(showCleanupRibbon || showSummaryRibbon) && (
+          <div className="px-6 py-3 bg-surface-container-low border-b border-outline-variant flex flex-wrap gap-3 text-label-sm text-secondary items-center">
+            {showCleanupRibbon && (
+              result.cleanup_status === 'processing' && cleanupElapsedSeconds != null ? (
+                <>
+                  <span className="material-symbols-outlined text-secondary" style={{ fontSize: '16px', animation: 'spin 1.5s linear infinite' }}>progress_activity</span>
+                  <span>Cleaning… {formatDuration(cleanupElapsedSeconds)}</span>
+                  {result.cleanup_paragraphs_done != null && result.cleanup_paragraphs_total != null && (
+                    <>{metaSep}<span>paragraph {result.cleanup_paragraphs_done} / {result.cleanup_paragraphs_total}</span></>
+                  )}
+                </>
+              ) : cleanupDuration != null ? (
+                <>
+                  <div className="flex items-center gap-2"><span className="material-symbols-outlined" style={{ fontSize: '16px' }}>timer</span>Cleaned in {formatDuration(cleanupDuration)}</div>
+                  {result.cleanup_model && <>{metaSep}<span className="font-bold text-on-surface">{result.cleanup_model}</span></>}
+                  {metaSep}
+                  <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold text-[10px] border border-primary/20">AI Cleanup</span>
+                  {(() => {
+                    const count = result.cleaned_text ? result.cleaned_text.split('\n\n').filter(p => p.trim()).length : null
+                    return count != null ? <>{metaSep}<span>{count} paragraphs</span></> : null
+                  })()}
+                  {result.cleanup_finished_at && <>{metaSep}<span>{formatDate(result.cleanup_finished_at)}</span></>}
+                </>
+              ) : null
+            )}
+            {showSummaryRibbon && (
+              result.summary_status === 'processing' && summaryElapsedSeconds != null ? (
+                <>
+                  <span className="material-symbols-outlined text-secondary" style={{ fontSize: '16px', animation: 'spin 1.5s linear infinite' }}>progress_activity</span>
+                  <span>Summarizing… {formatDuration(summaryElapsedSeconds)}</span>
+                  {result.summary_chunks_done != null && result.summary_chunks_total != null && (
+                    <>{metaSep}<span>{result.chapters ? 'chapter' : 'chunk'} {result.summary_chunks_done} / {result.summary_chunks_total}</span></>
+                  )}
+                </>
+              ) : summaryDuration != null ? (
+                <>
+                  <div className="flex items-center gap-2"><span className="material-symbols-outlined" style={{ fontSize: '16px' }}>timer</span>Summarized in {formatDuration(summaryDuration)}</div>
+                  {result.summary_model && <>{metaSep}<span className="font-bold text-on-surface">{result.summary_model}</span></>}
+                  {result.summary_mode === 'single' && <>{metaSep}<span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold text-[10px] border border-primary/20">Single Pass</span></>}
+                  {result.summary_mode === 'map_reduce' && (
+                    <>{metaSep}<span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold text-[10px] border border-primary/20">Map-Reduce</span>
+                    {result.summary_chunks_count != null && <>{metaSep}<span>{result.summary_chunks_count} chunks</span></>}</>
+                  )}
+                  {result.summary_mode === 'full_extract' && (
+                    <>{metaSep}<span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold text-[10px] border border-primary/20">Full Extract</span>
+                    {result.summary_chunks_count != null && <>{metaSep}<span>{result.summary_chunks_count} chapters</span></>}</>
+                  )}
+                  {compressionPct != null && <>{metaSep}<span>{compressionPct}% compressed</span></>}
+                  {result.summary_finished_at && <>{metaSep}<span>{formatDate(result.summary_finished_at)}</span></>}
+                </>
+              ) : null
+            )}
           </div>
+        )}
 
-          {/* ── Divider + Row 2: stage info (tab-dependent) ── */}
-          {activeTab === 'cleaned' && (
-            result.cleanup_status === 'processing' && cleanupElapsedSeconds != null ? (
-              <div className="meta-row meta-row--stage">
-                <span className="meta-chip" title="AI cleanup in progress">
-                  <span className="meta-label">Cleaning</span> {formatDuration(cleanupElapsedSeconds)}
-                </span>
-                {result.cleanup_paragraphs_done != null && result.cleanup_paragraphs_total != null && <>
-                  <span className="meta-sep">•</span>
-                  <span className="meta-chip" title="Paragraphs processed so far">
-                    paragraph {result.cleanup_paragraphs_done} / {result.cleanup_paragraphs_total}
-                  </span>
-                </>}
-              </div>
-            ) : cleanupDuration != null ? (
-              <div className="meta-row meta-row--stage">
-                <span className="meta-chip" title="Time spent on AI cleanup">
-                  <span className="meta-label">Cleaned in:</span> {formatDuration(cleanupDuration)}
-                </span>
-                {result.cleanup_model && <>
-                  <span className="meta-sep">•</span>
-                  <span className="meta-chip" title="Model used for cleanup">{result.cleanup_model}</span>
-                </>}
-                <span className="meta-sep">•</span>
-                <span className="meta-chip meta-method" title="Processing method">AI Cleanup</span>
-                {(() => {
-                  const count = result.cleaned_text
-                    ? result.cleaned_text.split('\n\n').filter(p => p.trim()).length
-                    : null
-                  return count != null ? <>
-                    <span className="meta-sep">•</span>
-                    <span className="meta-chip" title="Number of paragraphs processed">{count} paragraphs</span>
-                  </> : null
-                })()}
-                {result.cleanup_finished_at && <>
-                  <span className="meta-sep">•</span>
-                  <span className="meta-chip" title="When AI cleanup finished">{formatDate(result.cleanup_finished_at)}</span>
-                </>}
-              </div>
-            ) : null
-          )}
-          {activeTab === 'summary' && (
-            result.summary_status === 'processing' && summaryElapsedSeconds != null ? (
-              <div className="meta-row meta-row--stage">
-                <span className="meta-chip" title="Summarization in progress">
-                  <span className="meta-label">Summarizing</span> {formatDuration(summaryElapsedSeconds)}
-                </span>
-                {result.summary_chunks_done != null && result.summary_chunks_total != null && <>
-                  <span className="meta-sep">•</span>
-                  <span className="meta-chip" title="Chunks/chapters processed so far">
-                    {result.chapters ? 'chapter' : 'chunk'} {result.summary_chunks_done} / {result.summary_chunks_total}
-                  </span>
-                </>}
-              </div>
-            ) : summaryDuration != null ? (
-              <div className="meta-row meta-row--stage">
-                <span className="meta-chip" title="Time spent on summarization">
-                  <span className="meta-label">Summarized in</span> {formatDuration(summaryDuration)}
-                </span>
-                {result.summary_model && <>
-                  <span className="meta-sep">•</span>
-                  <span className="meta-chip" title="Model used for summarization">{result.summary_model}</span>
-                </>}
-                {result.summary_mode === 'single' && <>
-                  <span className="meta-sep">•</span>
-                  <span className="meta-chip meta-method" title="Processing method">Single Pass</span>
-                </>}
-                {result.summary_mode === 'map_reduce' && <>
-                  <span className="meta-sep">•</span>
-                  <span className="meta-chip meta-method" title="Processing method: text split into chunks, each summarized, then combined">Map-Reduce</span>
-                  {result.summary_chunks_count != null && <>
-                    <span className="meta-sep">•</span>
-                    <span className="meta-chip" title="Number of chunks processed">{result.summary_chunks_count} chunks</span>
-                  </>}
-                </>}
-                {result.summary_mode === 'full_extract' && <>
-                  <span className="meta-sep">•</span>
-                  <span className="meta-chip meta-method" title="Processing method: each chapter extracted independently, no compression">Full Extract</span>
-                  {result.summary_chunks_count != null && <>
-                    <span className="meta-sep">•</span>
-                    <span className="meta-chip" title="Number of chapters processed">{result.summary_chunks_count} chapters</span>
-                  </>}
-                </>}
-                {(() => {
-                  const inputLen = result.cleaned_text?.length ?? result.formatted_text?.length ?? null
-                  const outputLen = result.summary_text?.length ?? null
-                  if (!inputLen || !outputLen || outputLen >= inputLen) return null
-                  const pct = Math.round((1 - outputLen / inputLen) * 100)
-                  return <>
-                    <span className="meta-sep">•</span>
-                    <span className="meta-chip" title="How much the text was compressed vs input">{pct}% compressed</span>
-                  </>
-                })()}
-                {result.summary_finished_at && <>
-                  <span className="meta-sep">•</span>
-                  <span className="meta-chip" title="When summarization finished">{formatDate(result.summary_finished_at)}</span>
-                </>}
-              </div>
-            ) : null
-          )}
-        </div>
-
-        <hr className="section-divider" />
-
-        <div className="actions">
-          {/* ── Row 1 ── */}
-          <div className="actions-row">
-            {activeTab === 'subtitles' && <>
+        {/* Controls row */}
+        <div className="px-6 py-4 border-b border-outline-variant flex flex-wrap items-center gap-3">
+          {/* Tab-dependent left actions */}
+          {activeTab === 'subtitles' && (
+            <>
               <select
-                className="model-select-inline"
+                className="bg-surface-container-low border border-outline-variant rounded-lg px-3 py-2 text-label-md focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer"
                 value={reextractLang}
                 onChange={e => setReextractLang(e.target.value)}
                 disabled={!!result.reextract_in_progress}
@@ -786,328 +747,318 @@ export default function ResultPage() {
                 <option value="uk">Ukrainian</option>
               </select>
               <button
-                className="btn btn-secondary"
+                className={actionBtn(false)}
                 onClick={handleReextract}
-                disabled={
-                  !!result.reextract_in_progress ||
-                  result.cleanup_status === 'processing' ||
-                  result.summary_status === 'processing'
-                }
+                disabled={!!result.reextract_in_progress || result.cleanup_status === 'processing' || result.summary_status === 'processing'}
                 title="Re-fetch subtitles from YouTube. Cleanup and Summary will be cleared."
               >
-                {result.reextract_in_progress ? '↻ Re-extracting…' : '↻ Re-extract'}
+                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>refresh</span>
+                {result.reextract_in_progress ? 'Re-extracting…' : 'Re-extract'}
               </button>
-              <a className="btn btn-secondary" href={`/benchmark/${result.video_id}`}>⚖ Benchmark</a>
-            </>}
+            </>
+          )}
 
-            {activeTab === 'cleaned' && <>
-              <select
-                className="model-select-inline"
-                value={cleanupModel}
-                onChange={e => handleCleanupModelChange(e.target.value)}
-                disabled={models.length === 0}
-                title={models.length === 0 ? 'Ollama offline — cannot load models' : 'Model for AI cleanup'}
-              >
-                <option value="">— cleanup model —</option>
-                {models.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
+          {activeTab === 'cleaned' && (
+            <>
+              <div className="relative">
+                <select
+                  className="bg-surface-container-low border border-outline-variant rounded-lg px-3 py-2 pr-8 text-label-md focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer min-w-[180px]"
+                  value={cleanupModel}
+                  onChange={e => handleCleanupModelChange(e.target.value)}
+                  disabled={models.length === 0}
+                  title={models.length === 0 ? 'Ollama offline — cannot load models' : 'Model for AI cleanup'}
+                >
+                  <option value="">— cleanup model —</option>
+                  {models.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <span className="material-symbols-outlined absolute right-2 top-2.5 text-secondary pointer-events-none" style={{ fontSize: '16px' }}>expand_more</span>
+              </div>
               {result.cleanup_status === 'processing' ? (
-                <button className="btn btn-secondary" onClick={handleCancelCleanup}>✕ Stop</button>
+                <button className={actionBtn(false)} onClick={handleCancelCleanup}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>stop_circle</span>Stop
+                </button>
               ) : (
-                <button className="btn btn-ai" onClick={handleCleanup}>
-                  {result.cleanup_status === 'done' ? '↺ Re-run AI cleanup' : '✦ Clean with AI'}
+                <button className={actionBtn(true)} onClick={handleCleanup}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>auto_awesome</span>
+                  {result.cleanup_status === 'done' ? 'Re-run cleanup' : 'Clean with AI'}
                 </button>
               )}
-              <a className="btn btn-secondary" href={`/benchmark/${result.video_id}`}>⚖ Benchmark</a>
-            </>}
+            </>
+          )}
 
-            {activeTab === 'summary' && <>
-              <select
-                className="model-select-inline"
-                value={summaryModel}
-                onChange={e => handleSummaryModelChange(e.target.value)}
-                disabled={models.length === 0}
-                title={models.length === 0 ? 'Ollama offline — cannot load models' : 'Model for summarization'}
-              >
-                <option value="">— summary model —</option>
-                {models.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
+          {activeTab === 'summary' && (
+            <>
+              <div className="relative">
+                <select
+                  className="bg-surface-container-low border border-outline-variant rounded-lg px-3 py-2 pr-8 text-label-md focus:ring-2 focus:ring-primary/20 outline-none appearance-none cursor-pointer min-w-[180px]"
+                  value={summaryModel}
+                  onChange={e => handleSummaryModelChange(e.target.value)}
+                  disabled={models.length === 0}
+                  title={models.length === 0 ? 'Ollama offline — cannot load models' : 'Model for summarization'}
+                >
+                  <option value="">— summary model —</option>
+                  {models.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <span className="material-symbols-outlined absolute right-2 top-2.5 text-secondary pointer-events-none" style={{ fontSize: '16px' }}>expand_more</span>
+              </div>
               {result.summary_status === 'processing' ? (
-                <button className="btn btn-secondary" onClick={handleCancelSummary}>✕ Stop</button>
+                <button className={actionBtn(false)} onClick={handleCancelSummary}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>stop_circle</span>Stop
+                </button>
               ) : (
-                <button className="btn btn-ai" onClick={handleSummarize}>
-                  {result.summary_status === 'done' ? '↺ Re-run summary' : '✦ Summarize'}
+                <button className={actionBtn(true)} onClick={handleSummarize}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>refresh</span>
+                  {result.summary_status === 'done' ? 'Re-run summary' : 'Summarize'}
                 </button>
               )}
-              <a className="btn btn-secondary" href={`/benchmark/${result.video_id}`}>⚖ Benchmark</a>
-            </>}
-          </div>
+              <a className={actionBtn(false)} href={`/benchmark/${result.video_id}`}>
+                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>balance</span>Benchmark
+              </a>
+            </>
+          )}
 
-          {/* ── Row 2 ── */}
-          <div className="actions-row">
-            {activeTab === 'subtitles' && <>
-              <button className="btn btn-secondary" onClick={handleCopy}>
+          {/* Divider */}
+          {activeTab !== 'chat' && <div className="h-8 w-px bg-outline-variant mx-1" />}
+
+          {/* Common actions */}
+          {activeTab !== 'chat' && (
+            <>
+              <button className={actionBtn(false)} onClick={handleCopy}>
+                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>content_copy</span>
                 {copied ? 'Copied!' : 'Copy text'}
               </button>
-              <a className="btn btn-secondary" href={result.url} target="_blank" rel="noreferrer">Open video</a>
-            </>}
-
-            {(activeTab === 'cleaned' || activeTab === 'summary') && <>
-              <button className="btn btn-secondary" onClick={handleCopy}>
-                {copied ? 'Copied!' : 'Copy text'}
+              <a className={actionBtn(false)} href={result.url} target="_blank" rel="noreferrer">
+                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>open_in_new</span>
+                Open video
+              </a>
+              <button className={actionBtn(false, true)} onClick={handleDelete}>
+                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>delete</span>
+                Delete
               </button>
-              <a className="btn btn-secondary" href={result.url} target="_blank" rel="noreferrer">Open video</a>
-            </>}
+            </>
+          )}
 
-            <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
+          {/* Mindmap + MD toggles — right side */}
+          <div className="ml-auto flex items-center gap-2">
+            {activeTab === 'summary' && result.summary_text && (
+              <button
+                className={`p-2 rounded text-label-sm font-bold transition-colors ${mindmapEnabled ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-secondary hover:bg-surface-container-highest'}`}
+                onClick={async () => {
+                  if (!mindmapEnabled) {
+                    setMindmapEnabled(true)
+                    if (!result.mindmap_text && result.mindmap_status !== 'processing') await handleMindmap()
+                  } else {
+                    setMindmapEnabled(false)
+                  }
+                }}
+                title={mindmapEnabled ? 'Mindmap ON — click to switch to text' : 'Text view — click to generate mindmap'}
+              >🗺</button>
+            )}
+            <button
+              className={`px-2.5 py-1.5 rounded text-label-sm font-bold border transition-colors ${markdownEnabled ? 'bg-primary/10 text-primary border-primary/20' : 'bg-surface-container-high text-secondary border-outline-variant hover:bg-surface-container-highest'}`}
+              onClick={() => {
+                const next = !markdownEnabled
+                setMarkdownEnabled(next)
+                localStorage.setItem('yt-md-enabled', String(next))
+              }}
+              title={markdownEnabled ? 'Markdown rendering ON — click to switch to plain text' : 'Plain text — click to enable Markdown rendering'}
+            >MD</button>
           </div>
         </div>
 
-        <hr className="section-divider" />
-
+        {/* Error banners */}
         {activeTab === 'cleaned' && (result.cleanup_status === 'failed' || cleanupError) && (
-          <div className="cleanup-error">
-            {cleanupError || 'Cleanup failed. Possible causes: Ollama is not running, no model is selected, or the model returned no output (e.g. due to timeout on large paragraphs). Check backend log for details.'}
+          <div className="mx-6 mt-4 bg-error-container text-on-error-container rounded-lg px-4 py-3 text-body-sm">
+            {cleanupError || 'Cleanup failed. Possible causes: Ollama is not running, no model is selected, or the model returned no output. Check backend log for details.'}
           </div>
         )}
         {activeTab === 'summary' && (result.summary_status === 'failed' || summaryError) && (
-          <div className="cleanup-error">
-            {summaryError || 'Summarization failed. Possible causes: Ollama is not running, no model is selected, or a stage (MAP / REDUCE / chapter) timed out. For long videos (>50K chars without chapters) the REDUCE step may exceed the model context — try a stronger model, or wait for hierarchical map-reduce (Epic 18). Check backend log for details.'}
+          <div className="mx-6 mt-4 bg-error-container text-on-error-container rounded-lg px-4 py-3 text-body-sm">
+            {summaryError || 'Summarization failed. Possible causes: Ollama is not running, no model is selected, or a stage timed out. Check backend log for details.'}
           </div>
         )}
 
-        <div className="result-tabs-bar">
-        <div className="result-tabs">
-          <button
-            className={`result-tab ${activeTab === 'subtitles' ? 'active' : ''}`}
-            onClick={() => setActiveTab('subtitles')}
-          >
-            Subtitles
-          </button>
-          <button
-            className={`result-tab ${activeTab === 'cleaned' ? 'active' : ''}`}
-            onClick={() => setActiveTab('cleaned')}
-          >
-            {result.cleanup_status === 'processing'
-              ? <><span className="tab-spinner" />Cleaning…</>
-              : 'Cleaned'}
-          </button>
-          <button
-            className={`result-tab ${activeTab === 'summary' ? 'active' : ''}`}
-            onClick={() => setActiveTab('summary')}
-          >
-            {result.summary_status === 'processing'
-              ? <><span className="tab-spinner" />Summarizing…</>
-              : 'Summary'}
-          </button>
-          {chatHistory.length > 0 && (
-            <button
-              className={`result-tab ${activeTab === 'chat' ? 'active' : ''}`}
-              onClick={() => setActiveTab('chat')}
-            >
-              Chat <span className="tab-count">({chatHistory.length})</span>
+        {/* Tabs bar */}
+        <div className="px-6 border-b border-outline-variant">
+          <div className="flex gap-6">
+            <button className={tabClass('subtitles')} onClick={() => setActiveTab('subtitles')}>Subtitles</button>
+            <button className={tabClass('cleaned')} onClick={() => setActiveTab('cleaned')}>
+              {result.cleanup_status === 'processing'
+                ? <span className="flex items-center gap-2"><span className="material-symbols-outlined" style={{ fontSize: '14px', animation: 'spin 1s linear infinite' }}>progress_activity</span>Cleaning…</span>
+                : 'Cleaned'}
             </button>
-          )}
-        </div>
-          {activeTab === 'summary' && result.summary_text && (
-            <button
-              className={`md-toggle ${mindmapEnabled ? 'md-toggle--on' : ''}`}
-              onClick={async () => {
-                if (!mindmapEnabled) {
-                  setMindmapEnabled(true)
-                  // If no mindmap yet — add to queue
-                  if (!result.mindmap_text && result.mindmap_status !== 'processing') {
-                    await handleMindmap()
-                  }
-                } else {
-                  setMindmapEnabled(false)
-                }
-              }}
-              title={mindmapEnabled ? 'Mindmap ON — click to switch to text' : 'Text view — click to generate mindmap'}
-            >🗺</button>
-          )}
-          <button
-            className={`md-toggle ${markdownEnabled ? 'md-toggle--on' : ''}`}
-            onClick={() => {
-              const next = !markdownEnabled
-              setMarkdownEnabled(next)
-              localStorage.setItem('yt-md-enabled', String(next))
-            }}
-            title={markdownEnabled ? 'Markdown rendering ON — click to switch to plain text' : 'Plain text — click to enable Markdown rendering'}
-          >MD</button>
+            <button className={tabClass('summary')} onClick={() => setActiveTab('summary')}>
+              {result.summary_status === 'processing'
+                ? <span className="flex items-center gap-2"><span className="material-symbols-outlined" style={{ fontSize: '14px', animation: 'spin 1s linear infinite' }}>progress_activity</span>Summarizing…</span>
+                : 'Summary'}
+            </button>
+            {chatHistory.length > 0 && (
+              <button className={tabClass('chat')} onClick={() => setActiveTab('chat')}>
+                Chat <span className="ml-1 text-[11px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">{chatHistory.length}</span>
+              </button>
+            )}
+          </div>
         </div>
 
-        {activeTab === 'summary' ? (
-          <>
-            {!result.summary_text ? (
-              <div className="empty">
+        {/* Tab content */}
+        <div className="p-6">
+          {activeTab === 'summary' ? (
+            !result.summary_text ? (
+              <div className="py-12 text-center text-secondary text-body-md">
                 {result.summary_status === 'processing'
                   ? 'Summarization is running…'
                   : result.summary_status === 'failed'
-                    ? 'Summary failed. Click "↺ Re-run summary" to try again.'
-                    : 'No summary yet. Click "✦ Summarize" above to generate one.'}
+                    ? 'Summary failed. Click "Re-run summary" to try again.'
+                    : 'No summary yet. Click "Summarize" above to generate one.'}
               </div>
             ) : mindmapEnabled ? (
               result.mindmap_status === 'processing' ? (
-                <div className="empty">
-                  <span className="tab-spinner" /> Generating mindmap…
+                <div className="py-12 flex items-center justify-center gap-4 text-secondary text-body-md">
+                  <span className="material-symbols-outlined" style={{ animation: 'spin 1s linear infinite' }}>progress_activity</span>
+                  Generating mindmap…
                   <button
-                    className="cancel-btn"
-                    style={{ marginLeft: '1rem' }}
+                    className="ml-4 text-error hover:underline text-label-md"
                     onClick={async () => {
                       await cancelMindmap(videoId!)
                       stopMindmapPolling()
                       setResult(r => r ? { ...r, mindmap_status: null } : r)
                     }}
-                  >✕ Stop</button>
+                  >Stop</button>
                 </div>
               ) : result.mindmap_status === 'failed' || mindmapError ? (
-                <div className="cleanup-error">
-                  {mindmapError || 'Mindmap generation failed. Check that Ollama is running and a model is selected in Settings → Summarization.'}
+                <div className="bg-error-container text-on-error-container rounded-lg px-4 py-3 text-body-sm">
+                  {mindmapError || 'Mindmap generation failed. Check that Ollama is running and a model is selected.'}
                 </div>
               ) : result.mindmap_text ? (
-                <Suspense fallback={<div className="empty">Loading…</div>}>
-                  <MindmapView
-                    text={result.mindmap_text}
-                    title={result.title ?? undefined}
-                    onRegenerate={() => handleMindmap(true)}
-                  />
+                <Suspense fallback={<div className="py-8 text-center text-secondary">Loading…</div>}>
+                  <MindmapView text={result.mindmap_text} title={result.title ?? undefined} onRegenerate={() => handleMindmap(true)} />
                 </Suspense>
               ) : (
-                <div className="empty">Generating mindmap…</div>
+                <div className="py-8 text-center text-secondary">Generating mindmap…</div>
               )
             ) : (
-              <>
+              <div className="text-on-surface text-body-md leading-relaxed">
                 {markdownEnabled
                   ? <MarkdownContent text={result.summary_text!} />
                   : <div className="formatted-text">{renderText(result.summary_text!)}</div>
                 }
-
-                {/* Spacer so content isn't hidden behind fixed input bar */}
-                <div style={{ height: '80px' }} />
-              </>
-            )}
-          </>
-        ) : activeTab === 'chat' ? (
-          <>
-            <div className="chat-thread-header">
-              <button
-                className="btn-copy-chat"
-                onClick={() => {
-                  const text = chatHistory
-                    .filter(m => m.content)
-                    .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
-                    .join('\n\n')
+                <div className="h-20" />
+              </div>
+            )
+          ) : activeTab === 'chat' ? (
+            <>
+              {/* Chat header */}
+              <div className="flex items-center gap-3 mb-4 pb-4 border-b border-outline-variant">
+                <button className="text-label-md text-secondary hover:text-on-surface flex items-center gap-1.5 transition-colors" onClick={() => {
+                  const text = chatHistory.filter(m => m.content).map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n\n')
                   navigator.clipboard.writeText(text)
-                }}
-                title="Copy entire chat"
-              >⎘ Copy chat</button>
-              <button
-                className="btn-copy-chat"
-                onClick={handleClearChat}
-                title="Delete entire chat history"
-                style={{ marginLeft: '0.5rem', color: 'var(--err)' }}
-              >🗑 Clear chat</button>
+                }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>content_copy</span>Copy chat
+                </button>
+                <button className="text-label-md text-error hover:text-error/80 flex items-center gap-1.5 transition-colors" onClick={handleClearChat}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>delete</span>Clear chat
+                </button>
+              </div>
+              {/* Chat messages */}
+              <div className="space-y-4">
+                {chatHistory.map((msg, i) => (
+                  <div key={i} className={`flex gap-3 group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] rounded-xl px-4 py-3 text-body-sm relative ${
+                      msg.role === 'user'
+                        ? 'bg-primary-container text-on-primary-container ml-12'
+                        : 'bg-surface-container-low text-on-surface border border-outline-variant mr-12'
+                    }`}>
+                      {msg.content
+                        ? (markdownEnabled && msg.role === 'assistant'
+                            ? <ReactMarkdown>{msg.content}</ReactMarkdown>
+                            : msg.content)
+                        : (msg.role === 'assistant' && isChatting
+                            ? <span className="flex gap-1 py-1">{[0,1,2].map(j => <span key={j} className="w-2 h-2 rounded-full bg-secondary animate-bounce" style={{ animationDelay: `${j * 0.15}s` }} />)}</span>
+                            : null)}
+                      {msg.content && (
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-6 right-0 flex gap-1">
+                          <button className="p-1 text-secondary hover:text-on-surface" onClick={() => navigator.clipboard.writeText(msg.content)} title="Copy">
+                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>content_copy</span>
+                          </button>
+                          <button className="p-1 text-secondary hover:text-error transition-colors" onClick={() => deleteChatMessage(i)} title="Delete">
+                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>delete</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div ref={chatEndRef} />
+              </div>
+              <div className="h-20" />
+            </>
+          ) : activeTab === 'cleaned' && !result.cleaned_text ? (
+            <div className="py-12 text-center text-secondary text-body-md">
+              {result.cleanup_status === 'processing'
+                ? 'AI cleanup is running…'
+                : result.cleanup_status === 'failed'
+                  ? 'Cleanup failed. Click "Re-run cleanup" to try again.'
+                  : 'No cleaned version yet. Click "Clean with AI" above to start.'}
             </div>
-            <div className="chat-thread">
-              {chatHistory.map((msg, i) => (
-                <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
-                  {msg.content
-                    ? (markdownEnabled && msg.role === 'assistant'
-                        ? <ReactMarkdown>{msg.content}</ReactMarkdown>
-                        : msg.content)
-                    : (msg.role === 'assistant' && isChatting
-                        ? (
-                          <span className="chat-typing">
-                            <span className="chat-typing-dot" />
-                            <span className="chat-typing-dot" />
-                            <span className="chat-typing-dot" />
-                          </span>
-                        )
-                        : null)}
-                  {msg.content && (<>
-                    <button
-                      className="chat-msg-copy"
-                      onClick={() => navigator.clipboard.writeText(msg.content)}
-                      title="Copy message"
-                    >⎘</button>
-                    <button
-                      className="chat-msg-copy chat-msg-delete"
-                      onClick={() => deleteChatMessage(i)}
-                      title="Delete message"
-                    >🗑</button>
-                  </>)}
-                </div>
-              ))}
-              <div ref={chatEndRef} />
-            </div>
-            <div style={{ height: '80px' }} />
-          </>
-        ) : activeTab === 'cleaned' && !result.cleaned_text ? (
-          <div className="empty">
-            {result.cleanup_status === 'processing'
-              ? 'AI cleanup is running…'
-              : result.cleanup_status === 'failed'
-                ? 'Cleanup failed. Click "↺ Re-run AI cleanup" to try again.'
-                : 'No cleaned version yet. Click "✦ Clean with AI" above to start.'}
-          </div>
-        ) : (
-          displayText
-            ? markdownEnabled
-              ? <MarkdownContent text={displayText} />
-              : <div className="formatted-text">{renderText(displayText)}</div>
-            : null
-        )}
-      </div>
-    </div>
-
-    {/* Fixed chat input bar — on Summary tab (start chat) and Chat tab (continue) */}
-    {(activeTab === 'summary' || activeTab === 'chat') && result.summary_status === 'done' && result.summary_text && ollamaUrl && summaryModel && (
-      <div className="chat-input-bar">
-        {(() => {
-          const sourceLen = (result.cleaned_text ?? result.formatted_text ?? '').length
-          return sourceLen > CHAT_WARN_CHARS ? (
-            <div className="chat-warn">
-              ⚠ Text is very long ({Math.round(sourceLen / 1000)}K chars) — response quality may vary
-            </div>
-          ) : null
-        })()}
-        {chatHistory.length === 0 && (
-          <div className="chat-hint">Ask a follow-up question about the video</div>
-        )}
-        {chatHistory.length > 0 && (
-          <button className="chat-copy-btn" onClick={copyChat}>
-            {chatCopied ? 'Copied!' : 'Copy dialogue'}
-          </button>
-        )}
-        <div className="chat-input-wrap">
-          <textarea
-            ref={chatInputRef}
-            className="chat-input"
-            rows={1}
-            placeholder="Ask about the video…"
-            value={chatInput}
-            disabled={isChatting}
-            onChange={e => {
-              setChatInput(e.target.value)
-              e.target.style.height = 'auto'
-              e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
-            }}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage() }
-            }}
-          />
-          <button
-            className="chat-send-btn"
-            onClick={sendChatMessage}
-            disabled={isChatting || !chatInput.trim()}
-            title="Send"
-          >
-            {isChatting ? <span className="chat-send-spinner" /> : '➤'}
-          </button>
+          ) : (
+            displayText
+              ? markdownEnabled
+                ? <MarkdownContent text={displayText} />
+                : <div className="formatted-text">{renderText(displayText)}</div>
+              : null
+          )}
         </div>
-      </div>
-    )}
-    </>
+      </section>
+
+      {/* ── Fixed chat input bar ── */}
+      {(activeTab === 'summary' || activeTab === 'chat') && result.summary_status === 'done' && result.summary_text && ollamaUrl && summaryModel && (
+        <div className="fixed bottom-0 left-0 right-0 md:left-64 p-4 md:p-6 bg-surface-container-lowest/80 backdrop-blur-md border-t border-outline-variant z-50">
+          {(() => {
+            const sourceLen = (result.cleaned_text ?? result.formatted_text ?? '').length
+            return sourceLen > CHAT_WARN_CHARS ? (
+              <div className="max-w-[1200px] mx-auto mb-2 text-label-sm text-secondary">
+                ⚠ Text is very long ({Math.round(sourceLen / 1000)}K chars) — response quality may vary
+              </div>
+            ) : null
+          })()}
+          <div className="max-w-[1200px] mx-auto">
+            {chatHistory.length === 0 && (
+              <div className="text-label-sm text-secondary bg-surface-container-low px-3 py-1 rounded-t-lg border-x border-t border-outline-variant w-fit">
+                Ask a follow-up question about the video
+              </div>
+            )}
+            <div className="flex items-center gap-3 bg-surface-container-lowest border-2 border-outline-variant rounded-full p-2 pl-5 pr-2 shadow-sm focus-within:border-primary/40 transition-all">
+              <textarea
+                ref={chatInputRef}
+                className="flex-1 bg-transparent border-none focus:ring-0 outline-none text-body-md text-on-surface placeholder:text-secondary/60 resize-none leading-normal"
+                rows={1}
+                placeholder="Ask about the video…"
+                value={chatInput}
+                disabled={isChatting}
+                onChange={e => {
+                  setChatInput(e.target.value)
+                  e.target.style.height = 'auto'
+                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage() }
+                }}
+              />
+              <button
+                className="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center hover:scale-105 active:scale-95 transition-transform disabled:opacity-40"
+                onClick={sendChatMessage}
+                disabled={isChatting || !chatInput.trim()}
+                title="Send"
+              >
+                {isChatting
+                  ? <span className="material-symbols-outlined" style={{ fontSize: '18px', animation: 'spin 1s linear infinite' }}>progress_activity</span>
+                  : <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>send</span>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
