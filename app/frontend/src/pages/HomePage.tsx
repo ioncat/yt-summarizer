@@ -140,94 +140,136 @@ export default function HomePage() {
   }
 
   return (
-    <div className="container">
+    <div className="flex flex-col items-center p-6 md:p-12 gap-6 min-h-[calc(100vh-4rem)] justify-center">
+      {/* Missing config warning */}
       {missingConfig.length > 0 && (
-        <div className="settings-warning" style={{ marginBottom: '1rem' }}>
-          ⚠ Required settings missing: <strong>{missingConfig.join(', ')}</strong>.{' '}
-          <Link to="/settings">Go to Settings →</Link>
+        <div className="w-full max-w-2xl flex items-center gap-3 bg-error-container text-on-error-container border border-error rounded-xl px-4 py-3 text-label-md">
+          <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: '18px' }}>warning</span>
+          <span>Required settings missing: <strong>{missingConfig.join(', ')}</strong>.</span>
+          <Link to="/settings" className="ml-auto text-label-sm underline underline-offset-2 hover:no-underline flex-shrink-0">Settings →</Link>
         </div>
       )}
-      <div className="card">
-        <h1>YT Summarizer</h1>
-        <p className="subtitle">Paste a YouTube URL to extract and format subtitles.</p>
 
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>YouTube URL</label>
-            <input
-              type="text"
-              placeholder="https://www.youtube.com/watch?v=..."
-              value={url}
-              onChange={e => setUrl(e.target.value)}
-              required
-              autoFocus
-            />
+      {/* Main form card */}
+      <div className="w-full max-w-2xl bg-surface-container-lowest border border-outline-variant rounded-xl p-8 shadow-sm">
+        <div className="text-center mb-10">
+          <h2 className="text-headline-xl text-on-surface mb-2">YT Summarizer</h2>
+          <p className="text-body-md text-secondary">Paste a YouTube URL to extract and format subtitles.</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* URL input with icon */}
+          <div className="space-y-2">
+            <label className="text-label-md text-on-surface-variant block" htmlFor="url">YouTube URL</label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-secondary" style={{ fontSize: '20px' }}>link</span>
+              <input
+                id="url"
+                type="text"
+                className="w-full pl-11 pr-4 py-3 bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-body-md"
+                placeholder="https://www.youtube.com/watch?v=..."
+                value={url}
+                onChange={e => setUrl(e.target.value)}
+                required
+                autoFocus
+              />
+            </div>
           </div>
-          <div className="form-group">
-            <label>Subtitle language</label>
-            <select value={language} onChange={e => setLanguage(e.target.value)}>
+
+          {/* Language select */}
+          <div className="space-y-2">
+            <label className="text-label-md text-on-surface-variant block" htmlFor="lang">Subtitle language</label>
+            <select
+              id="lang"
+              className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-body-md appearance-none cursor-pointer"
+              value={language}
+              onChange={e => setLanguage(e.target.value)}
+            >
               {LANGUAGES.map(l => (
                 <option key={l.value} value={l.value}>{l.label}</option>
               ))}
             </select>
-            <p className="field-hint">Auto detects the video's original language. Override if needed.</p>
+            <p className="text-body-sm text-secondary">Auto detects the video's original language. Override if needed.</p>
           </div>
-          <div className="form-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={autoPipeline}
-                disabled={!ollamaOnline}
-                onChange={e => {
-                  setAutoPipeline(e.target.checked)
-                  localStorage.setItem('yt_summarizer_auto_pipeline', String(e.target.checked))
-                }}
-              />
+
+          {/* Pipeline checkbox */}
+          <div className="flex items-center gap-3 pt-2">
+            <input
+              id="pipeline"
+              type="checkbox"
+              className="w-5 h-5 text-primary border-outline-variant rounded cursor-pointer focus:ring-primary/20 transition-all accent-primary"
+              checked={autoPipeline}
+              disabled={!ollamaOnline}
+              onChange={e => {
+                setAutoPipeline(e.target.checked)
+                localStorage.setItem('yt_summarizer_auto_pipeline', String(e.target.checked))
+              }}
+            />
+            <label htmlFor="pipeline" className="text-label-md text-on-surface cursor-pointer select-none">
               Run full pipeline (Extract → Cleanup → Summary)
             </label>
-            <p className="field-hint">
-              {ollamaOnline ? 'Adds to queue. Processes sequentially — nothing gets lost on restart.' : 'Ollama offline — unavailable.'}
-            </p>
           </div>
-          {error && <div className="error-box" style={{ marginBottom: '1rem', whiteSpace: 'pre-line' }}>{error}</div>}
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <button className="btn btn-primary" type="submit" disabled={loading || !url.trim()}>
-              {loading ? 'Submitting…' : autoPipeline ? '⏱ Add to queue' : 'Extract subtitles'}
+          {!ollamaOnline && (
+            <p className="text-body-sm text-secondary -mt-2">Ollama offline — full pipeline unavailable.</p>
+          )}
+
+          {error && (
+            <div className="flex items-start gap-2 bg-error-container text-on-error-container rounded-lg px-4 py-3 text-body-sm whitespace-pre-line">
+              <span className="material-symbols-outlined flex-shrink-0 mt-0.5" style={{ fontSize: '16px' }}>error</span>
+              {error}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex flex-col md:flex-row gap-4 pt-2">
+            <button
+              className="flex-1 bg-primary text-on-primary py-4 px-6 rounded-lg text-label-md font-bold transition-all hover:opacity-90 active:scale-95 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+              type="submit"
+              disabled={loading || !url.trim()}
+            >
+              {loading ? 'Submitting…' : autoPipeline ? 'Add to queue' : 'Extract subtitles'}
             </button>
             <button
               type="button"
-              className="btn btn-secondary"
+              className="flex-1 bg-surface-container-high text-on-surface-variant py-4 px-6 rounded-lg text-label-md font-medium transition-all hover:bg-surface-container-highest active:scale-95"
               onClick={() => { setBulkOpen(o => !o); setBulkResult(null); setBulkError('') }}
             >
-              {bulkOpen ? '✕ Cancel' : '⏱ Bulk add'}
+              {bulkOpen ? 'Cancel bulk' : 'Bulk add'}
             </button>
           </div>
         </form>
       </div>
 
+      {/* Bulk add panel */}
       {bulkOpen && (
-        <div className="card bulk-panel">
-          <h3 style={{ marginTop: 0 }}>Bulk Add to Queue</h3>
-          <form onSubmit={handleBulkSubmit}>
-            <div className="form-group">
-              <label>URLs (one per line)</label>
+        <div className="w-full max-w-2xl bg-surface-container-lowest border border-outline-variant rounded-xl p-8 shadow-sm">
+          <h3 className="text-headline-lg text-on-surface mb-6">Bulk Add to Queue</h3>
+          <form onSubmit={handleBulkSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-label-md text-on-surface-variant block">URLs (one per line)</label>
               <textarea
-                className="bulk-textarea"
-                placeholder="https://www.youtube.com/watch?v=...&#10;https://youtu.be/..."
+                className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-body-sm resize-y"
+                placeholder={"https://www.youtube.com/watch?v=...\nhttps://youtu.be/..."}
                 value={bulkText}
                 onChange={e => { setBulkText(e.target.value); setBulkResult(null) }}
                 rows={6}
               />
             </div>
-            <div className="form-group">
-              <label>Pipeline</label>
-              <select value={bulkPipeline} onChange={e => setBulkPipeline(e.target.value)}>
+            <div className="space-y-2">
+              <label className="text-label-md text-on-surface-variant block">Pipeline</label>
+              <select
+                className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-body-md appearance-none cursor-pointer"
+                value={bulkPipeline}
+                onChange={e => setBulkPipeline(e.target.value)}
+              >
                 {PIPELINE_PRESETS.map(p => (
                   <option key={p.value} value={p.value}>{p.label}</option>
                 ))}
               </select>
             </div>
-            {bulkError && <div className="error-box" style={{ marginBottom: '0.75rem' }}>{bulkError}</div>}
+            {bulkError && (
+              <div className="bg-error-container text-on-error-container rounded-lg px-4 py-3 text-body-sm">{bulkError}</div>
+            )}
             {bulkResult && (() => {
               const skipped = [
                 ...bulkResult.duplicates.map(u => ({ url: u, reason: 'duplicate' })),
@@ -236,33 +278,34 @@ export default function HomePage() {
               const hasAdded = bulkResult.added > 0
               const hasSkipped = skipped.length > 0
               return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.75rem' }}>
+                <div className="space-y-2">
                   {hasAdded && (
-                    <div className="bulk-result bulk-result--ok">
-                      ✓ Added to queue: <strong>{bulkResult.added}</strong>. <Link to="/queue">View queue →</Link>
+                    <div className="bg-tertiary-fixed text-on-tertiary-container rounded-lg px-4 py-3 text-body-sm">
+                      ✓ Added to queue: <strong>{bulkResult.added}</strong>.{' '}
+                      <Link to="/queue" className="underline underline-offset-2">View queue →</Link>
                     </div>
                   )}
                   {hasSkipped && (
-                    <div className="bulk-result bulk-result--err">
-                      <div className="bulk-report-line">Skipped: <strong>{skipped.length}</strong></div>
-                      <ul className="bulk-skipped-list">
-                        {skipped.map(({ url, reason }, i) => (
-                          <li key={i}>
-                            <span className="bulk-skipped-url">{url}</span>
-                            <span className="bulk-skipped-reason">{reason}</span>
+                    <div className="bg-error-container text-on-error-container rounded-lg px-4 py-3 text-body-sm">
+                      <div className="font-semibold mb-2">Skipped: {skipped.length}</div>
+                      <ul className="space-y-1">
+                        {skipped.map(({ url: u, reason }, i) => (
+                          <li key={i} className="flex gap-2">
+                            <span className="truncate flex-1">{u}</span>
+                            <span className="flex-shrink-0 opacity-70">{reason}</span>
                           </li>
                         ))}
                       </ul>
                     </div>
                   )}
                   {!hasAdded && !hasSkipped && (
-                    <div className="bulk-result bulk-result--warn">Nothing added to queue.</div>
+                    <div className="bg-surface-container-high text-secondary rounded-lg px-4 py-3 text-body-sm">Nothing added to queue.</div>
                   )}
                 </div>
               )
             })()}
             <button
-              className="btn btn-primary"
+              className="w-full bg-primary text-on-primary py-4 px-6 rounded-lg text-label-md font-bold transition-all hover:opacity-90 active:scale-95 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
               type="submit"
               disabled={bulkLoading || bulkCount === 0}
             >

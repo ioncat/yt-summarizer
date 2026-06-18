@@ -455,28 +455,37 @@ export default function SettingsPage() {
   }, [])
 
   if (error) return (
-    <div className="container">
-      <div className="card"><div className="error-box">{error}</div></div>
+    <div className="p-6 md:p-gutter max-w-[1200px] mx-auto w-full">
+      <div className="bg-error-container text-on-error-container rounded-xl px-6 py-4 text-body-md">{error}</div>
     </div>
   )
 
   if (!appSettings || !cleanup || !summarization || !summExtract || !summCombine) return (
-    <div className="container">
-      <div className="card"><div className="status-box"><div className="spinner" /></div></div>
+    <div className="p-6 md:p-gutter max-w-[1200px] mx-auto w-full flex justify-center py-16">
+      <div className="spinner" />
     </div>
   )
 
   return (
-    <div className="container">
-      <h1>Settings</h1>
-      <p className="subtitle">Configure the application. All settings are stored in the database.</p>
+    <div className="p-6 md:p-gutter max-w-[1200px] mx-auto w-full space-y-6">
+      {/* Page header */}
+      <div className="mb-2">
+        <h2 className="text-headline-xl text-on-surface">Settings</h2>
+        <p className="text-body-md text-on-surface-variant mt-1">Configure the application. All settings are stored in the database.</p>
+      </div>
 
-      <div className="card">
-        <div className="result-tabs" style={{ marginBottom: 0 }}>
+      {/* Tabbed card */}
+      <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden">
+        {/* Tab header */}
+        <div className="flex border-b border-outline-variant px-6">
           {TABS.map(tab => (
             <button
               key={tab.id}
-              className={`result-tab ${activeTab === tab.id ? 'active' : ''}`}
+              className={`py-4 px-6 text-label-md border-b-2 transition-all ${
+                activeTab === tab.id
+                  ? 'border-primary text-primary font-bold'
+                  : 'border-transparent text-on-surface-variant hover:text-on-surface'
+              }`}
               onClick={() => setActiveTab(tab.id)}
             >
               {tab.label}
@@ -484,7 +493,8 @@ export default function SettingsPage() {
           ))}
         </div>
 
-        <div style={{ paddingTop: '1.5rem' }}>
+        {/* Tab content */}
+        <div className="p-6 md:p-gutter">
           {activeTab === 'general' && (
             <GeneralPanel initial={appSettings} onSaved={setAppSettings} />
           )}
