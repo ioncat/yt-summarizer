@@ -67,8 +67,8 @@
 
 ## Related docs
 
-- [USER_GUIDE.md](../USER_GUIDE.md) — пользовательские режимы обработки
+- [USER_GUIDE.md](../guides/USER_GUIDE.md) — пользовательские режимы обработки
 - [CLAUDE.md](../../CLAUDE.md) — техническая архитектура
 - [open-questions.md](open-questions.md) — нерешённые проектные вопросы
-- [phase2-architecture.md](../phase2-architecture.md) — детали Map-Reduce
-- [backlog/BACKLOG.md](../backlog/BACKLOG.md) — эпики
+- [phase2-architecture.md](../engineering/phase2-architecture.md) — детали Map-Reduce
+- [backlog/BACKLOG.md](../delivery/backlog/BACKLOG.md) — эпики

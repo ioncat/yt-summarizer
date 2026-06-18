@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## ⚠️ Backlog & Epics Convention
 
-**Every epic and user story MUST follow `docs/product-delivery-conventions.md`.**  
+**Every epic and user story MUST follow `docs/delivery/product-delivery-conventions.md`.**  
 Read it before creating or editing any epic file.
 
 Key requirements:
@@ -178,7 +178,7 @@ All 5 epics done. Full stack running:
 - **chat_history bug fix**: `video_service.get_result()` now explicitly `json.loads()` if `fmt.chat_history` is a string (SQLAlchemy JSON column bypassed by raw SQL write in `save_chat_history`)
 - **Chat auto-reset removed**: `useEffect([summary_text])` that cleared chatHistory on every summary_text change removed; user controls chat lifetime via Clear chat only
 - **Pipeline guard in handleSummarize**: if `cleanup_status` is null and `cleaned_text` is absent → `confirm()` dialog "Run cleanup → summarize pipeline?"; on confirm → `handleCleanup()` + `autoSummarizeAfterCleanupRef = true`; when cleanup reaches `done` → auto-starts summary without switching to Cleaned tab
-- **Behavior docs**: `docs/system-behavior.md` — Mermaid diagrams: Activity (full pipeline), StateDiagram × 3 (Task / Cleanup / Summary), StateDiagram (ResultPage UI), dependency graph
+- **Behavior docs**: `docs/engineering/system-behavior.md` — Mermaid diagrams: Activity (full pipeline), StateDiagram × 3 (Task / Cleanup / Summary), StateDiagram (ResultPage UI), dependency graph
 
 #### Epic 25 ✅ — Chapter Heading Preservation & Rendering
 - `text_cleaner.py`: paragraphs starting with `## ` → bypass LLM entirely, pass through unchanged
@@ -411,14 +411,14 @@ After every commit — пройти по списку и обновить рел
 | Файл | Когда обновлять |
 |------|-----------------|
 | `CLAUDE.md` | Изменилась архитектура, ключевые детали реализации, новые паттерны |
-| `docs/backlog/BACKLOG.md` | Новая фича, изменение статуса, known issue найден или закрыт |
-| `docs/backlog/epics/EPIC-NN.md` | Изменилось поведение конкретного эпика |
-| `docs/USER_GUIDE.md` | Изменилось пользовательское поведение, новые опции, новые предупреждения |
-| `docs/test-cases.md` | Новый сценарий, новый лог-тег, изменились критерии pass/fail |
-| `docs/system-behavior.md` | Изменилась логика pipeline, state machines, активность |
+| `docs/delivery/backlog/BACKLOG.md` | Новая фича, изменение статуса, known issue найден или закрыт |
+| `docs/delivery/backlog/epics/EPIC-NN.md` | Изменилось поведение конкретного эпика |
+| `docs/guides/USER_GUIDE.md` | Изменилось пользовательское поведение, новые опции, новые предупреждения |
+| `docs/delivery/test-cases.md` | Новый сценарий, новый лог-тег, изменились критерии pass/fail |
+| `docs/engineering/system-behavior.md` | Изменилась логика pipeline, state machines, активность |
 | `README.md` | Изменились ключевые фичи, setup, позиционирование |
-| `docs/saas-transition.md` | Новое конкурентное наблюдение, стратегический инсайт *(gitignored)* |
-| **`docs/effort-log.md`** | **Всегда — в конце каждой сессии. Обязательно.** |
+| `docs/project/saas-transition.md` | Новое конкурентное наблюдение, стратегический инсайт *(gitignored)* |
+| **`docs/project/effort-log.md`** | **Всегда — в конце каждой сессии. Обязательно.** |
 
 **Правило**: если сомневаешься — обновляй. Документ проще поправить, чем восстанавливать контекст спустя месяц.
 
@@ -432,8 +432,8 @@ Before shipping to production, remove all debug `console.error` calls added acro
 
 ## References
 
-- **Functional Requirements**: `docs/requirements.md`
-- **Phase 2 LLM Architecture**: `docs/phase2-architecture.md`
-- **Effort Log**: `docs/effort-log.md`
+- **Functional Requirements**: `docs/delivery/requirements.md`
+- **Phase 2 LLM Architecture**: `docs/engineering/phase2-architecture.md`
+- **Effort Log**: `docs/project/effort-log.md`
 - **yt-dlp**: https://github.com/yt-dlp/yt-dlp
 - **FastAPI**: https://fastapi.tiangolo.com/

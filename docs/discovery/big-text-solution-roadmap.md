@@ -510,6 +510,6 @@ Concurrent keep-alive двух моделей = ~13GB RAM минимум. На c
 
 - [big-text-problem-statement.md](big-text-problem-statement.md) — формулировка проблемы
 - [big-text-problem-solution-discussion.md](big-text-problem-solution-discussion%20.md) — обсуждение принципов решения + Q&A (source of this roadmap)
-- [../USER_GUIDE.md](../USER_GUIDE.md) — текущие режимы обработки
+- [../guides/USER_GUIDE.md](../guides/USER_GUIDE.md) — текущие режимы обработки
 - [../../CLAUDE.md](../../CLAUDE.md) — техническая архитектура
-- [../backlog/BACKLOG.md](../backlog/BACKLOG.md) — существующие эпики
+- [../delivery/backlog/BACKLOG.md](../delivery/backlog/BACKLOG.md) — существующие эпики

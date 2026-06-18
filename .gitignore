@@ -72,7 +72,7 @@ Thumbs.db
 # ========================
 # Private / internal docs
 # ========================
-docs/saas-transition.md
+docs/project/saas-transition.md
 
 # ========================
 # Claude Code local config
@@ -81,8 +81,8 @@ docs/saas-transition.md
 frontend/.claude/
 docs/project-bootstrap-guide.md
 docs/DISCOVERY.md
-docs/PROJECT_PLAN.md
-docs/retrospective.md
+docs/project/PROJECT_PLAN.md
+docs/project/retrospective.md
 AGENTS.md
 
 # ========================
