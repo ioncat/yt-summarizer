@@ -174,42 +174,55 @@ body {
 
 .card {
   background: var(--surface);
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 2rem;
-  box-shadow: 0 1px 4px var(--shadow);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px var(--shadow);
 }
 
 .form-group { margin-bottom: 1rem; }
-.form-group label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.4rem; }
+.form-group label { display: block; font-size: 0.82rem; font-weight: 500; color: var(--text-muted); margin-bottom: 0.4rem; letter-spacing: 0.01em; }
 
 input[type="text"], select {
   width: 100%;
   padding: 0.65rem 0.9rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  font-size: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: var(--surface-2);
+  color: var(--text);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-input[type="text"]:focus, select:focus { border-color: var(--accent); }
+input[type="text"]:focus, select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
 
 .btn {
-  display: inline-block;
-  padding: 0.65rem 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1.25rem;
   border: none;
-  border-radius: 6px;
-  font-size: 1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: inherit;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, transform 0.1s, background 0.15s;
 }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: var(--accent); color: var(--surface); }
-.btn-primary:hover:not(:disabled) { opacity: 0.85; }
-.btn-secondary { background: var(--surface-3); color: var(--text-muted); }
-.btn-secondary:hover:not(:disabled) { background: var(--border); }
-.btn-sm { padding: 0.3rem 0.75rem; font-size: 0.82rem; }
-.btn-danger { background: var(--surface); color: var(--accent); border: 1px solid var(--accent); }
-.btn-danger:hover:not(:disabled) { background: var(--accent-soft); }
+.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #ffffff; }
+.btn-primary:hover:not(:disabled) { opacity: 0.88; }
+.btn-secondary { background: var(--surface-4); color: var(--text-muted); }
+.btn-secondary:hover:not(:disabled) { background: var(--surface-5); color: var(--text); }
+.btn-sm { padding: 0.3rem 0.75rem; font-size: 0.8rem; }
+.btn-danger { background: var(--surface); color: var(--err); border: 1px solid var(--err); }
+.btn-danger:hover:not(:disabled) { background: var(--err-soft); }
 
 .status-box {
   text-align: center;
