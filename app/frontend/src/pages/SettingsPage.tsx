@@ -90,79 +90,49 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
     !cookiesPath && 'Cookies path',
   ].filter(Boolean)
 
+  const inputClass = (missing: boolean) =>
+    `w-full px-4 py-2.5 bg-surface-container-low border rounded-lg text-body-md focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${missing ? 'border-error/60' : 'border-outline-variant focus:border-primary'}`
+
   return (
-    <div className="settings-section">
+    <div className="space-y-6">
       {missingFields.length > 0 && (
-        <div className="settings-warning">
-          ⚠ Required fields missing: {missingFields.join(', ')}
+        <div className="flex items-center gap-2 bg-error-container text-on-error-container rounded-lg px-4 py-3 text-body-sm">
+          <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: '16px' }}>warning</span>
+          Required fields missing: {missingFields.join(', ')}
         </div>
       )}
 
-      <div className="form-group">
-        <label>Ollama URL <span className="required-mark">*</span></label>
-        <input
-          type="text"
-          value={ollamaUrl}
-          onChange={e => setOllamaUrl(e.target.value)}
-          placeholder="http://localhost:11434"
-          className={!ollamaUrl ? 'input-missing' : ''}
-        />
+      <div className="space-y-2">
+        <label className="block text-label-md text-on-surface-variant">Ollama URL <span className="text-error">*</span></label>
+        <input type="text" className={inputClass(!ollamaUrl)} value={ollamaUrl} onChange={e => setOllamaUrl(e.target.value)} placeholder="http://localhost:11434" />
       </div>
 
-      <div className="form-group">
-        <label>yt-dlp path <span className="required-mark">*</span></label>
-        <input
-          type="text"
-          value={ytdlpPath}
-          onChange={e => setYtdlpPath(e.target.value)}
-          placeholder="C:/ytdlp/yt-dlp.exe"
-          className={!ytdlpPath ? 'input-missing' : ''}
-        />
-        <div className="field-hint">Path to yt-dlp executable on the server.</div>
+      <div className="space-y-2">
+        <label className="block text-label-md text-on-surface-variant">yt-dlp path <span className="text-error">*</span></label>
+        <input type="text" className={inputClass(!ytdlpPath)} value={ytdlpPath} onChange={e => setYtdlpPath(e.target.value)} placeholder="C:/ytdlp/yt-dlp.exe" />
+        <p className="text-body-sm text-secondary">Path to yt-dlp executable on the server.</p>
       </div>
 
-      <div className="form-group">
-        <label>Cookies path <span className="required-mark">*</span></label>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <input
-            type="text"
-            value={cookiesPath}
-            onChange={e => setCookiesPath(e.target.value)}
-            placeholder="../data/www.youtube.com_cookies.txt"
-            className={!cookiesPath ? 'input-missing' : ''}
-            style={{ flex: 1 }}
-          />
-          <button className="btn btn-secondary" onClick={() => fileRef.current?.click()}>
-            Upload
-          </button>
+      <div className="space-y-2">
+        <label className="block text-label-md text-on-surface-variant">Cookies path <span className="text-error">*</span></label>
+        <div className="flex gap-2">
+          <input type="text" className={`flex-1 px-4 py-2.5 bg-surface-container-low border rounded-lg text-body-md focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${!cookiesPath ? 'border-error/60' : 'border-outline-variant focus:border-primary'}`} value={cookiesPath} onChange={e => setCookiesPath(e.target.value)} placeholder="../data/www.youtube.com_cookies.txt" />
+          <button className="px-4 py-2.5 bg-surface-container-high text-on-surface-variant border border-outline-variant rounded-lg text-label-md hover:bg-surface-container-highest active:scale-95 transition-all" onClick={() => fileRef.current?.click()}>Upload</button>
         </div>
-        <input ref={fileRef} type="file" accept=".txt" style={{ display: 'none' }} onChange={handleCookiesUpload} />
-        <div className="field-hint">Export from Chrome via "Get cookies.txt LOCALLY" extension.</div>
+        <input ref={fileRef} type="file" accept=".txt" className="hidden" onChange={handleCookiesUpload} />
+        <p className="text-body-sm text-secondary">Export from Chrome via "Get cookies.txt LOCALLY" extension.</p>
       </div>
 
-      <div className="form-group">
-        <label>Parallel workers</label>
-        <input
-          type="number"
-          min={1}
-          max={16}
-          value={parallelWorkers}
-          onChange={e => { setParallelWorkers(e.target.value); setParallelError('') }}
-          style={{ maxWidth: '100px' }}
-          className={parallelError ? 'input-missing' : ''}
-        />
-        {parallelError && <div className="field-hint" style={{ color: '#dc2626' }}>{parallelError}</div>}
-        <div className="field-hint">
-          Number of paragraphs/chunks processed simultaneously during cleanup and summarization.
-          Should match <code>OLLAMA_NUM_PARALLEL</code> on your Ollama server (default 1 = sequential).
-        </div>
+      <div className="space-y-2">
+        <label className="block text-label-md text-on-surface-variant">Parallel workers</label>
+        <input type="number" min={1} max={16} className={`w-24 px-4 py-2.5 bg-surface-container-low border rounded-lg text-body-md focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${parallelError ? 'border-error/60' : 'border-outline-variant focus:border-primary'}`} value={parallelWorkers} onChange={e => { setParallelWorkers(e.target.value); setParallelError('') }} />
+        {parallelError && <p className="text-body-sm text-error">{parallelError}</p>}
+        <p className="text-body-sm text-secondary">Paragraphs/chunks processed simultaneously. Should match <code className="text-xs bg-surface-container-high px-1 py-0.5 rounded">OLLAMA_NUM_PARALLEL</code> on your Ollama server (default 1 = sequential).</p>
       </div>
 
-      <div className="actions">
-        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-        {toast && <span className="settings-toast">{toast}</span>}
+      <div className="flex items-center gap-3 pt-2">
+        <button className="px-6 py-2.5 bg-primary text-on-primary rounded-lg text-label-md font-semibold hover:opacity-90 active:scale-95 transition-all disabled:opacity-40" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+        {toast && <span className="text-label-sm text-tertiary font-semibold">{toast}</span>}
       </div>
     </div>
   )
@@ -200,14 +170,13 @@ function ForceMapReduceToggle({ value, onSaved }: ForceMapReduceProps) {
   }
 
   return (
-    <div className="settings-section" style={{ paddingBottom: '0.5rem', borderBottom: '1px solid #eee', marginBottom: '1rem' }}>
-      <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer' }}>
-        <input type="checkbox" checked={checked} onChange={handleChange} />
-        <span>Force Map-Reduce mode</span>
-        {toast && <span className="settings-toast" style={{ marginLeft: '0.5rem' }}>{toast}</span>}
-      </label>
-      <div className="field-hint" style={{ marginTop: '0.3rem' }}>
-        Overrides auto-detection — always use Map-Reduce regardless of text length. For testing only.
+    <div className="flex items-start gap-3 pb-6 mb-6 border-b border-outline-variant">
+      <input type="checkbox" id="force-map-reduce" className="w-4 h-4 accent-primary mt-0.5 cursor-pointer" checked={checked} onChange={handleChange} />
+      <div>
+        <label htmlFor="force-map-reduce" className="text-label-md text-on-surface cursor-pointer">
+          Force Map-Reduce mode {toast && <span className="text-label-sm text-tertiary font-semibold ml-2">{toast}</span>}
+        </label>
+        <p className="text-body-sm text-secondary mt-1">Overrides auto-detection — always use Map-Reduce regardless of text length. For testing only.</p>
       </div>
     </div>
   )
@@ -260,19 +229,18 @@ function ModelOnlyPanel({ stage, initial, models, modelsOnline, onSaved }: {
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+    <div className="flex items-center gap-3">
       <select
+        className={`flex-1 px-4 py-2.5 bg-surface-container-low border rounded-lg text-body-md focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all appearance-none cursor-pointer ${!model ? 'border-error/60' : 'border-outline-variant focus:border-primary'}`}
         value={model}
         onChange={handleChange}
         disabled={!modelsOnline}
-        className={!model ? 'input-missing' : ''}
         title={!modelsOnline ? 'Ollama offline — cannot load models' : undefined}
-        style={{ flex: 1 }}
       >
         <option value="">— Select your model —</option>
         {models.map(m => <option key={m} value={m}>{m}</option>)}
       </select>
-      {toast && <span className="settings-toast">{toast}</span>}
+      {toast && <span className="text-label-sm text-tertiary font-semibold">{toast}</span>}
     </div>
   )
 }
@@ -334,77 +302,57 @@ function StagePanel({ stage, initial, models, modelsOnline, locked, hideModel, l
 
   const missingModel = !locked && !hideModel && !model
 
+  const taClass = 'w-full px-4 py-2.5 bg-surface-container-low border border-outline-variant rounded-lg text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-y disabled:opacity-60'
+
   return (
-    <div className="settings-section">
-      {label && <h3 style={{ margin: '0 0 1rem', fontSize: '0.95rem', color: '#555' }}>{label}</h3>}
+    <div className="space-y-6">
+      {label && <h3 className="text-body-md font-semibold text-secondary">{label}</h3>}
       {locked && (
-        <div className="settings-warning settings-warning-info">
+        <div className="flex items-center gap-2 bg-secondary-container text-on-secondary-container rounded-lg px-4 py-3 text-body-sm">
+          <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: '16px' }}>lock</span>
           Phase 2 — coming soon. Settings locked.
         </div>
       )}
       {missingModel && (
-        <div className="settings-warning">
-          ⚠ No model selected — AI cleanup will not run until a model is chosen.
+        <div className="flex items-center gap-2 bg-error-container text-on-error-container rounded-lg px-4 py-3 text-body-sm">
+          <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: '16px' }}>warning</span>
+          No model selected — AI cleanup will not run until a model is chosen.
         </div>
       )}
 
       {!hideModel && (
-        <div className="form-group">
-          <label>Model {!locked && <span className="required-mark">*</span>}</label>
+        <div className="space-y-2">
+          <label className="block text-label-md text-on-surface-variant">Model {!locked && <span className="text-error">*</span>}</label>
           <select
+            className={`w-full px-4 py-2.5 bg-surface-container-low border rounded-lg text-body-md focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all appearance-none cursor-pointer disabled:opacity-60 ${missingModel ? 'border-error/60' : 'border-outline-variant focus:border-primary'}`}
             value={model}
             onChange={e => setModel(e.target.value)}
             disabled={locked || !modelsOnline}
-            className={missingModel ? 'input-missing' : ''}
             title={!modelsOnline ? 'Ollama offline — cannot load models' : undefined}
           >
             <option value="">— Select your model —</option>
-            {models.map(m => (
-              <option key={m} value={m}>{m}</option>
-            ))}
+            {models.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
-          {!modelsOnline && (
-            <div className="field-hint">Ollama offline — model list unavailable</div>
-          )}
+          {!modelsOnline && <p className="text-body-sm text-secondary">Ollama offline — model list unavailable</p>}
         </div>
       )}
 
-      <div className="form-group">
-        <label>System prompt</label>
-        <textarea
-          className="settings-textarea"
-          value={systemPrompt}
-          onChange={e => setSystemPrompt(e.target.value)}
-          disabled={locked}
-          rows={4}
-          placeholder="System prompt for this stage…"
-        />
+      <div className="space-y-2">
+        <label className="block text-label-md text-on-surface-variant">System prompt</label>
+        <textarea className={taClass} value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} disabled={locked} rows={4} placeholder="System prompt for this stage…" />
       </div>
 
-      <div className="form-group">
-        <label>User prompt template</label>
-        <textarea
-          className="settings-textarea"
-          value={userPrompt}
-          onChange={e => setUserPrompt(e.target.value)}
-          disabled={locked}
-          rows={10}
-          placeholder="Use {text} as the placeholder for input text…"
-        />
-        {!locked && (
-          <div className="field-hint">Use <code>&#123;text&#125;</code> as placeholder for the input text.</div>
-        )}
+      <div className="space-y-2">
+        <label className="block text-label-md text-on-surface-variant">User prompt template</label>
+        <textarea className={`${taClass} font-mono`} value={userPrompt} onChange={e => setUserPrompt(e.target.value)} disabled={locked} rows={10} placeholder="Use {text} as the placeholder for input text…" />
+        {!locked && <p className="text-body-sm text-secondary">Use <code className="text-xs bg-surface-container-high px-1 py-0.5 rounded">{'{'+'text'+'}'}</code> as placeholder for the input text.</p>}
       </div>
 
       {!locked && (
-        <div className="actions">
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          <button className="btn btn-secondary" onClick={handleReset} disabled={saving}>
-            Reset to defaults
-          </button>
-          {toast && <span className="settings-toast">{toast}</span>}
+        <div className="flex items-center gap-3 pt-2">
+          <button className="px-6 py-2.5 bg-primary text-on-primary rounded-lg text-label-md font-semibold hover:opacity-90 active:scale-95 transition-all disabled:opacity-40" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+          <button className="px-6 py-2.5 bg-surface-container-high text-on-surface-variant border border-outline-variant rounded-lg text-label-md hover:bg-surface-container-highest active:scale-95 transition-all disabled:opacity-40" onClick={handleReset} disabled={saving}>Reset to defaults</button>
+          {toast && <span className="text-label-sm text-tertiary font-semibold">{toast}</span>}
         </div>
       )}
     </div>
@@ -461,8 +409,8 @@ export default function SettingsPage() {
   )
 
   if (!appSettings || !cleanup || !summarization || !summExtract || !summCombine) return (
-    <div className="p-6 md:p-gutter max-w-[1200px] mx-auto w-full flex justify-center py-16">
-      <div className="spinner" />
+    <div className="flex items-center justify-center py-16">
+      <span className="material-symbols-outlined text-secondary" style={{ fontSize: '36px', animation: 'spin 1.2s linear infinite' }}>progress_activity</span>
     </div>
   )
 
@@ -506,92 +454,43 @@ export default function SettingsPage() {
               modelsOnline={modelsOnline}
             />
           )}
-          {activeTab === 'summarization' && (
-            <>
-              {/* Force Map-Reduce toggle */}
-              <ForceMapReduceToggle
-                value={appSettings.force_map_reduce === 'true'}
-                onSaved={setAppSettings}
-              />
+          {activeTab === 'summarization' && (() => {
+            const subTabClass = (active: boolean) =>
+              active
+                ? 'px-4 py-2 text-label-md font-bold text-primary border-b-2 border-primary transition-colors'
+                : 'px-4 py-2 text-label-md text-on-surface-variant hover:text-on-surface border-b-2 border-transparent transition-colors'
+            return (
+              <>
+                <ForceMapReduceToggle value={appSettings.force_map_reduce === 'true'} onSaved={setAppSettings} />
 
-              {/* Model selector — shared across both modes */}
-              <div className="settings-section" style={{ paddingBottom: '0.75rem', borderBottom: '1px solid #eee', marginBottom: '1rem' }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label>Model <span className="required-mark">*</span></label>
-                  <ModelOnlyPanel
-                    stage="summarization"
-                    initial={summarization}
-                    models={models}
-                    modelsOnline={modelsOnline}
-                    onSaved={setSummarization}
-                  />
+                {/* Model selector — shared across modes */}
+                <div className="space-y-2 pb-6 mb-6 border-b border-outline-variant">
+                  <label className="block text-label-md text-on-surface-variant">Model <span className="text-error">*</span></label>
+                  <ModelOnlyPanel stage="summarization" initial={summarization} models={models} modelsOnline={modelsOnline} onSaved={setSummarization} />
                 </div>
-              </div>
 
-              {/* Sub-tabs for prompts */}
-              <div className="result-tabs" style={{ marginBottom: '1rem' }}>
-                <button
-                  className={`result-tab ${summSubTab === 'single_pass' ? 'active' : ''}`}
-                  onClick={() => setSummSubTab('single_pass')}
-                >
-                  Single Pass
-                </button>
-                <button
-                  className={`result-tab ${summSubTab === 'map_reduce' ? 'active' : ''}`}
-                  onClick={() => setSummSubTab('map_reduce')}
-                >
-                  Map-Reduce
-                </button>
-              </div>
+                {/* Mode sub-tabs */}
+                <div className="flex gap-4 border-b border-outline-variant mb-6">
+                  <button className={subTabClass(summSubTab === 'single_pass')} onClick={() => setSummSubTab('single_pass')}>Single Pass</button>
+                  <button className={subTabClass(summSubTab === 'map_reduce')} onClick={() => setSummSubTab('map_reduce')}>Map-Reduce</button>
+                </div>
 
-              {summSubTab === 'single_pass' && (
-                <StagePanel
-                  stage="summarization"
-                  initial={summarization}
-                  models={models}
-                  modelsOnline={modelsOnline}
-                  hideModel
-                />
-              )}
-              {summSubTab === 'map_reduce' && (
-                <>
-                  <div className="result-tabs" style={{ marginBottom: '1rem' }}>
-                    <button
-                      className={`result-tab ${mapReduceStep === 'extract' ? 'active' : ''}`}
-                      onClick={() => setMapReduceStep('extract')}
-                    >
-                      Step 1 — Extract (per chunk)
-                    </button>
-                    <button
-                      className={`result-tab ${mapReduceStep === 'combine' ? 'active' : ''}`}
-                      onClick={() => setMapReduceStep('combine')}
-                    >
-                      Step 2 — Combine (all chunks)
-                    </button>
-                  </div>
-
-                  {mapReduceStep === 'extract' && (
-                    <StagePanel
-                      stage="summarization_extract"
-                      initial={summExtract}
-                      models={models}
-                      modelsOnline={modelsOnline}
-                      hideModel
-                    />
-                  )}
-                  {mapReduceStep === 'combine' && (
-                    <StagePanel
-                      stage="summarization_combine"
-                      initial={summCombine}
-                      models={models}
-                      modelsOnline={modelsOnline}
-                      hideModel
-                    />
-                  )}
-                </>
-              )}
-            </>
-          )}
+                {summSubTab === 'single_pass' && (
+                  <StagePanel stage="summarization" initial={summarization} models={models} modelsOnline={modelsOnline} hideModel />
+                )}
+                {summSubTab === 'map_reduce' && (
+                  <>
+                    <div className="flex gap-4 border-b border-outline-variant mb-6">
+                      <button className={subTabClass(mapReduceStep === 'extract')} onClick={() => setMapReduceStep('extract')}>Step 1 — Extract (per chunk)</button>
+                      <button className={subTabClass(mapReduceStep === 'combine')} onClick={() => setMapReduceStep('combine')}>Step 2 — Combine (all chunks)</button>
+                    </div>
+                    {mapReduceStep === 'extract' && <StagePanel stage="summarization_extract" initial={summExtract} models={models} modelsOnline={modelsOnline} hideModel />}
+                    {mapReduceStep === 'combine' && <StagePanel stage="summarization_combine" initial={summCombine} models={models} modelsOnline={modelsOnline} hideModel />}
+                  </>
+                )}
+              </>
+            )
+          })()}
         </div>
       </div>
     </div>
