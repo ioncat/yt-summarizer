@@ -79,9 +79,9 @@ body {
 #root { min-height: 100vh; }
 
 .container {
-  max-width: 800px;
+  max-width: 860px;
   margin: 0 auto;
-  padding: 2rem 1rem;
+  padding: 2rem 1.5rem;
 }
 
 /* ============================================================
@@ -97,7 +97,7 @@ body {
   left: 0;
   top: 0;
   height: 100vh;
-  width: 200px;
+  width: 256px;
   background: var(--surface-2);
   border-right: 1px solid var(--border);
   display: flex;
@@ -142,7 +142,7 @@ body {
 .sidebar-link.active { background: var(--accent); color: #ffffff; }
 
 .main-area {
-  margin-left: 200px;
+  margin-left: 256px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -152,7 +152,7 @@ body {
 .topbar {
   position: sticky;
   top: 0;
-  height: 52px;
+  height: 64px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: flex;
