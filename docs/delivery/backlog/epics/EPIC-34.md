@@ -9,135 +9,135 @@
 
 ## Strategic Context
 
-Обработка одного видео — это ручной workflow. Пользователь с большим списком контента (курс, канал, исследование) вынужден добавлять видео по одному и ждать каждого. Batch-очередь убирает этот барьер и открывает сценарии неконтролируемой фоновой обработки.
+Processing one video at a time is a manual workflow. A user with a large content list (a course, a channel, a research topic) has to add videos one by one and wait for each. A batch queue removes this barrier and enables unattended background processing scenarios.
 
 ---
 
 ## Goal
 
-Пользователь вставляет несколько URL построчно → все попадают в очередь → backend обрабатывает по одному последовательно через выбранный pipeline → пользователь видит статус каждого в очереди.
+User pastes multiple URLs, one per line → all enter the queue → backend processes them sequentially through the selected pipeline → user sees the status of each item.
 
 ---
 
 ## User Stories
 
-### US-3401: DB schema и queue worker
+### US-3401: DB schema and queue worker
 
-**Given** backend стартует  
-**When** `_migrate_db()` выполняется  
-**Then** таблица `processing_queue` существует с колонками:
+**Given** the backend starts  
+**When** `_migrate_db()` runs  
+**Then** the `processing_queue` table exists with columns:
 `id`, `url`, `video_id`, `status`, `pipeline_stages`, `error_message`, `added_at`, `started_at`, `finished_at`, `sort_order`
 
 **Notes for Engineering:**
 - `status` ∈ `pending | processing | done | failed | skipped`
 - `pipeline_stages` — JSON array: `["extract"]` / `["extract","cleanup"]` / `["extract","cleanup","summary"]`
-- `video_id` — заполняется после завершения extraction (связь с `videos` таблицей)
-- Queue worker: asyncio background task, старт в `lifespan()`, polling каждые 5 сек
-- Worker берёт один `pending` item, выставляет `processing`, запускает pipeline stages последовательно
-- На ошибке: `status = failed`, `error_message` заполняется, переходит к следующему
-- **Одновременно обрабатывается строго один item** — Ollama не поддерживает параллельные heavy запросы
-- DB backup перед миграцией
+- `video_id` — populated after extraction completes (foreign key to `videos` table)
+- Queue worker: asyncio background task, started in `lifespan()`, polling every 5 seconds
+- Worker picks one `pending` item, sets it to `processing`, runs pipeline stages sequentially
+- On error: `status = failed`, `error_message` filled in, moves to the next item
+- **Strictly one item processed at a time** — Ollama does not support parallel heavy requests
+- DB backup before migration
 
-**Out of Scope:** приоритизация внутри очереди, pause/resume всей очереди
+**Out of Scope:** priority ordering within the queue, pause/resume of the entire queue
 
 **Edge Cases:**
-- Backend рестарт во время обработки → items со статусом `processing` при старте сбрасываются в `pending`
-- Дубликат URL в очереди → добавляется (пользователь мог хотеть повторную обработку), не блокируется
-- URL недоступен → `status = failed`, message из subtitle_extractor error classification
+- Backend restarts mid-processing → items with `processing` status at startup are reset to `pending`
+- Duplicate URL in queue → added (user may have wanted reprocessing), not blocked
+- URL unreachable → `status = failed`, message from subtitle_extractor error classification
 
 ---
 
 ### US-3402: API endpoints
 
-**Given** очередь реализована  
-**When** клиент вызывает API  
-**Then** доступны:
+**Given** the queue is implemented  
+**When** client calls the API  
+**Then** the following endpoints are available:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/queue/bulk` | Принимает `{urls: string[], pipeline_stages: string[]}` → добавляет в очередь → возвращает список добавленных id |
-| GET | `/api/queue` | Возвращает все items, сортировка по `sort_order` + `added_at` |
-| DELETE | `/api/queue/{id}` | Удаляет pending item. Нельзя удалить processing |
-| DELETE | `/api/queue` | Очищает только `pending` items (не трогает processing/done/failed) |
+| POST | `/api/queue/bulk` | Accepts `{urls: string[], pipeline_stages: string[]}` → adds to queue → returns list of added ids |
+| GET | `/api/queue` | Returns all items, sorted by `sort_order` + `added_at` |
+| DELETE | `/api/queue/{id}` | Deletes a pending item. Cannot delete a processing item |
+| DELETE | `/api/queue` | Clears only `pending` items (does not touch processing/done/failed) |
 
 **Notes for Engineering:**
-- Validation: каждый URL прогоняется через `extract_video_id()` при добавлении — невалидные отклоняются сразу
-- Dedup: URL считается дублём если его `video_id` уже есть в `videos` (обработан ранее) или в `processing_queue` со статусом `pending`/`processing` (уже в очереди). Дубли пропускаются, не добавляются.
-- `pipeline_stages` default если не передан: читать из `app_settings` (`queue_default_pipeline`, seed = `["extract"]`)
-- `GET /api/queue` включает поля для UI: `id`, `url`, `video_id`, `status`, `error_message`, `added_at`, `started_at`, `finished_at`
-- Ответ `POST /api/queue/bulk`: `{added, ids, invalid: [url], duplicates: [url]}`
+- Validation: each URL is run through `extract_video_id()` on add — invalid ones are rejected immediately
+- Dedup: a URL is considered a duplicate if its `video_id` already exists in `videos` (previously processed) or in `processing_queue` with status `pending`/`processing` (already queued). Duplicates are skipped, not added.
+- `pipeline_stages` default if not provided: read from `app_settings` (`queue_default_pipeline`, seed = `["extract"]`)
+- `GET /api/queue` includes UI fields: `id`, `url`, `video_id`, `status`, `error_message`, `added_at`, `started_at`, `finished_at`
+- `POST /api/queue/bulk` response: `{added, ids, invalid: [url], duplicates: [url]}`
 
-**Out of Scope:** pagination для GET /api/queue (при разумном числе видео не нужно)
+**Out of Scope:** pagination for GET /api/queue (not needed for a reasonable number of videos)
 
 **Edge Cases:**
-- POST с пустым массивом URL → 400
-- Все URL невалидны → 400
-- Все URL — дубли → 200, `added: 0`, `duplicates: [...]` (не ошибка — пользователь видит почему ничего не добавлено)
-- Часть дублей, часть новых → добавить только новые, `duplicates: [...]` показать в UI
-- DELETE processing item → 409 Conflict
+- POST with empty URL array → 400
+- All URLs invalid → 400
+- All URLs are duplicates → 200, `added: 0`, `duplicates: [...]` (not an error — user sees why nothing was added)
+- Mix of duplicates and new URLs → add only new ones, show `duplicates: [...]` in UI
+- DELETE on processing item → 409 Conflict
 
 ---
 
-### US-3403: Frontend — Bulk Add panel на HomePage
+### US-3403: Frontend — Bulk Add panel on HomePage
 
-**Given** пользователь на HomePage  
-**When** кликает "Bulk add" (кнопка рядом с основным полем URL)  
-**Then** раскрывается панель:
+**Given** user is on the HomePage  
+**When** clicks "Bulk add" (button next to the main URL field)  
+**Then** a panel expands with:
 - `<textarea>` — "Paste URLs, one per line"
-- Selector pipeline stages: "Extract only" / "Extract + Cleanup" / "Full pipeline"
-- Кнопка "Add to queue (N URLs)" — N обновляется live при вводе
-- Кнопка Cancel — скрывает панель
+- Pipeline stage selector: "Extract only" / "Extract + Cleanup" / "Full pipeline"
+- "Add to queue (N URLs)" button — N updates live as user types
+- Cancel button — hides the panel
 
 **Notes for Engineering:**
-- Парсинг textarea: split по `\n`, trim каждой строки, фильтр пустых
-- Валидация на frontend: простой regex на youtube.com/watch или youtu.be — остальное бэкенд отклонит
-- После сабмита: панель закрывается, показывается toast "N videos added to queue"
-- Не navigates away — пользователь остаётся на странице
+- Textarea parsing: split by `\n`, trim each line, filter empty lines
+- Frontend validation: simple regex for youtube.com/watch or youtu.be — everything else is rejected by the backend
+- After submit: panel closes, toast "N videos added to queue" shown
+- Does not navigate away — user stays on the page
 
-**Out of Scope:** drag & drop файла со списком URL, импорт из clipboard API
+**Out of Scope:** drag & drop file with URL list, import via clipboard API
 
 **Edge Cases:**
-- Все URL невалидны → показать ошибки inline под textarea
-- Часть валидны, часть нет → добавить валидные, показать список невалидных
-- Все URL — дубли → `added: 0`, показать сообщение "All N URLs already processed" + список
-- Часть дублей → добавить уникальные, показать "N added, M duplicates skipped" + список дублей
+- All URLs invalid → show errors inline below the textarea
+- Mix of valid and invalid → add valid ones, show list of invalid
+- All URLs are duplicates → `added: 0`, show "All N URLs already processed" + list
+- Mix of duplicates → add unique ones, show "N added, M duplicates skipped" + duplicate list
 
 ---
 
 ### US-3404: Frontend — Queue status view
 
-**Given** в очереди есть items  
-**When** пользователь открывает Queue страницу (`/queue`) или панель  
-**Then** видит список items с колонками: порядок / URL (короткий) / статус / pipeline / время
+**Given** there are items in the queue  
+**When** user opens the Queue page (`/queue`) or panel  
+**Then** sees a list of items with columns: order / URL (short) / status / pipeline / time
 
 **Notes for Engineering:**
-- Новый nav link "⏱ Queue" рядом с History (показывается только если есть pending/processing items — badge с числом)
-- Polling GET /api/queue каждые 3 сек пока есть processing/pending items
-- Статусы с иконками: ⏸ pending / ⏳ processing / ✓ done / ❌ failed / — skipped
+- New nav link "⏱ Queue" next to History (shown only when there are pending/processing items — badge with count)
+- Poll GET /api/queue every 3 seconds while there are processing/pending items
+- Status icons: ⏸ pending / ⏳ processing / ✓ done / ❌ failed / — skipped
 - `done` items — clickable → navigate to `/result/{video_id}`
-- `failed` items — показывают error_message при hover/expand
-- Кнопка "Clear completed" — DELETE /api/queue (только pending) + убирает done/failed из UI
-- Кнопка "✕" у pending item — DELETE /api/queue/{id}
+- `failed` items — show error_message on hover/expand
+- "Clear completed" button — DELETE /api/queue (pending only) + removes done/failed from UI
+- "✕" button on pending item — DELETE /api/queue/{id}
 
-**Out of Scope:** reorder drag&drop, pause individual items
+**Out of Scope:** reorder via drag & drop, pause individual items
 
 **Edge Cases:**
-- Queue пустая → "No items in queue"
-- Processing item нельзя удалить — кнопка disabled с tooltip
+- Queue empty → "No items in queue"
+- Processing item cannot be deleted — button disabled with tooltip
 
 ---
 
 ## Implementation Plan
 
-1. 🔴 **BLOCKER** `models.py` + `database.py` — `processing_queue` таблица + миграция + `app_settings` seed для `queue_default_pipeline`
-2. 🔴 **BLOCKER** `queue_service.py` — CRUD для очереди + queue worker (`_queue_worker` asyncio loop, старт в `lifespan`)
-3. 🟠 `api.py` — 4 новых endpoint
+1. 🔴 **BLOCKER** `models.py` + `database.py` — `processing_queue` table + migration + `app_settings` seed for `queue_default_pipeline`
+2. 🔴 **BLOCKER** `queue_service.py` — queue CRUD + queue worker (`_queue_worker` asyncio loop, started in `lifespan`)
+3. 🟠 `api.py` — 4 new endpoints
 4. 🟠 `HomePage.tsx` — Bulk Add panel
-5. 🟡 `QueuePage.tsx` — новая страница + nav link
-6. 🟡 CSS — стили для панели и страницы
+5. 🟡 `QueuePage.tsx` — new page + nav link
+6. 🟡 CSS — styles for the panel and page
 
 ---
 
 ## Open Questions
 
-- **Queue worker + текущий pipeline** — если пользователь вручную запускает summary пока идёт очередь: два Ollama вызова параллельно? Решение: queue worker проверяет `_SUMMARY_CANCEL_SET` или `summary_status == 'processing'` перед стартом — если занято, ждёт следующего polling tick.
+- **Queue worker + manual pipeline conflict** — if the user manually triggers a summary while the queue is running: two Ollama calls in parallel? Resolution: queue worker checks `_SUMMARY_CANCEL_SET` or `summary_status == 'processing'` before starting — if busy, waits for the next polling tick.
