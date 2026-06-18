@@ -6,7 +6,7 @@ import path from 'path'
 export default defineConfig(({ mode }) => {
   // Always resolve .env from project root (two levels up from app/frontend/)
   const env = loadEnv(mode, path.resolve(__dirname, '../..'), '')
-  const frontendPort = parseInt(env.FRONTEND_PORT ?? '3000')
+  const frontendPort = parseInt(process.env.PORT ?? env.FRONTEND_PORT ?? '3000')
   const backendPort = env.BACKEND_PORT ?? '8000'
 
   return {

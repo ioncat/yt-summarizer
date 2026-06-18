@@ -20,9 +20,13 @@ export default function QueueBadge() {
   }, [])
 
   return (
-    <span className="queue-nav-link">
-      ⏱ Queue
-      {active > 0 && <span className="queue-badge">{active}</span>}
+    <span className="flex items-center gap-2">
+      Queue
+      {active > 0 && (
+        <span className="bg-primary text-on-primary text-xs font-semibold rounded-full px-1.5 py-0.5 leading-none min-w-[18px] text-center">
+          {active}
+        </span>
+      )}
     </span>
   )
 }
