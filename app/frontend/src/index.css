@@ -551,14 +551,14 @@ input[type="text"]:focus, select:focus {
 .tab-hint { font-size: 0.75rem; }
 .empty { text-align: center; color: var(--text-faint); padding: 3rem; }
 
-h1 { font-size: 1.6rem; margin-bottom: 0.5rem; }
-h2 { font-size: 1.3rem; margin-bottom: 1.5rem; }
-.subtitle { color: var(--text-muted); margin-bottom: 2rem; }
+h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
+h2 { font-size: 1.2rem; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 1.5rem; }
+.subtitle { color: var(--text-muted); margin-bottom: 2rem; font-size: 0.9rem; }
 
 .settings-section { padding: 0; }
-.settings-textarea { width: 100%; padding: 0.65rem 0.9rem; border: 1px solid var(--border-strong); border-radius: 6px; font-size: 0.9rem; font-family: monospace; outline: none; resize: vertical; transition: border-color 0.15s; }
-.settings-textarea:focus { border-color: var(--accent); }
-.settings-textarea:disabled { background: var(--surface-2); color: var(--text-faint); }
+.settings-textarea { width: 100%; padding: 0.65rem 0.9rem; border: 1px solid var(--border); border-radius: 8px; font-size: 0.875rem; font-family: monospace; background: var(--surface-2); color: var(--text); outline: none; resize: vertical; transition: border-color 0.15s, box-shadow 0.15s; }
+.settings-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
+.settings-textarea:disabled { background: var(--surface-3); color: var(--text-faint); }
 .settings-toast { font-size: 0.85rem; color: var(--text-muted); align-self: center; }
 
 .settings-warning { background: var(--warn-soft); border: 1px solid var(--warn); color: var(--warn); border-radius: 8px; padding: 0.6rem 1rem; font-size: 0.85rem; margin-bottom: 1.2rem; }
