@@ -14,8 +14,8 @@ The creator has already done the structural work: named each semantic block, def
 its scope, and anchored it to a timestamp. Preserving this structure is the single
 most important quality constraint when chapters are present.
 
-**Terminology**: when a video has chapters, subtitle groups are called **параграфы**
-(paragraphs), matching the chapter structure. This naming is intentional and must
+**Terminology**: when a video has chapters, subtitle groups are called **paragraphs**,
+matching the chapter structure. This naming is intentional and must
 be kept throughout code and UI.
 
 ---
@@ -23,11 +23,11 @@ be kept throughout code and UI.
 ## Pipeline Invariant
 
 ```
-formatted_text:   ## Введение\n\nтекст субтитров...
+formatted_text:   ## Introduction\n\nraw subtitle text...
                        ↓  cleanup (LLM touches only text, not heading)
-cleaned_text:     ## Введение\n\nочищенный текст...
+cleaned_text:     ## Introduction\n\ncleaned text...
                        ↓  summarize (heading preserved in output)
-summary_text:     ## Введение\n\nсводка параграфа...
+summary_text:     ## Introduction\n\nparagraph summary...
 ```
 
 ---

@@ -1,74 +1,74 @@
 # Problem Statement — yt-summarizer
 
-## Ядро проблемы
+## Core Problem
 
-**Превратить сырую транскрипцию длинного видео (от 60 тысяч до 300+ тысяч знаков) в нормальный читаемый документ — со смысловой и структурной целостностью, на уровне качества газетной статьи или учебного материала.**
+**Convert a raw transcription of a long video (60K to 300K+ characters) into a readable document — with semantic and structural integrity, at the quality level of a newspaper article or study material.**
 
-## Условия, в которых проблема проявляется
+## Conditions Where the Problem Manifests
 
-1. **Объём:** 60K–300K+ символов сырой VTT-транскрипции
-2. **Локальное железо:** один LLM на потребительском компьютере. Нет облачных API, нет горизонтального масштабирования
-3. **Контекст LLM:** ограничен (8K–32K токенов). Текст целиком не влезает
-4. **Время:** обработка идёт от минут до часов; пользователь не готов ждать дни
-5. **Качество входа:** автотранскрипция YouTube — без знаков препинания, с филлерами ("ну", "вот", "как бы"), оборванными предложениями, повторами одной мысли разными словами
+1. **Volume:** 60K–300K+ characters of raw VTT transcription
+2. **Local hardware:** a single LLM on a consumer machine. No cloud APIs, no horizontal scaling
+3. **LLM context:** limited (8K–32K tokens). The full text does not fit
+4. **Time:** processing takes minutes to hours; the user is not willing to wait days
+5. **Input quality:** YouTube auto-transcription — no punctuation, filler words ("uh", "like", "you know"), broken sentences, the same idea repeated in different words
 
-## Чего нужно добиться
+## What We Need to Achieve
 
-### Смысл
+### Meaning
 
-- Сохранить **все ключевые факты, примеры, термины, цифры, аргументы**
-- Не выдумать ничего нового (anti-hallucination)
-- Не сжимать там, где автор уже структурировал материал (курсы, лекции с главами)
-- Сжимать там, где это новости, обзоры, разговорный контент
+- Preserve **all key facts, examples, terms, numbers, and arguments**
+- Invent nothing new (anti-hallucination)
+- Do not compress where the author already structured the material (courses, lectures with chapters)
+- Compress where the content is news, reviews, or conversational
 
-### Форма
+### Form
 
-Подача должна соответствовать норме читаемого документа:
+Output must meet the standard of a readable document:
 
-- **Абзацы** разумного размера, тематические
-- **Заголовки** для разделов / глав
-- **Прямая речь, цитаты** — где они есть (если автор кого-то цитирует, форматировать как цитату)
-- **Списки, перечисления** — где они уместны (шаги, варианты, факторы)
-- **Пунктуация и капитализация** — корректные
-- **Без филлеров и повторов**
+- **Paragraphs** of reasonable size, thematic
+- **Headings** for sections / chapters
+- **Direct speech, quotes** — where present (if the author quotes someone, format it as a quote)
+- **Lists, enumerations** — where appropriate (steps, options, factors)
+- **Punctuation and capitalization** — correct
+- **No fillers or repetition**
 
-### Структура — два сценария
+### Structure — Two Scenarios
 
-| Сценарий | Что есть на входе | Что должно быть на выходе |
+| Scenario | Input | Expected Output |
 |---|---|---|
-| **Автор разметил видео главами** | YouTube chapters → `## Heading` | Структурированный референс по главам. Все факты сохранены. Минимум компрессии. Документ как учебник. |
-| **Автор не разметил** | Сплошной текст | LLM сам выделяет тематические разделы. Возможна компрессия — пользователь готов потерять детали ради читаемости. |
+| **Author marked chapters** | YouTube chapters → `## Heading` | Structured reference by chapter. All facts preserved. Minimal compression. Document like a textbook. |
+| **No author markup** | Continuous text | LLM identifies thematic sections itself. Compression is acceptable — the user is willing to lose detail for readability. |
 
-### Адаптивность по интенту
+### Adaptive Intent
 
-Один и тот же длинный текст пользователь может захотеть посмотреть как:
+The same long text may be needed in different modes:
 
-1. **TL;DR** — буллеты, 5 минут чтения
-2. **Структурированную сводку** — параграфы по темам, 20 минут
-3. **Полный референс** — главы как в книге, час чтения, ничего не потеряно
+1. **TL;DR** — bullets, 5 minutes of reading
+2. **Structured summary** — paragraphs by topic, 20 minutes
+3. **Full reference** — chapters like a book, one hour of reading, nothing lost
 
-Все три = один pipeline с разными режимами (см. [USER_GUIDE → Processing modes](../USER_GUIDE.md#processing-modes)).
+All three = one pipeline with different modes (see [USER_GUIDE → Processing modes](../guides/USER_GUIDE.md#processing-modes)).
 
-## Антипатерны (что мы НЕ хотим)
+## Anti-Patterns (What We Do NOT Want)
 
-- ❌ Стена сырого текста без абзацев и заголовков
-- ❌ Жёсткое сжатие 95% когда пользователь хотел детали
-- ❌ Выдуманные факты, не присутствующие в видео
-- ❌ Список Markdown-таблиц с эмодзи там, где должен быть literary текст
-- ❌ Часы ожидания обработки без видимого прогресса
-- ❌ Потеря смысловых границ — например, отрезанная середина мысли из-за неудачного chunking
+- ❌ A wall of raw text without paragraphs or headings
+- ❌ Hard compression to 5% when the user wanted details
+- ❌ Hallucinated facts not present in the video
+- ❌ A list of Markdown tables with emoji where literary text is expected
+- ❌ Hours of processing with no visible progress
+- ❌ Loss of semantic boundaries — e.g., a thought cut off mid-sentence due to bad chunking
 
-## Метрики успеха
+## Success Metrics
 
-- **Compression ratio** — сжатие в процентах (уже отображается в UI)
-- **Lossless score** (на будущее) — какой процент named entities, чисел, дат из исходника попал в вывод
-- **Время обработки** — общее и в пересчёте на 1K символов
-- **Структура** — сколько секций / параграфов, средний размер
+- **Compression ratio** — compression as a percentage (already shown in the UI)
+- **Lossless score** (future) — what percentage of named entities, numbers, and dates from the source made it into the output
+- **Processing time** — total and per 1K characters
+- **Structure** — number of sections / paragraphs, average size
 
-## Related docs
+## Related Docs
 
-- [USER_GUIDE.md](../USER_GUIDE.md) — пользовательские режимы обработки
-- [CLAUDE.md](../../CLAUDE.md) — техническая архитектура
-- [open-questions.md](open-questions.md) — нерешённые проектные вопросы
-- [phase2-architecture.md](../phase2-architecture.md) — детали Map-Reduce
-- [backlog/BACKLOG.md](../backlog/BACKLOG.md) — эпики
+- [USER_GUIDE.md](../guides/USER_GUIDE.md) — user processing modes
+- [CLAUDE.md](../../CLAUDE.md) — technical architecture
+- [open-questions.md](open-questions.md) — unresolved design questions
+- [phase2-architecture.md](../engineering/phase2-architecture.md) — Map-Reduce details
+- [backlog/BACKLOG.md](../delivery/backlog/BACKLOG.md) — epics

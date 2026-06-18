@@ -1,6 +1,6 @@
 # YT Summarizer — User Guide
 
-Complete guide to using YT Summarizer. For a one-page intro, see [README](../README.md). For minimal setup steps, see [Quick Start](quick-start-guide.md).
+Complete guide to using YT Summarizer. For a one-page intro, see [README](../../README.md). For minimal setup steps, see [Quick Start](quick-start-guide.md).
 
 ---
 

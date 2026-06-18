@@ -143,28 +143,28 @@ Improve summarization quality beyond single-pass. Map-reduce or chunked approach
 
 ---
 
-## UX Polish & Bug Fixes (не эпики)
+## UX Polish & Bug Fixes (non-epic)
 
-Небольшие улучшения и фиксы, не тянущие на отдельный эпик.
+Small improvements and fixes that don't warrant a standalone epic.
 
-| Дата | Описание |
-|------|----------|
-| 19.05.2026 | Re-extract subtitles: `POST /api/result/{video_id}/reextract` — повторное извлечение субтитров для существующего видео без удаления истории |
+| Date | Description |
+|------|-------------|
+| 19.05.2026 | Re-extract subtitles: `POST /api/result/{video_id}/reextract` — re-run extraction for an existing video without deleting its history |
 | 19.05.2026 | VTT parser fix: decode HTML entities (`&#39;` → `'`) + collapse whitespace |
-| 21.05.2026 | Chat typing animation: 3-dot bounce + spinner на кнопке отправки (yt-summarizer + llm-onpage-summarizer) |
-| 21.05.2026 | History page: stage checkmarks ✓ (grey = not run, green = done) для Cleanup и Summary; type badges унифицированы в нейтральный стиль |
-| 21.05.2026 | Result meta: всегда отображает метод (Single Pass / Map-Reduce / Full Extract) рядом с моделью |
-| 21.05.2026 | Settings → Summarization → Map-Reduce: Step 1 / Step 2 разделены на горизонтальные вкладки (убран скролл) |
-| 21.05.2026 | Result meta redesign: два ряда (видео-инфо / stage-инфо), разделители `•`, hover tooltips; классы `.meta-row`, `.meta-chip`, `.meta-sep`, `.meta-label` |
-| 21.05.2026 | Result meta: `cleanup_finished_at` и `summary_finished_at` из API — timestamp последнего запуска этапа отображается в конце stage row |
-| 21.05.2026 | Date format: `DD.MM.YYYY, HH:MM` (locale-independent) вместо локализованного toLocaleString |
-| 04.06.2026 | **Favicon** — SVG красный кружок с белым «YTS» (`public/favicon.svg`), подключён в `index.html` |
-| 04.06.2026 | **Queue progress display** — `on_progress` колбэки подключены в воркере для cleanup/summary/mindmap; текст прогресса ("paragraph 3/12", "chunk 5/20") в баннере и строке таблицы QueuePage с подсветкой активной стадии |
-| 04.06.2026 | **Queue как единственный путь LLM** — HomePage autoPipeline → queue; ResultPage кнопки (Clean with AI / Summarize / Mind Map / pipeline guard) → queue; `_run_mindmap_stage` в воркере |
-| 04.06.2026 | **Queue UX**: постоянный polling 3s; сортировка processing→pending→failed→done, новые сверху внутри группы; QueueBadge polling 4s (было 8s) |
-| 04.06.2026 | **History search** — поле поиска по title+author, серверная `ILIKE` фильтрация, дебаунс 350ms |
-| 04.06.2026 | **Favorites** — `is_favorite BOOLEAN` в `videos` (миграция); `POST /api/result/{id}/favorite` toggle; `?favorites_only=true` в `/history`; ★/☆ кнопка в ResultPage + HistoryPage строках + фильтр "☆ Favorites" |
-| 23.05.2026 | **Known issue: chapter titles language mismatch** — ~~yt-dlp извлекает `info["chapters"]` на языке YouTube-интерфейса пользователя (через cookies). Workaround: переключить YouTube-интерфейс на язык видео перед извлечением.~~ **Resolved 23.05.2026**: YouTube API переводит `info["chapters"]` на английский на стороне сервера независимо от кук, заголовков и client-type (подтверждено диагностикой). Фикс: `_parse_description_chapters()` — берём таймкоды из `info["description"]` (не переводится YouTube, всегда на языке автора). Fallback на `info["chapters"]` с `[CHAPTER_SOURCE]` warning в лог. Проверка скрипта заголовков vs языка субтитров — warning при расхождении. |
+| 21.05.2026 | Chat typing animation: 3-dot bounce + spinner on the send button (yt-summarizer + llm-onpage-summarizer) |
+| 21.05.2026 | History page: stage checkmarks ✓ (grey = not run, green = done) for Cleanup and Summary; type badges unified to a neutral style |
+| 21.05.2026 | Result meta: always shows mode (Single Pass / Map-Reduce / Full Extract) next to model name |
+| 21.05.2026 | Settings → Summarization → Map-Reduce: Step 1 / Step 2 split into horizontal tabs (scroll removed) |
+| 21.05.2026 | Result meta redesign: two rows (video-info / stage-info), `•` separators, hover tooltips; classes `.meta-row`, `.meta-chip`, `.meta-sep`, `.meta-label` |
+| 21.05.2026 | Result meta: `cleanup_finished_at` and `summary_finished_at` from API — finish timestamp shown at the end of each stage row |
+| 21.05.2026 | Date format: `DD.MM.YYYY, HH:MM` (locale-independent) instead of `toLocaleString` |
+| 04.06.2026 | **Favicon** — SVG red circle with white "YTS" (`public/favicon.svg`), wired up in `index.html` |
+| 04.06.2026 | **Queue progress display** — `on_progress` callbacks connected in worker for cleanup/summary/mindmap; progress text ("paragraph 3/12", "chunk 5/20") in the banner and QueuePage table row with active-stage highlighting |
+| 04.06.2026 | **Queue as sole LLM path** — HomePage autoPipeline → queue; ResultPage buttons (Clean with AI / Summarize / Mind Map / pipeline guard) → queue; `_run_mindmap_stage` in worker |
+| 04.06.2026 | **Queue UX**: constant 3s polling; sort order processing→pending→failed→done, newest first within each group; QueueBadge polling 4s (was 8s) |
+| 04.06.2026 | **History search** — search field by title+author, server-side `ILIKE` filtering, 350ms debounce |
+| 04.06.2026 | **Favorites** — `is_favorite BOOLEAN` in `videos` (migration); `POST /api/result/{id}/favorite` toggle; `?favorites_only=true` on `/history`; ★/☆ button in ResultPage + HistoryPage rows + "☆ Favorites" filter |
+| 23.05.2026 | **Known issue: chapter titles language mismatch** — ~~yt-dlp extracts `info["chapters"]` in the language of the user's YouTube interface (via cookies). Workaround: switch YouTube interface to the video's language before extracting.~~ **Resolved 23.05.2026**: YouTube API translates `info["chapters"]` to English server-side regardless of cookies, headers, or client-type (confirmed by diagnostics). Fix: `_parse_description_chapters()` — takes timecodes from `info["description"]` (never auto-translated by YouTube, always in the author's language). Fallback to `info["chapters"]` with `[CHAPTER_SOURCE]` warning in log. Script check: heading script vs subtitle language — warning on mismatch. |
 
 ---
 
@@ -182,16 +182,16 @@ Whisper fallback when no subtitles are available. Language param from Phase 1 re
 
 ## Ideas & Deferred Improvements
 
-Мелкие идеи и технические улучшения, не тянущие на эпик. Могут быть реализованы по мере необходимости.
+Small ideas and technical improvements that don't warrant an epic. Can be implemented as needed.
 
-| Идея | Описание | Сложность |
-|------|----------|-----------|
-| Mindmap из summary (Markmap) | Визуальный mindmap из `summary_text`. **Вариант A (эксперимент, ~1-2ч)**: прогнать существующий `summary_text` с `## ` заголовками через `markmap-lib` + `markmap-view` — нулевой доп. LLM-вызов, проверить визуальную ценность. **Вариант B (~4-5ч)**: отдельный LLM-промпт для иерархии смыслов (`#` тема, `##` ветки, `###` детали), хранить в `mindmap_text` в DB, кнопка на Result page. Начать с A. **Мотивация**: `docs/saas-transition.md` → раздел 7.2 (конкурентная отстройка). | A: ~2ч / B: ~5ч |
-| Suggested Questions (авто-вопросы к видео) | После summary LLM генерирует 5 вопросов, раскрывающих смысл видео (с учётом заголовка). Показываются как кликабельные chips в chat-зоне. Клик → отправляет как chat message. Снижает барьер входа в чат — пользователю не нужно придумывать вопрос. Ключевой инсайт: заголовок видео — это то, зачем пришёл пользователь, вопросы должны отвечать именно на это. 1 доп. LLM-вызов + `suggested_questions` JSON-колонка в DB. **Мотивация**: `docs/saas-transition.md` → раздел 7.3.1. | ~2–3 ч |
-| Output format templates (Prompt Templates) | Набор готовых шаблонов вывода рядом с кнопкой Summarize: "Инструкция", "Action Plan", "Позиция автора", "Ключевые факты", "Pros & Cons". Пользователь выбирает формат — система подставляет соответствующий системный промпт. Каждый шаблон — отдельная `pipeline_settings`-запись в БД (или хардкод с возможностью кастомизации). **Мотивация**: см. `docs/saas-transition.md` → раздел 6 (use cases) и раздел 7 (конкурентные преимущества). Это ключевой вектор дифференциации от конкурентов. | ~3–4 ч |
-| Chat: server-side save | Перенести сохранение истории чата на бэкенд — буферизовать ответ в `chat_proxy`, сохранять в DB после завершения стрима независимо от клиента. Нужно добавить `video_id` в `ChatRequest`. Текущая реализация теряет ответ если пользователь уходит со страницы до завершения генерации. | ~30 мин |
-| **[Гипотеза] Защита от переполнения контекстного окна LLM** | При запуске полного пайплайна (Extract → Cleanup → Summary) Ollama или модель могут зависнуть/упасть из-за переполнения context window на больших текстах. Текущие митигации: map-reduce (24K порог), чанки по 3K, таймаут 180с. **Исследуемые решения**: (1) явная передача `"num_ctx": N` в каждый запрос к Ollama — жёсткое ограничение окна, предсказуемый truncate; (2) `GET {ollama_url}/api/ps` — проверка загруженной модели перед стартом очереди (детект OOM/unload); (3) retry с уменьшенным чанком при 500/timeout. **Требует**: нагрузочного тестирования на больших видео (>50K chars) с разными моделями. Не брать в работу без тестов. | ~4–6 ч + тесты |
-| README: обновить концепцию и позиционирование | Текущий README описывает инструмент как "watch or skip" — быстрое решение смотреть или нет. По мере реализации работы с большими текстами (длинные лекции, документальные видео, курсы) позиционирование должно сместиться: приложение становится инструментом глубокого извлечения знаний, а не просто фильтром контента. Обновить Introduction, Vision, раздел "Watch or Skip" → более широкую формулировку. **Триггер**: реализация Epic 18 (XL-тексты) или Phase 3 (STT). | ~1 ч |
+| Idea | Description | Complexity |
+|------|-------------|------------|
+| Mindmap from summary (Markmap) | Visual mindmap from `summary_text`. **Option A (experiment, ~1–2h)**: pipe existing `summary_text` with `## ` headings through `markmap-lib` + `markmap-view` — zero extra LLM call, test visual value. **Option B (~4–5h)**: dedicated LLM prompt for semantic hierarchy (`#` topic, `##` branches, `###` details), store in `mindmap_text` in DB, button on Result page. Start with A. | A: ~2h / B: ~5h |
+| Suggested Questions (auto-questions for video) | After summary, LLM generates 5 questions that reveal the video's key ideas (using the title as context). Shown as clickable chips in the chat area. Click → sends as a chat message. Lowers the barrier to starting a chat — user doesn't need to think of a question. 1 extra LLM call + `suggested_questions` JSON column in DB. | ~2–3h |
+| Output format templates (Prompt Templates) | A set of ready-made output templates next to the Summarize button: "How-to", "Action Plan", "Author's position", "Key facts", "Pros & Cons". User picks a format — system substitutes the corresponding system prompt. Each template is a separate `pipeline_settings` entry in DB (or hardcoded with customization support). Key differentiator from competitors. | ~3–4h |
+| Chat: server-side save | Move chat history saving to the backend — buffer the response in `chat_proxy`, save to DB after stream finishes regardless of client state. Requires adding `video_id` to `ChatRequest`. Current implementation loses the response if user navigates away before generation completes. | ~30 min |
+| **[Hypothesis] LLM context window overflow protection** | When running the full pipeline (Extract → Cleanup → Summary) Ollama or the model may hang/crash due to context window overflow on large texts. Current mitigations: map-reduce (24K threshold), 3K chunks, 180s timeout. **Explored solutions**: (1) explicitly pass `"num_ctx": N` in every Ollama request — hard window cap, predictable truncation; (2) `GET {ollama_url}/api/ps` — check loaded model before queue start (detect OOM/unload); (3) retry with smaller chunk on 500/timeout. **Requires**: load testing on large videos (>50K chars) with different models. Do not start without tests. | ~4–6h + tests |
+| README: update concept and positioning | Current README frames the tool as "watch or skip" — a quick filter for video content. As support for large texts grows (long lectures, documentaries, courses), positioning should shift: the app becomes a deep knowledge extraction tool, not just a content filter. Update Introduction, Vision, "Watch or Skip" section → broader framing. **Trigger**: Epic 18 (XL texts) or Phase 3 (STT). | ~1h |
 
 ---
 

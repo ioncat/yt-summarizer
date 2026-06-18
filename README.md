@@ -1,6 +1,6 @@
 # YT Summarizer
 
-Turn YouTube videos into scannable text so you can decide what to watch, save, or skip.
+AI tool for YouTube: extract, clean, summarize video content — and chat with the content.
 
 ## Watch or Skip
 
@@ -18,9 +18,9 @@ YT Summarizer gives you a short AI summary of any YouTube video, so you can:
 
 The goal: turn a watch-or-skip guess into a fast, informed decision.
 
-→ **[Quick Start Guide](docs/quick-start-guide.md)** — minimal setup to try it out  
-→ **[User Guide](docs/USER_GUIDE.md)** — features, settings, troubleshooting, FAQ  
-→ **[System Behavior](docs/system-behavior.md)** — pipeline activity diagram + state diagrams (Mermaid)
+→ **[Quick Start Guide](docs/guides/quick-start-guide.md)** — minimal setup to try it out  
+→ **[User Guide](docs/guides/USER_GUIDE.md)** — features, settings, troubleshooting, FAQ  
+→ **[System Behavior](docs/engineering/system-behavior.md)** — pipeline activity diagram + state diagrams (Mermaid)
 
 ---
 
@@ -41,15 +41,17 @@ YouTube URL → Extract → Format → AI Cleanup → Summarize → Chat Q&A
 Each stage's output is stored separately in SQLite and shown as its own tab: **Subtitles · Cleaned · Summary**.
 
 **Key features:**
-- **Local LLM via Ollama** — no data leaves your machine
+- **AI via Ollama** — connect any local or remote LLM
 - **Auto language detection** — picks original video language from yt-dlp metadata
 - **Chapter-aware formatting** — preserves YouTube creator's chapter structure
-- **Multiple processing modes** — Single-pass / Map-Reduce / Full Extract, auto-selected
-- **Benchmark page** — compare 2–4 models side by side
-- **Chat Q&A** — ask follow-up questions with full context
-- **Completion notifications** — tab title + browser notification
+- **Multiple processing modes** — Single-pass / Map-Reduce / Full Extract, auto-selected by text length and structure
+- **Processing queue** — bulk URL submission, durable background processing, auto-resume on restart
+- **Mind map** — generate structured mind map from summary via LLM
+- **Benchmark page** — compare 2–4 models side by side on same content
+- **Chat Q&A** — ask follow-up questions with full video context
+- **Completion notifications** — tab title + browser notification when pipeline finishes
 
-See the [User Guide](docs/USER_GUIDE.md) for details on each feature.
+See the [User Guide](docs/guides/USER_GUIDE.md) for details on each feature.
 
 ---
 
@@ -59,43 +61,9 @@ See the [User Guide](docs/USER_GUIDE.md) for details on each feature.
 |---|---|
 | Frontend | React + TypeScript + Vite |
 | Backend | Python + FastAPI |
-| LLM | Ollama (local) |
+| LLM | Ollama |
 | Subtitle extraction | yt-dlp |
 | Database | SQLite (async via aiosqlite) |
-
-```
-yt-summarizer/
-├── app/
-│   ├── backend/             # FastAPI + Python
-│   ├── frontend/            # React + TypeScript + Vite
-│   └── data/                # SQLite DB + cookies (gitignored)
-├── docs/
-│   ├── USER_GUIDE.md        # Full user guide
-│   ├── quick-start-guide.md # Minimal setup
-│   ├── backlog/             # Epics and user stories
-│   └── ...
-├── CLAUDE.md                # Internal/development docs
-├── docker-compose.yml
-└── README.md
-```
-
----
-
-## Quick install
-
-```bash
-# Backend
-cd app/backend && pip install -r requirements.txt && uvicorn main:app --port 8001
-
-# Frontend (in another terminal)
-cd app/frontend && npm install && npm run dev
-```
-
-Then open <http://localhost:3001> and configure Ollama URL, yt-dlp path, and cookies in Settings → General.
-
-For Docker: `docker compose up --build`.
-
-Full setup walkthrough: [Quick Start](docs/quick-start-guide.md). Detailed feature reference: [User Guide](docs/USER_GUIDE.md).
 
 ---
 
@@ -107,13 +75,21 @@ Full setup walkthrough: [Quick Start](docs/quick-start-guide.md). Detailed featu
 | GET | `/api/status/{task_id}` | Poll processing status |
 | GET | `/api/result/{video_id}` | Get all data for a video |
 | POST | `/api/result/{video_id}/cleanup` | Trigger AI cleanup |
+| DELETE | `/api/result/{video_id}/cleanup` | Cancel cleanup |
 | POST | `/api/result/{video_id}/summary` | Trigger AI summarization |
+| DELETE | `/api/result/{video_id}/summary` | Cancel summarization |
+| POST | `/api/result/{video_id}/mindmap` | Generate mind map |
+| POST | `/api/queue/bulk` | Add URLs to processing queue |
+| GET | `/api/queue` | Queue items with live progress |
+| DELETE | `/api/queue/{id}` | Remove pending item |
 | POST | `/api/benchmark/run` | Run N-model benchmark |
 | GET | `/api/history` | Paginated history |
 | GET | `/api/settings` | All settings |
+| PUT | `/api/settings/app` | Save app settings |
 | GET | `/api/models` | Available Ollama models |
+| GET | `/api/health` | Backend + Ollama status |
 
-Cancel endpoints: `DELETE /api/result/{video_id}/cleanup` and `/summary`. Full API reference in [CLAUDE.md](CLAUDE.md).
+Full API reference in [CLAUDE.md](CLAUDE.md).
 
 ---
 
@@ -122,8 +98,8 @@ Cancel endpoints: `DELETE /api/result/{video_id}/cleanup` and `/summary`. Full A
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Phase 1 — Subtitle Extraction | ✅ Done | Extract, format, store, display |
-| Phase 1.5 — LLM Cleanup & UX | ✅ Done | Cleanup, summarization, Settings, auto-pipeline, cancel, chapter-aware, notifications |
-| Phase 2 — Summarization Quality | 🔄 In Progress | Map-Reduce, Full Extract, Benchmark, Parallel MAP |
+| Phase 1.5 — LLM Cleanup & UX | ✅ Done | Cleanup, summarization, Settings, auto-pipeline, cancel, chapter-aware, queue, notifications |
+| Phase 2 — Summarization Quality | 🔄 In Progress | Map-Reduce ✅, Full Extract ✅, Benchmark ✅, Mind Map ✅ — XL hierarchical mode 🔵 |
 | Phase 3 — Speech-to-Text | 🔵 Planned | Whisper fallback when no subtitles |
 
-See [docs/backlog/BACKLOG.md](docs/backlog/BACKLOG.md) for detailed epic breakdown.
+See [docs/delivery/backlog/BACKLOG.md](docs/delivery/backlog/BACKLOG.md) for detailed epic breakdown.
