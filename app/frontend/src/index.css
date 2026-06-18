@@ -1,67 +1,75 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 /* ============================================================
    Theme variables — light (default) and dark
    ============================================================ */
 :root {
-  --bg:           #f5f5f5;
-  --surface:     #ffffff;
-  --surface-2:   #f9fafb;     /* secondary surface — code blocks, toolbars */
-  --surface-3:   #f0f0f0;     /* badges, button hover */
-  --text:        #222222;
-  --text-muted:  #666666;
-  --text-faint:  #999999;
-  --border:      #e0e0e0;
-  --border-strong: #cccccc;
-  --accent:      #e00000;
-  --accent-soft: #ffeaea;
-  --link-hover:  #000000;
-  --shadow:      rgba(0,0,0,0.08);
+  --bg:              #f8f9fa;
+  --surface:         #ffffff;
+  --surface-2:       #f3f4f5;   /* sidebar, secondary containers */
+  --surface-3:       #edeeef;   /* container mid */
+  --surface-4:       #e7e8e9;   /* container high — button secondary bg */
+  --surface-5:       #e1e3e4;   /* container highest — badges */
+  --text:            #191c1d;
+  --text-muted:      #564241;
+  --text-faint:      #897270;
+  --border:          #dcc0bf;
+  --border-strong:   #897270;
+  --accent:          #a03e40;
+  --accent-dark:     #81272b;
+  --accent-soft:     #ffdad8;
+  --link-hover:      #81272b;
+  --shadow:          rgba(0,0,0,0.06);
 
-  /* Status / semantic accents — kept readable in both themes */
-  --ai:          #6d28d9;
-  --ai-soft:     #f3f0ff;
-  --ai-border:   #c4b5fd;
-  --ok:          #16a34a;
-  --ok-soft:     #f0fdf4;
-  --warn:        #92400e;
-  --warn-soft:   #fffbeb;
-  --err:         #b91c1c;
-  --err-soft:    #fef2f2;
+  /* Status / semantic */
+  --ai:          #4c616c;
+  --ai-soft:     #cfe6f3;
+  --ai-border:   #b4cad7;
+  --ok:          #286b33;
+  --ok-soft:     #acf4ad;
+  --warn:        #7a5c00;
+  --warn-soft:   #fff3cc;
+  --err:         #ba1a1a;
+  --err-soft:    #ffdad6;
   --info:        #1e40af;
   --info-soft:   #eff6ff;
 }
 
 [data-theme="dark"] {
-  --bg:           #0f1115;
-  --surface:     #181b22;
-  --surface-2:   #1f242d;
-  --surface-3:   #262c37;
-  --text:        #e6e8eb;
-  --text-muted:  #a0a6b1;
-  --text-faint:  #6b7280;
-  --border:      #2d333d;
-  --border-strong: #3a414d;
-  --accent:      #ff5757;
-  --accent-soft: #3a1a1a;
-  --link-hover:  #ffffff;
-  --shadow:      rgba(0,0,0,0.45);
+  --bg:              #111314;
+  --surface:         #1a1d1e;
+  --surface-2:       #1f2324;
+  --surface-3:       #252a2b;
+  --surface-4:       #2c3133;
+  --surface-5:       #333839;
+  --text:            #e1e3e4;
+  --text-muted:      #b0acab;
+  --text-faint:      #7a7473;
+  --border:          #413736;
+  --border-strong:   #5a5150;
+  --accent:          #ffb3b1;
+  --accent-dark:     #ff8a88;
+  --accent-soft:     #5c2325;
+  --link-hover:      #ffb3b1;
+  --shadow:          rgba(0,0,0,0.45);
 
-  --ai:          #a78bfa;
-  --ai-soft:     #2a1f4d;
-  --ai-border:   #6d28d9;
-  --ok:          #4ade80;
-  --ok-soft:     #0d2a17;
+  --ai:          #b4cad7;
+  --ai-soft:     #1a2e38;
+  --ai-border:   #354a54;
+  --ok:          #91d793;
+  --ok-soft:     #0a2410;
   --warn:        #fbbf24;
   --warn-soft:   #3a2a08;
-  --err:         #f87171;
-  --err-soft:    #3a1818;
+  --err:         #ffb4ab;
+  --err-soft:    #4a1010;
   --info:        #93c5fd;
   --info-soft:   #1a2a4a;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
