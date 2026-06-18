@@ -44,10 +44,12 @@ Each stage's output is stored separately in SQLite and shown as its own tab: **S
 - **AI via Ollama** — connect any local or remote LLM
 - **Auto language detection** — picks original video language from yt-dlp metadata
 - **Chapter-aware formatting** — preserves YouTube creator's chapter structure
-- **Multiple processing modes** — Single-pass / Map-Reduce / Full Extract, auto-selected
-- **Benchmark page** — compare 2–4 models side by side
-- **Chat Q&A** — ask follow-up questions with full context
-- **Completion notifications** — tab title + browser notification
+- **Multiple processing modes** — Single-pass / Map-Reduce / Full Extract, auto-selected by text length and structure
+- **Processing queue** — bulk URL submission, durable background processing, auto-resume on restart
+- **Mind map** — generate structured mind map from summary via LLM
+- **Benchmark page** — compare 2–4 models side by side on same content
+- **Chat Q&A** — ask follow-up questions with full video context
+- **Completion notifications** — tab title + browser notification when pipeline finishes
 
 See the [User Guide](docs/guides/USER_GUIDE.md) for details on each feature.
 
@@ -73,13 +75,21 @@ See the [User Guide](docs/guides/USER_GUIDE.md) for details on each feature.
 | GET | `/api/status/{task_id}` | Poll processing status |
 | GET | `/api/result/{video_id}` | Get all data for a video |
 | POST | `/api/result/{video_id}/cleanup` | Trigger AI cleanup |
+| DELETE | `/api/result/{video_id}/cleanup` | Cancel cleanup |
 | POST | `/api/result/{video_id}/summary` | Trigger AI summarization |
+| DELETE | `/api/result/{video_id}/summary` | Cancel summarization |
+| POST | `/api/result/{video_id}/mindmap` | Generate mind map |
+| POST | `/api/queue/bulk` | Add URLs to processing queue |
+| GET | `/api/queue` | Queue items with live progress |
+| DELETE | `/api/queue/{id}` | Remove pending item |
 | POST | `/api/benchmark/run` | Run N-model benchmark |
 | GET | `/api/history` | Paginated history |
 | GET | `/api/settings` | All settings |
+| PUT | `/api/settings/app` | Save app settings |
 | GET | `/api/models` | Available Ollama models |
+| GET | `/api/health` | Backend + Ollama status |
 
-Cancel endpoints: `DELETE /api/result/{video_id}/cleanup` and `/summary`. Full API reference in [CLAUDE.md](CLAUDE.md).
+Full API reference in [CLAUDE.md](CLAUDE.md).
 
 ---
 
@@ -88,8 +98,8 @@ Cancel endpoints: `DELETE /api/result/{video_id}/cleanup` and `/summary`. Full A
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Phase 1 — Subtitle Extraction | ✅ Done | Extract, format, store, display |
-| Phase 1.5 — LLM Cleanup & UX | ✅ Done | Cleanup, summarization, Settings, auto-pipeline, cancel, chapter-aware, notifications |
-| Phase 2 — Summarization Quality | 🔄 In Progress | Map-Reduce, Full Extract, Benchmark, Parallel MAP |
+| Phase 1.5 — LLM Cleanup & UX | ✅ Done | Cleanup, summarization, Settings, auto-pipeline, cancel, chapter-aware, queue, notifications |
+| Phase 2 — Summarization Quality | 🔄 In Progress | Map-Reduce ✅, Full Extract ✅, Benchmark ✅, Mind Map ✅ — XL hierarchical mode 🔵 |
 | Phase 3 — Speech-to-Text | 🔵 Planned | Whisper fallback when no subtitles |
 
 See [docs/delivery/backlog/BACKLOG.md](docs/delivery/backlog/BACKLOG.md) for detailed epic breakdown.
