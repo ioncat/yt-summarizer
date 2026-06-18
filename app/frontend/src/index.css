@@ -720,26 +720,27 @@ input.input-missing:focus, select.input-missing:focus { border-color: var(--acce
 }
 .queue-list { overflow-x: auto; }
 .queue-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-.queue-table th { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 2px solid var(--border); color: var(--text-faint); font-weight: 600; font-size: 0.78rem; }
-.queue-table td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
-.queue-row--processing td { background: var(--ai-soft); }
-.queue-row--done td { opacity: 0.75; }
+.queue-table th { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); color: var(--text-faint); font-weight: 600; font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; }
+.queue-table td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.queue-row--processing td { background: var(--accent-soft); }
+.queue-row--done td { opacity: 0.65; }
 .queue-row--failed td { background: var(--err-soft); }
 .queue-cell-num { color: var(--text-faint); width: 2rem; }
 .queue-cell-url { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .queue-cell-pipeline { color: var(--text-muted); font-size: 0.78rem; }
 .queue-cell-time { color: var(--text-faint); font-size: 0.78rem; white-space: nowrap; }
 .queue-cell-actions { width: 2rem; text-align: center; }
-.queue-status { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.78rem; padding: 1px 6px; border-radius: 4px; }
-.queue-status--pending { background: var(--surface-2); color: var(--text-faint); }
-.queue-status--processing { background: var(--ai-soft); color: var(--ai); }
-.queue-status--done { background: var(--ok-soft, #f0fdf4); color: var(--ok, #16a34a); }
+.queue-status { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; font-weight: 500; padding: 0.15rem 0.55rem; border-radius: 999px; }
+.queue-status--pending { background: var(--surface-4); color: var(--text-faint); }
+.queue-status--processing { background: var(--accent-soft); color: var(--accent); }
+.queue-status--done { background: var(--ok-soft); color: var(--ok); }
 .queue-status--failed { background: var(--err-soft); color: var(--err); }
+.queue-status--skipped { background: var(--surface-4); color: var(--text-faint); }
 .queue-error-toggle { background: none; border: none; cursor: pointer; color: var(--text-faint); font-size: 0.75rem; margin-left: 4px; padding: 0; }
 .queue-error-toggle:hover { color: var(--text); }
-.queue-row-error td { background: var(--err-soft); padding: 0.25rem 0.6rem; }
+.queue-row-error td { background: var(--err-soft); padding: 0.25rem 0.75rem; }
 .queue-error-msg { font-size: 0.78rem; color: var(--err); font-family: var(--font-mono, monospace); white-space: pre-wrap; }
-.queue-delete-btn { background: none; border: none; cursor: pointer; color: var(--text-faint); padding: 2px 4px; border-radius: 4px; font-size: 0.9rem; }
+.queue-delete-btn { background: none; border: none; cursor: pointer; color: var(--text-faint); padding: 2px 6px; border-radius: 6px; font-size: 0.9rem; }
 .queue-delete-btn:hover { background: var(--err-soft); color: var(--err); }
 .queue-delete-btn--disabled { opacity: 0.3; cursor: not-allowed; }
 
