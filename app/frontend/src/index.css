@@ -84,27 +84,87 @@ body {
   padding: 2rem 1rem;
 }
 
-nav {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  height: 56px;
+/* ============================================================
+   App layout — sidebar + main area
+   ============================================================ */
+.app-layout {
+  display: flex;
+  min-height: 100vh;
 }
-.nav-inner {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 0 1.5rem;
-  height: 100%;
+
+.sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100vh;
+  width: 200px;
+  background: var(--surface-2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  z-index: 40;
+}
+
+.sidebar-logo {
+  padding: 0.5rem 0.5rem 1.5rem;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.sidebar-bottom {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sidebar-link {
   display: flex;
   align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.sidebar-link:hover { background: var(--surface-4); color: var(--text); }
+.sidebar-link.active { background: var(--accent-soft); color: var(--accent); }
+
+.main-area {
+  margin-left: 200px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
-nav .logo { font-weight: 700; font-size: 1.1rem; color: var(--accent); text-decoration: none; }
-nav a { color: var(--text-muted); text-decoration: none; font-size: 0.95rem; white-space: nowrap; display: inline-flex; align-items: center; }
-nav a:hover { color: var(--link-hover); }
+.topbar {
+  position: sticky;
+  top: 0;
+  height: 52px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  z-index: 30;
+}
 
-.nav-left { display: flex; align-items: center; gap: 2rem; flex: 1; }
-.nav-center { display: flex; align-items: center; justify-content: center; flex: 1; gap: 2rem; }
-.nav-right { display: flex; align-items: center; justify-content: flex-end; flex: 1; }
+.main-content { flex: 1; }
+
+.logo { font-weight: 700; font-size: 1.05rem; color: var(--accent); text-decoration: none; }
 
 .status-bar { display: flex; align-items: center; gap: 0.75rem; }
 .status-label { font-size: 0.75rem; color: var(--text-faint); margin-right: 0.25rem; }
