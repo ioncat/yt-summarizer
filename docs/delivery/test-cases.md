@@ -25,7 +25,7 @@ Accept-Language, and player_client. Confirmed by diagnostics (`tools/debug_chapt
 **Given** user extracts subtitles from a Russian-language video  
 **When** extraction completes  
 **Then**:
-- Chapter headings in `formatted_text` are in Russian (`## Хаос и бег по минному полю`)
+- Chapter headings in `formatted_text` are in Russian (`## Хаос и бег по минному полю` — "Chaos and running through a minefield")
 - Chapter headings in `cleaned_text` are in Russian (LLM preserves them unchanged)
 - Chapter headings in `summary_text` are in Russian
 - Chapter headings in mindmap are in Russian
