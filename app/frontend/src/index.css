@@ -361,7 +361,7 @@ input[type="text"]:focus, select:focus {
   flex-shrink: 0;
 }
 
-.cleanup-error { color: var(--err); background: var(--err-soft); border: 1px solid #fca5a5; border-radius: 6px; padding: 0.6rem 1rem; font-size: 0.85rem; margin-bottom: 1rem; }
+.cleanup-error { color: var(--err); background: var(--err-soft); border: 1px solid var(--err); border-radius: 8px; padding: 0.6rem 1rem; font-size: 0.85rem; margin-bottom: 1rem; }
 .meta-model { color: var(--text-faint); font-size: 0.85em; }
 .meta-method { color: var(--accent); font-weight: 500; }
 .summary-actions { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
@@ -447,7 +447,7 @@ input[type="text"]:focus, select:focus {
 }
 
 .chat-hint { font-size: 12px; color: var(--text-faint); text-align: center; margin-bottom: 6px; }
-.chat-warn { font-size: 12px; color: var(--warn); background: var(--surface)beb; border: 1px solid #fde68a; border-radius: 6px; padding: 4px 10px; text-align: center; margin-bottom: 6px; }
+.chat-warn { font-size: 12px; color: var(--warn); background: var(--warn-soft); border: 1px solid var(--warn); border-radius: 6px; padding: 4px 10px; text-align: center; margin-bottom: 6px; }
 
 .chat-copy-btn {
   display: block;
@@ -564,7 +564,7 @@ h2 { font-size: 1.2rem; font-weight: 600; letter-spacing: -0.01em; margin-bottom
 .settings-warning { background: var(--warn-soft); border: 1px solid var(--warn); color: var(--warn); border-radius: 8px; padding: 0.6rem 1rem; font-size: 0.85rem; margin-bottom: 1.2rem; }
 .settings-warning-info { background: var(--info-soft); border-color: #93c5fd; color: var(--info); }
 .required-mark { color: var(--accent); margin-left: 2px; }
-input.input-missing, select.input-missing { border-color: #fca5a5; background: var(--surface)5f5; }
+input.input-missing, select.input-missing { border-color: var(--err); background: var(--err-soft); }
 input.input-missing:focus, select.input-missing:focus { border-color: var(--accent); }
 
 /* ============================================================
