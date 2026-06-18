@@ -55,6 +55,16 @@ See the [User Guide](docs/guides/USER_GUIDE.md) for details on each feature.
 
 ---
 
+## Where This Is Going
+
+Current pipeline works well for most videos. The longer-term direction is a local **document compiler**: instead of summarizing text, extract a structured Intermediate Representation — claims, entities, quotes, terminology — then render any output mode from it: TL;DR, summary, full reference, study guide.
+
+One processing pass. Any output format. Nothing invented.
+
+This is active research. The current Map-Reduce and Full Extract modes are the first steps toward it.
+
+---
+
 ## Tech Stack
 
 | Component | Technology |
