@@ -139,7 +139,7 @@ body {
   white-space: nowrap;
 }
 .sidebar-link:hover { background: var(--surface-4); color: var(--text); }
-.sidebar-link.active { background: var(--accent-soft); color: var(--accent); }
+.sidebar-link.active { background: var(--accent); color: #ffffff; }
 
 .main-area {
   margin-left: 200px;
@@ -164,7 +164,8 @@ body {
 
 .main-content { flex: 1; }
 
-.logo { font-weight: 700; font-size: 1.05rem; color: var(--accent); text-decoration: none; }
+.logo { font-weight: 700; font-size: 1.05rem; color: var(--accent); text-decoration: none; display: block; }
+.sidebar-tagline { font-size: 0.72rem; color: var(--text-faint); margin-top: 0.15rem; }
 
 .status-bar { display: flex; align-items: center; gap: 0.75rem; }
 .status-label { font-size: 0.75rem; color: var(--text-faint); margin-right: 0.25rem; }
@@ -196,8 +197,8 @@ input[type="text"], select {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 input[type="text"]:focus, select:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .btn {

@@ -17,6 +17,7 @@ export default function App() {
       <aside className="sidebar">
         <div className="sidebar-logo">
           <NavLink to="/" className="logo">YT Summarizer</NavLink>
+          <div className="sidebar-tagline">AI Productivity Suite</div>
         </div>
         <nav className="sidebar-nav">
           <NavLink to="/" end className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}>+ New</NavLink>
