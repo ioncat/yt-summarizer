@@ -272,47 +272,47 @@ input[type="text"]:focus, select:focus {
 .actions { display: flex; flex-direction: column; gap: 0.5rem; }
 .actions-row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
 
-.history-list { list-style: none; }
+.history-list { list-style: none; display: flex; flex-direction: column; gap: 0.25rem; }
 .history-item {
   display: flex;
   align-items: center;
-  padding: 1rem 0;
-  border-bottom: 1px solid var(--surface-3);
-  gap: 1rem;
+  padding: 0.75rem 0.75rem;
+  border-radius: 8px;
+  gap: 0.75rem;
+  transition: background 0.12s;
 }
-.history-item:last-child { border-bottom: none; }
-.history-item--selected { background: var(--ai-soft); border-radius: 6px; padding-left: 0.5rem; padding-right: 0.5rem; }
-.history-checkbox { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; accent-color: var(--ai); }
+.history-item:hover { background: var(--surface-2); }
+.history-item--selected { background: var(--accent-soft); }
+.history-checkbox { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; accent-color: var(--accent); }
 .history-info { flex: 1; min-width: 0; }
-.history-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.history-meta { font-size: 0.82rem; color: var(--text-faint); margin-top: 0.2rem; }
+.history-title { font-weight: 500; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.history-meta { font-size: 0.78rem; color: var(--text-faint); margin-top: 0.15rem; }
 
-.stage-checks { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
-.stage-check {
-  font-size: 0.85rem;
-  cursor: default;
-  line-height: 1;
-}
-.stage-check--off  { color: var(--text-faint); opacity: 0.4; }
+.stage-checks { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
+.stage-check { font-size: 0.8rem; cursor: default; line-height: 1; }
+.stage-check--off  { color: var(--text-faint); opacity: 0.35; }
 .stage-check--done { color: var(--ok); }
 
 .lang-badge {
-  font-size: 0.75rem;
-  background: var(--surface-3);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: var(--surface-4);
   color: var(--text-muted);
-  padding: 0.2rem 0.5rem;
+  padding: 0.15rem 0.5rem;
   border-radius: 4px;
   flex-shrink: 0;
 }
 
 .type-badge {
-  font-size: 0.75rem;
-  padding: 0.2rem 0.6rem;
-  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
   flex-shrink: 0;
   white-space: nowrap;
   border: 1px solid var(--border);
-  background: var(--surface-2);
+  background: var(--surface-3);
   color: var(--text-faint);
 }
 .type-badge.type-short          { }
