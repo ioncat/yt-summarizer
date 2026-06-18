@@ -323,7 +323,7 @@ input[type="text"]:focus, select:focus {
 .field-hint { font-size: 0.8rem; color: var(--text-faint); margin-top: 0.4rem; }
 
 .checkbox-label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.95rem; }
-.checkbox-label input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--ai); }
+.checkbox-label input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
 .checkbox-label input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.5; }
 
 .pipeline-stages { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 0.5rem; }
@@ -332,7 +332,7 @@ input[type="text"]:focus, select:focus {
 .pipeline-stage.done { color: var(--ok); }
 .pipeline-stage.pending { color: var(--text-faint); }
 .stage-icon { width: 24px; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; }
-.error-box { color: var(--accent); background: var(--accent-soft); padding: 1rem; border-radius: 6px; }
+.error-box { color: var(--err); background: var(--err-soft); border: 1px solid var(--err); padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.875rem; }
 
 .btn-ai { background: var(--ai-soft); color: var(--ai); border: 1px solid var(--ai-border); display: inline-flex; align-items: center; gap: 0.4rem; }
 .btn-ai:hover:not(:disabled) { background: var(--ai-soft); border-color: var(--ai); }
@@ -561,7 +561,7 @@ h2 { font-size: 1.3rem; margin-bottom: 1.5rem; }
 .settings-textarea:disabled { background: var(--surface-2); color: var(--text-faint); }
 .settings-toast { font-size: 0.85rem; color: var(--text-muted); align-self: center; }
 
-.settings-warning { background: var(--surface)beb; border: 1px solid #fcd34d; color: var(--warn); border-radius: 6px; padding: 0.6rem 1rem; font-size: 0.85rem; margin-bottom: 1.2rem; }
+.settings-warning { background: var(--warn-soft); border: 1px solid var(--warn); color: var(--warn); border-radius: 8px; padding: 0.6rem 1rem; font-size: 0.85rem; margin-bottom: 1.2rem; }
 .settings-warning-info { background: var(--info-soft); border-color: #93c5fd; color: var(--info); }
 .required-mark { color: var(--accent); margin-left: 2px; }
 input.input-missing, select.input-missing { border-color: #fca5a5; background: var(--surface)5f5; }
@@ -699,7 +699,8 @@ input.input-missing:focus, select.input-missing:focus { border-color: var(--acce
 
 /* Bulk Add panel */
 .bulk-panel { margin-top: 1rem; }
-.bulk-textarea { width: 100%; resize: vertical; font-family: var(--font-mono, monospace); font-size: 0.82rem; }
+.bulk-textarea { width: 100%; resize: vertical; font-family: var(--font-mono, monospace); font-size: 0.82rem; padding: 0.65rem 0.9rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); outline: none; transition: border-color 0.15s; }
+.bulk-textarea:focus { border-color: var(--accent); }
 .bulk-result { padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; margin-bottom: 0.75rem; }
 .bulk-result--ok { background: var(--ok-soft); color: var(--ok); border: 1px solid var(--ok); }
 .bulk-result--warn { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); }
