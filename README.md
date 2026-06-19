@@ -22,6 +22,8 @@ The goal: turn a watch-or-skip guess into a fast, informed decision.
 → **[User Guide](docs/guides/USER_GUIDE.md)** — features, settings, troubleshooting, FAQ  
 → **[System Behavior](docs/engineering/system-behavior.md)** — pipeline activity diagram + state diagrams (Mermaid)
 
+<img src="docs/screenshots/home.png" width="800" alt="Main application screen - add link and start pipeline">
+
 ---
 
 If you care about reducing cognitive load and saving time in the age of information overload, you might also find this useful:  
