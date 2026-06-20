@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Nexus Summarizer - Processing Queue</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary-container": "#cfe6f3",
+                        "primary-fixed-dim": "#ffb3b1",
+                        "tertiary-fixed-dim": "#91d793",
+                        "surface-container-low": "#1a1c1e",
+                        "on-secondary": "#ffffff",
+                        "on-background": "#e1e3e4",
+                        "on-secondary-container": "#cfe6f3",
+                        "surface-container-high": "#2b2f32",
+                        "outline-variant": "#4d4544",
+                        "on-primary-fixed": "#410007",
+                        "surface-bright": "#2e3132",
+                        "primary-fixed": "#ffdad8",
+                        "surface-tint": "#ffb3b1",
+                        "primary-container": "#81272b",
+                        "inverse-on-surface": "#191c1d",
+                        "secondary-fixed": "#cfe6f3",
+                        "surface-container-highest": "#33373a",
+                        "on-tertiary-fixed-variant": "#acf4ad",
+                        "on-error-container": "#ffdad6",
+                        "on-tertiary-container": "#286b33",
+                        "secondary": "#b4cad7",
+                        "on-secondary-fixed-variant": "#354a54",
+                        "outline": "#9f8c8a",
+                        "on-tertiary": "#ffffff",
+                        "surface-variant": "#534342",
+                        "tertiary": "#91d793",
+                        "inverse-primary": "#81272b",
+                        "background": "#121212",
+                        "on-secondary-fixed": "#071e27",
+                        "surface-dim": "#111415",
+                        "on-primary-container": "#ffdad8",
+                        "inverse-surface": "#e1e2e3",
+                        "surface-container-lowest": "#0f1112",
+                        "on-primary": "#ffffff",
+                        "error": "#ffb4ab",
+                        "on-error": "#690005",
+                        "on-tertiary-fixed": "#002107",
+                        "on-primary-fixed-variant": "#ffb3b1",
+                        "tertiary-fixed": "#acf4ad",
+                        "on-surface-variant": "#dcc0bf",
+                        "tertiary-container": "#08521d",
+                        "primary": "#ffb3b1",
+                        "secondary-fixed-dim": "#b4cad7",
+                        "status-online": "#91d793",
+                        "surface": "#111415",
+                        "error-container": "#93000a",
+                        "surface-container": "#1e2122",
+                        "status-online-container": "#286b33",
+                        "on-surface": "#e1e3e4"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "unit": "4px",
+                        "container-padding-desktop": "2rem",
+                        "section-gap": "2.5rem",
+                        "sidebar-width": "16rem",
+                        "stack-gap": "1rem",
+                        "container-padding-mobile": "1rem",
+                        "gutter": "1.5rem"
+                    },
+                    "fontFamily": {
+                        "headline-lg-mobile": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-md": ["Inter"],
+                        "tag-uppercase": ["Inter"],
+                        "headline-xl": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "headline-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "label-md": ["14px", {"lineHeight": "16px", "fontWeight": "500"}],
+                        "tag-uppercase": ["11px", {"lineHeight": "12px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "headline-xl": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-sm": ["12px", {"lineHeight": "14px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        @keyframes pulse-soft {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(0.95); }
+        }
+        .pulse-indicator {
+            animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md overflow-hidden flex h-screen">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full w-sidebar-width flex flex-col py-6 border-r border-outline-variant bg-surface-container-lowest z-20">
+<div class="px-6 mb-8">
+<h1 class="text-headline-lg font-headline-lg font-bold text-primary">Nexus Summarizer</h1>
+<p class="text-label-sm text-on-surface-variant">v2.4.0 Live</p>
+</div>
+<button class="mx-4 mb-6 py-3 px-4 bg-primary text-on-primary rounded-lg flex items-center justify-center gap-2 font-label-md hover:opacity-90 active:scale-95 transition-all shadow-sm">
+<span class="material-symbols-outlined">add</span>
+            New Processing Task
+        </button>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 py-3 px-6 text-on-surface-variant hover:bg-surface-container-high rounded-full mx-2 transition-all" href="#">
+<span class="material-symbols-outlined">add</span>
+<span class="font-label-md">New</span>
+</a>
+<a class="flex items-center gap-3 py-3 px-6 text-on-surface-variant hover:bg-surface-container-high rounded-full mx-2 transition-all" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="font-label-md">History</span>
+</a>
+<!-- Active Tab: Queue -->
+<a class="flex items-center gap-3 py-3 px-6 bg-primary-container text-on-primary-container rounded-full mx-2 font-bold active:scale-95 transition-transform" href="#">
+<span class="material-symbols-outlined">pending_actions</span>
+<span class="font-label-md">Queue</span>
+</a>
+<a class="flex items-center gap-3 py-3 px-6 text-on-surface-variant hover:bg-surface-container-high rounded-full mx-2 transition-all" href="#">
+<span class="material-symbols-outlined">equalizer</span>
+<span class="font-label-md">Benchmarks</span>
+</a>
+<a class="flex items-center gap-3 py-3 px-6 text-on-surface-variant hover:bg-surface-container-high rounded-full mx-2 transition-all" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-md">Settings</span>
+</a>
+</nav>
+<div class="mt-auto border-t border-outline-variant pt-6 space-y-1">
+<a class="flex items-center gap-3 py-2 px-6 text-on-surface-variant hover:bg-surface-container-high rounded-full mx-2 transition-all" href="#">
+<span class="material-symbols-outlined">help</span>
+<span class="font-label-md">Support</span>
+</a>
+<a class="flex items-center gap-3 py-2 px-6 text-error hover:bg-error-container rounded-full mx-2 transition-all" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span class="font-label-md">Sign Out</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 ml-sidebar-width flex flex-col h-full bg-background relative">
+<!-- TopAppBar -->
+<header class="h-16 flex justify-between items-center px-container-padding-desktop border-b border-outline-variant bg-surface-dim sticky top-0 z-10">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 px-3 py-1 bg-surface-container rounded-lg">
+<span class="w-2 h-2 rounded-full bg-status-online pulse-indicator"></span>
+<span class="text-label-sm font-semibold text-secondary uppercase tracking-wider">Systems Health</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">monitoring</span>
+</div>
+</div>
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-status-online"></span>
+<span class="text-label-sm text-on-surface">API: ONLINE</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-status-online"></span>
+<span class="text-label-sm text-on-surface">Ollama: READY</span>
+</div>
+<div class="flex items-center gap-4 ml-4">
+<button class="p-2 text-on-surface-variant hover:bg-surface-container-high rounded-full transition-colors">
+<span class="material-symbols-outlined">light_mode</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:bg-surface-container-high rounded-full transition-colors">
+<span class="material-symbols-outlined">analytics</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-highest border border-outline-variant flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A professional user profile portrait in a minimalist, high-productivity software environment. The lighting is soft and corporate-modern, matching a clean light-mode interface with subtle grey and white tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBgEmZjtjtEVtJp7NfU6aAcAPhHheYFEaDjAUMEqOaCDNvah7IMAjptutvyZzvhoZVwel9GoAGdNBm0ldVoybjP5teHkcVnO9hJPLHSXPzkTchvK72icAJnmxmnXos_lLQ8NUpR8kFcTTeH912fAWvZrZVlFEPW8UvyaIgdsb2Azv5okxOTpRhxg7J8fWsMabXq1kEcXklKp3CayUHY6T3UezULLKL_ubG8Twfou7LPR_GL9WxILhNM28g10fT650tSamTJv7APETc"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Content Body -->
+<section class="flex-1 overflow-y-auto p-gutter max-w-[1200px] mx-auto w-full">
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-lg overflow-hidden flex flex-col mb-12">
+<!-- Header Actions -->
+<div class="p-6 flex justify-between items-center border-b border-outline-variant bg-surface-bright">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary font-bold text-headline-lg">timer</span>
+<h2 class="text-headline-lg font-headline-lg font-bold">Processing Queue</h2>
+</div>
+<div class="flex gap-3">
+<button class="px-4 py-2 border border-error text-error rounded-lg text-label-md font-semibold hover:bg-error-container transition-colors">
+                            Clean failed (3)
+                        </button>
+<button class="px-4 py-2 bg-surface-container-high text-on-surface-variant rounded-lg text-label-md font-semibold hover:bg-surface-container-highest transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">keyboard_backspace</span>
+                            Home
+                        </button>
+</div>
+</div>
+<!-- Active Notification -->
+<div class="px-6 py-4 bg-secondary-container/10 border-b border-outline-variant">
+<div class="flex items-center gap-4 text-body-md">
+<span class="material-symbols-outlined text-secondary pulse-indicator">sync</span>
+<span class="font-medium text-on-surface">Processing: <span class="text-primary hover:underline cursor-pointer">youtu.be/gJ0aQoZ0YUI</span></span>
+<div class="flex items-center gap-2 text-on-surface-variant text-body-sm">
+<span class="text-primary font-bold">extract</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+<span>cleanup</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+<span>summary</span>
+</div>
+<span class="ml-auto text-secondary italic text-body-sm">extracting subtitles...</span>
+</div>
+</div>
+<!-- Data Table -->
+<div class="flex-1 overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant">
+<th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider">#</th>
+<th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider">URL</th>
+<th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider">Pipeline</th>
+<th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider text-center">Status</th>
+<th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider text-right">Added</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/30">
+<!-- Row 1: Active -->
+<tr class="hover:bg-surface-container-high transition-colors bg-secondary-container/5">
+<td class="px-6 py-5 text-on-surface-variant">1</td>
+<td class="px-6 py-5 text-primary font-medium hover:underline cursor-pointer">youtu.be/gJ0aQoZ0YUI</td>
+<td class="px-6 py-5">
+<div class="flex items-center gap-1 text-label-sm">
+<span class="text-primary font-bold">extract</span>
+<span class="text-outline">→</span>
+<span class="text-outline">cleanup</span>
+<span class="text-outline">→</span>
+<span class="text-outline">summary</span>
+</div>
+</td>
+<td class="px-6 py-5">
+<div class="flex items-center justify-center gap-2 text-secondary font-semibold text-body-sm">
+<span class="material-symbols-outlined pulse-indicator">hourglass_top</span>
+<span>processing</span>
+</div>
+</td>
+<td class="px-6 py-5 text-right text-on-surface-variant text-label-sm">18.06.2026, 09:25</td>
+</tr>
+<!-- Rows 2-4: Failed -->
+<tr class="hover:bg-error-container/20 transition-colors bg-error-container/10">
+<td class="px-6 py-5 text-on-surface-variant">2</td>
+<td class="px-6 py-5 text-primary font-medium hover:underline cursor-pointer">youtu.be/knlarrATjBU</td>
+<td class="px-6 py-5">
+<div class="flex items-center gap-1 text-label-sm">
+<span class="text-on-surface-variant">extract</span>
+<span class="text-outline">→</span>
+<span class="text-on-surface-variant">cleanup</span>
+<span class="text-outline">→</span>
+<span class="text-on-surface-variant">summary</span>
+</div>
+</td>
+<td class="px-6 py-5">
+<div class="flex items-center justify-center gap-2 text-error font-semibold text-body-sm">
+<span class="material-symbols-outlined text-[18px]">error</span>
+<span>failed</span>
+<span class="material-symbols-outlined text-[16px] cursor-pointer">arrow_drop_down</span>
+</div>
+</td>
+<td class="px-6 py-5 text-right text-on-surface-variant text-label-sm">18.06.2026, 09:24</td>
+</tr>
+<tr class="hover:bg-error-container/20 transition-colors bg-error-container/10">
+<td class="px-6 py-5 text-on-surface-variant">3</td>
+<td class="px-6 py-5 text-primary font-medium hover:underline cursor-pointer">youtu.be/J_jjw7y5zaw</td>
+<td class="px-6 py-5">
+<div class="flex items-center gap-1 text-label-sm">
+<span class="text-on-surface-variant">extract</span>
+<span class="text-outline">→</span>
+<span class="text-on-surface-variant">cleanup</span>
+<span class="text-outline">→</span>
+<span class="text-on-surface-variant">summary</span>
+</div>
+</td>
+<td class="px-6 py-5">
+<div class="flex items-center justify-center gap-2 text-error font-semibold text-body-sm">
+<span class="material-symbols-outlined text-[18px]">error</span>
+<span>failed</span>
+<span class="material-symbols-outlined text-[16px] cursor-pointer">arrow_drop_down</span>
+</div>
+</td>
+<td class="px-6 py-5 text-right text-on-surface-variant text-label-sm">18.06.2026, 09:22</td>
+</tr>
+<tr class="hover:bg-error-container/20 transition-colors bg-error-container/10">
+<td class="px-6 py-5 text-on-surface-variant">4</td>
+<td class="px-6 py-5 text-primary font-medium hover:underline cursor-pointer">youtu.be/J_jjw7y5zaw</td>
+<td class="px-6 py-5">
+<div class="flex items-center gap-1 text-label-sm">
+<span class="text-on-surface-variant">extract</span>
+<span class="text-outline">→</span>
+<span class="text-on-surface-variant">cleanup</span>
+<span class="text-outline">→</span>
+<span class="text-on-surface-variant">summary</span>
+</div>
+</td>
+<td class="px-6 py-5">
+<div class="flex items-center justify-center gap-2 text-error font-semibold text-body-sm">
+<span class="material-symbols-outlined text-[18px]">error</span>
+<span>failed</span>
+<span class="material-symbols-outlined text-[16px] cursor-pointer">arrow_drop_down</span>
+</div>
+</td>
+<td class="px-6 py-5 text-right text-on-surface-variant text-label-sm">18.06.2026, 09:21</td>
+</tr>
+<!-- Rows 5+: Done -->
+<tr class="hover:bg-surface-container-high transition-colors">
+<td class="px-6 py-5 text-on-surface-variant">5</td>
+<td class="px-6 py-5 text-primary font-medium hover:underline cursor-pointer">shorts/qkoNpta0eYA</td>
+<td class="px-6 py-5">
+<div class="flex items-center gap-1 text-label-sm">
+<span class="text-on-surface-variant">extract</span>
+<span class="text-outline">→</span>
+<span class="text-on-surface-variant">cleanup</span>
+<span class="text-outline">→</span>
+<span class="text-on-surface-variant">summary</span>
+</div>
+</td>
+<td class="px-6 py-5">
+<div class="flex items-center justify-center gap-2 text-tertiary font-semibold text-body-sm">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+<span>done</span>
+</div>
+</td>
+<td class="px-6 py-5 text-right text-on-surface-variant text-label-sm">17.06.2026, 19:31</td>
+</tr>
+<tr class="hover:bg-surface-container-high transition-colors">
+<td class="px-6 py-5 text-on-surface-variant">6</td>
+<td class="px-6 py-5 text-primary font-medium hover:underline cursor-pointer">youtu.be/7ruGAgA2blw</td>
+<td class="px-6 py-5">
+<div class="flex items-center gap-1 text-label-sm">
+<span class="text-on-surface-variant">extract</span>
+<span class="text-outline">→</span>
+<span class="text-on-surface-variant">cleanup</span>
+<span class="text-outline">→</span>
+<span class="text-on-surface-variant">summary</span>
+</div>
+</td>
+<td class="px-6 py-5">
+<div class="flex items-center justify-center gap-2 text-tertiary font-semibold text-body-sm">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+<span>done</span>
+</div>
+</td>
+<td class="px-6 py-5 text-right text-on-surface-variant text-label-sm">15.06.2026, 18:35</td>
+</tr>
+<tr class="hover:bg-surface-container-high transition-colors">
+<td class="px-6 py-5 text-on-surface-variant">7</td>
+<td class="px-6 py-5 text-primary font-medium hover:underline cursor-pointer">youtu.be/BGZDLKPMgEo</td>
+<td class="px-6 py-5">
+<div class="flex items-center gap-1 text-label-sm">
+<span class="text-on-surface-variant">extract</span>
+<span class="text-outline">→</span>
+<span class="text-on-surface-variant">cleanup</span>
+<span class="text-outline">→</span>
+<span class="text-on-surface-variant">summary</span>
+</div>
+</td>
+<td class="px-6 py-5">
+<div class="flex items-center justify-center gap-2 text-tertiary font-semibold text-body-sm">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+<span>done</span>
+</div>
+</td>
+<td class="px-6 py-5 text-right text-on-surface-variant text-label-sm">04.06.2026, 09:20</td>
+</tr>
+<tr class="hover:bg-surface-container-high transition-colors">
+<td class="px-6 py-5 text-on-surface-variant">8</td>
+<td class="px-6 py-5 text-primary font-medium hover:underline cursor-pointer">youtu.be/88YA0hyPcEo</td>
+<td class="px-6 py-5">
+<div class="flex items-center gap-1 text-label-sm">
+<span class="text-on-surface-variant">cleanup</span>
+<span class="text-outline">→</span>
+<span class="text-on-surface-variant">summary</span>
+</div>
+</td>
+<td class="px-6 py-5">
+<div class="flex items-center justify-center gap-2 text-tertiary font-semibold text-body-sm">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+<span>done</span>
+</div>
+</td>
+<td class="px-6 py-5 text-right text-on-surface-variant text-label-sm">29.05.2026, 12:32</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Footer Pagination-like state -->
+<div class="p-4 bg-surface-container-low border-t border-outline-variant flex items-center justify-between text-label-sm text-on-surface-variant">
+<span>Showing 8 of 152 items</span>
+<div class="flex gap-2">
+<button class="px-3 py-1 bg-surface-container-highest rounded border border-outline-variant hover:bg-surface-container-high transition-colors text-on-surface">Previous</button>
+<button class="px-3 py-1 bg-primary text-on-primary rounded hover:opacity-90 transition-colors">Next</button>
+</div>
+</div>
+</div>
+<!-- Dashboard Insights (Asymmetric Row for extra detail) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-gutter">
+<div class="md:col-span-2 bg-surface-container-lowest border border-outline-variant rounded-xl p-6 flex flex-col justify-between">
+<div>
+<h3 class="text-label-md font-bold text-on-surface-variant mb-4 uppercase tracking-widest">Efficiency Metrics</h3>
+<div class="flex items-end gap-2 mb-2">
+<span class="text-headline-xl font-headline-xl text-primary">94.2%</span>
+<span class="text-tertiary text-label-md font-bold pb-1">↑ 2.4%</span>
+</div>
+<p class="text-body-sm text-on-surface-variant">Processing speed across all pipelines has stabilized after v2.4.0 deployment. Token usage is within predicted limits.</p>
+</div>
+<div class="h-16 w-full bg-surface-container flex items-end gap-1 mt-6">
+<div class="flex-1 bg-primary/20 h-[40%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/40 h-[60%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/30 h-[50%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/60 h-[80%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/50 h-[70%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/90 h-[95%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/70 h-[85%] rounded-t-sm"></div>
+</div>
+</div>
+<div class="bg-primary-container text-on-primary-container rounded-xl p-6 flex flex-col border border-primary/20">
+<h3 class="text-label-md font-bold mb-4 uppercase tracking-widest opacity-80">Local LLM Node</h3>
+<div class="flex items-center gap-4 mb-6">
+<span class="material-symbols-outlined text-[48px]" style="font-variation-settings: 'FILL' 1;">memory</span>
+<div>
+<p class="text-headline-lg font-bold">Ollama v0.1.32</p>
+<p class="text-label-sm opacity-80 text-primary-fixed">Ready for offload</p>
+</div>
+</div>
+<div class="mt-auto space-y-3">
+<div class="flex justify-between text-label-sm">
+<span>VRAM Usage</span>
+<span>4.2GB / 12GB</span>
+</div>
+<div class="h-1 bg-on-primary-container/20 rounded-full overflow-hidden">
+<div class="h-full bg-primary-fixed w-[35%]"></div>
+</div>
+<button class="w-full mt-4 py-2 border border-on-primary-container/30 rounded-lg text-label-sm font-bold hover:bg-on-primary-container/10 transition-colors">
+                            Manage Model Weights
+                        </button>
+</div>
+</div>
+</div>
+</section>
+<!-- Tooltip/Hover Effect Elements (Hidden by default) -->
+<div class="absolute pointer-events-none opacity-0 transition-opacity bg-inverse-surface text-inverse-on-surface text-label-sm px-3 py-1.5 rounded shadow-lg z-50" id="status-tooltip">
+            Pipeline details view
+        </div>
+</main>
+<script>
+        // Micro-interactions and interactive logic
+        document.querySelectorAll('tr').forEach(row => {
+            row.addEventListener('mouseenter', (e) => {
+                if(row.classList.contains('bg-error-container/10')) {
+                    // Optional: highlight logic for specific status
+                }
+            });
+        });
+
+        // Simulating some status changes or notifications
+        console.log("Nexus Summarizer v2.4.0 Engine Initialized (Dark Mode)...");
+    </script>
+</body></html>

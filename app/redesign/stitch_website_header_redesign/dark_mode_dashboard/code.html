@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>YT Summarizer - Dashboard</title>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-primary-fixed": "#410007",
+                    "surface": "#191c1d",
+                    "inverse-surface": "#e1e3e4",
+                    "on-secondary-fixed": "#071e27",
+                    "on-secondary-container": "#cfe6f3",
+                    "error": "#ffb4ab",
+                    "on-primary-fixed-variant": "#ffdad8",
+                    "outline": "#a08c8a",
+                    "inverse-primary": "#81272b",
+                    "on-primary-container": "#ffdad8",
+                    "primary-fixed-dim": "#ffb3b1",
+                    "secondary-container": "#354a54",
+                    "on-secondary": "#1d333d",
+                    "surface-bright": "#353a3b",
+                    "error-container": "#93000a",
+                    "primary-container": "#81272a",
+                    "on-error-container": "#ffdad6",
+                    "tertiary-container": "#08521d",
+                    "surface-container-lowest": "#0b0e0f",
+                    "tertiary-fixed": "#acf4ad",
+                    "tertiary": "#91d793",
+                    "secondary-fixed-dim": "#b4cad7",
+                    "surface-container-high": "#282b2c",
+                    "on-primary": "#ffffff",
+                    "on-error": "#690005",
+                    "on-surface-variant": "#dcc0bf",
+                    "status-online": "#91d793",
+                    "surface-container": "#1d2021",
+                    "background": "#191c1d",
+                    "on-secondary-fixed-variant": "#cfe6f3",
+                    "surface-variant": "#564241",
+                    "surface-container-highest": "#333637",
+                    "surface-container-low": "#111415",
+                    "secondary-fixed": "#cfe6f3",
+                    "on-tertiary-fixed-variant": "#acf4ad",
+                    "on-tertiary-fixed": "#002107",
+                    "status-online-container": "#08521d",
+                    "outline-variant": "#564241",
+                    "on-surface": "#e1e3e4",
+                    "surface-dim": "#111415",
+                    "on-background": "#e1e3e4",
+                    "primary": "#ffb3b1",
+                    "on-tertiary-container": "#acf4ad",
+                    "tertiary-fixed-dim": "#91d793",
+                    "surface-tint": "#ffb3b1",
+                    "secondary": "#b4cad7",
+                    "primary-fixed": "#ffdad8",
+                    "on-tertiary": "#003910",
+                    "inverse-on-surface": "#191c1d"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "sidebar-width": "16rem",
+                    "container-padding-desktop": "2rem",
+                    "gutter": "1.5rem",
+                    "unit": "4px",
+                    "stack-gap": "1rem",
+                    "section-gap": "2.5rem",
+                    "container-padding-mobile": "1rem"
+            },
+            "fontFamily": {
+                    "label-sm": ["Inter"],
+                    "tag-uppercase": ["Inter"],
+                    "headline-xl": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "label-md": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "body-md": ["Inter"],
+                    "headline-lg-mobile": ["Inter"]
+            },
+            "fontSize": {
+                    "label-sm": ["12px", {"lineHeight": "14px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "tag-uppercase": ["11px", {"lineHeight": "12px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                    "headline-xl": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "label-md": ["14px", {"lineHeight": "16px", "fontWeight": "500"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        
+        .pulse-dot {
+            animation: pulse-ring 2s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(.8); opacity: 0.8; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(.8); opacity: 0.8; }
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container">
+<!-- SideNavBar Anchor -->
+<aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-low border-r border-outline-variant flex flex-col p-4 gap-stack-gap z-40 hidden md:flex">
+<div class="mb-8 px-2">
+<h1 class="font-headline-lg text-headline-lg font-bold text-primary">YT Summarizer</h1>
+<p class="font-label-md text-label-md text-secondary">AI Productivity Suite</p>
+</div>
+<nav class="flex-grow flex flex-col gap-1">
+<a class="flex items-center gap-3 px-4 py-3 bg-primary-container text-on-primary-container rounded-lg font-label-md text-label-md transition-all active:scale-[0.98] duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="add_circle">add_circle</span>
+            New
+        </a>
+<a class="flex items-center gap-3 px-4 py-3 text-secondary hover:bg-surface-container-high rounded-lg font-label-md text-label-md transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+            History
+        </a>
+<a class="flex items-center gap-3 px-4 py-3 text-secondary hover:bg-surface-container-high rounded-lg font-label-md text-label-md transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="queue_play_next">queue_play_next</span>
+            Queue
+        </a>
+<a class="flex items-center gap-3 px-4 py-3 text-secondary hover:bg-surface-container-high rounded-lg font-label-md text-label-md transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="speed">speed</span>
+            Benchmarks
+        </a>
+</nav>
+<div class="mt-auto border-t border-outline-variant pt-4">
+<a class="flex items-center gap-3 px-4 py-3 text-secondary hover:bg-surface-container-high rounded-lg font-label-md text-label-md transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+            Settings
+        </a>
+<div class="flex items-center gap-3 px-4 py-4 mt-2">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center overflow-hidden">
+<img alt="User Profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDGHOJ6vEuksYaW63fbL9nQkOEd376zdiKCGPcekdiBcBZ3yPDQwFE0IalWUYCWeYflWvJFLSCQ3w3oPJeG1NcSDk5brx0mGBsHG0nJCyqhKLVtpo2Rvqr6NsFX3INBU0tPfc8jUIMDwbSZTucR812QXUgzvSufSaeWJZwmquQeCuTxjCxPVV9Qip_regcCxbAVLaCF2oOhnA3edYCkBHCd4PxkHVKwHPoCppV4Bbqu-k1tSEToTqvEeK5cwhi6M6b-QfiHhRITjoQ"/>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface">Alex Rivera</span>
+<span class="font-label-sm text-label-sm text-secondary">Pro Plan</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="md:ml-64 min-h-screen flex flex-col">
+<!-- TopNavBar Anchor -->
+<header class="fixed top-0 left-0 right-0 md:left-64 z-30 h-16 bg-surface-container-lowest flex justify-between items-center px-gutter border-b border-outline-variant">
+<div class="flex items-center gap-stack-gap">
+<!-- Mobile Menu Trigger -->
+<button class="md:hidden p-2 text-on-surface hover:bg-surface-container transition-colors rounded-lg">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<div class="hidden md:flex items-center gap-6">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-status-online pulse-dot"></span>
+<span class="font-label-sm text-label-sm text-on-surface">Systems Health: <span class="text-tertiary font-bold">Online</span></span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-status-online"></span>
+<span class="font-label-sm text-label-sm text-on-surface">API Status: <span class="text-tertiary font-bold">Online</span></span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-status-online"></span>
+<span class="font-label-sm text-label-sm text-on-surface">Ollama Core: <span class="text-tertiary font-bold">Online</span></span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-secondary hover:bg-surface-container-high transition-colors rounded-full active:scale-95 duration-100">
+<span class="material-symbols-outlined" data-icon="sensors">sensors</span>
+</button>
+<button class="p-2 text-secondary hover:bg-surface-container-high transition-colors rounded-full active:scale-95 duration-100">
+<span class="material-symbols-outlined" data-icon="api">api</span>
+</button>
+<button class="p-2 text-secondary hover:bg-surface-container-high transition-colors rounded-full active:scale-95 duration-100">
+<span class="material-symbols-outlined" data-icon="database">database</span>
+</button>
+</div>
+</header>
+<!-- Main Workspace -->
+<div class="mt-16 flex-grow flex flex-col items-center justify-center p-6 md:p-12 max-w-[1200px] mx-auto w-full gap-section-gap">
+<!-- Central Processing Card -->
+<div class="w-full max-w-2xl bg-surface-container border border-outline-variant rounded-xl p-8 shadow-sm">
+<div class="text-center mb-10">
+<h2 class="font-headline-xl text-headline-xl text-on-surface mb-2">YT Summarizer</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Paste a YouTube URL to extract and format subtitles.</p>
+</div>
+<form class="space-y-stack-gap" onsubmit="return false;">
+<!-- URL Input -->
+<div class="space-y-2">
+<label class="font-label-md text-label-md text-on-surface-variant" for="url">YouTube URL</label>
+<div class="relative">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant" style="font-size: 20px;">link</span>
+<input class="w-full pl-11 pr-4 py-3 bg-surface-container-lowest border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md text-on-surface placeholder:text-on-surface-variant/50" id="url" placeholder="https://www.youtube.com/watch?v=..." type="text"/>
+</div>
+</div>
+<!-- Dropdowns Row -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-stack-gap">
+<div class="space-y-2">
+<label class="font-label-md text-label-md text-on-surface-variant" for="lang">Subtitle language</label>
+<select class="w-full px-4 py-3 bg-surface-container-lowest border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md text-on-surface appearance-none cursor-pointer" id="lang">
+<option class="bg-surface-container">Auto-detect</option>
+<option class="bg-surface-container">English</option>
+<option class="bg-surface-container">Spanish</option>
+<option class="bg-surface-container">French</option>
+<option class="bg-surface-container">Japanese</option>
+</select>
+</div>
+<div class="space-y-2">
+<label class="font-label-md text-label-md text-on-surface-variant" for="model">LLM Model</label>
+<select class="w-full px-4 py-3 bg-surface-container-lowest border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-body-md text-body-md text-on-surface appearance-none cursor-pointer" id="model">
+<option class="bg-surface-container">Llama 3 (8B)</option>
+<option class="bg-surface-container">GPT-4o</option>
+<option class="bg-surface-container">Mistral Large</option>
+<option class="bg-surface-container">Claude 3.5 Sonnet</option>
+</select>
+</div>
+</div>
+<!-- Checkbox -->
+<div class="flex items-center gap-3 pt-2">
+<div class="relative flex items-center">
+<input class="w-5 h-5 text-primary border-outline-variant rounded cursor-pointer focus:ring-primary/20 transition-all bg-surface-container-lowest" id="pipeline" type="checkbox"/>
+</div>
+<label class="font-label-md text-label-md text-on-surface cursor-pointer" for="pipeline">Run full pipeline (Transcript + Summary + Keywords)</label>
+</div>
+<!-- Action Buttons -->
+<div class="flex flex-col md:flex-row gap-4 pt-6">
+<button class="flex-grow bg-primary text-on-primary-fixed py-4 px-6 rounded-lg font-label-md text-label-md font-bold transition-all hover:brightness-110 active:scale-95 shadow-sm">
+                        Add to queue
+                    </button>
+<button class="flex-grow bg-surface-container-high text-on-surface py-4 px-6 rounded-lg font-label-md text-label-md font-medium transition-all hover:bg-surface-container-highest active:scale-95 border border-outline-variant">
+                        Bulk add
+                    </button>
+</div>
+</form>
+</div>
+<!-- Last Summary Widget -->
+<section class="w-full grid grid-cols-1 md:grid-cols-12 gap-gutter">
+<div class="md:col-span-8 bg-surface-container border border-outline-variant rounded-xl p-6 flex flex-col gap-4">
+<div class="flex justify-between items-center">
+<h3 class="font-label-md text-label-md text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" style="font-size: 18px;">history</span>
+                        Last Summary
+                    </h3>
+<span class="font-label-sm text-label-sm text-on-surface-variant">2 minutes ago</span>
+</div>
+<div class="flex flex-col md:flex-row gap-6">
+<div class="w-full md:w-48 h-32 rounded-lg overflow-hidden bg-surface-variant relative flex-shrink-0 border border-outline-variant">
+<img class="w-full h-full object-cover opacity-80" data-alt="A professional cinematic frame from a high-quality technology documentary video displayed as a thumbnail." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAQ_rhb9G10ffv9t_Z-mADtb1UB3lyqZQOsMmDq40oUkYb828IuC_zaVAjjVc4ifeXo2cgqUk-_Bq-tdv1XOA-5cj5dIDfciq8I_4Dg-OaKrbJQ9htpIPSuvKgj_JOmpeqrA_3ngAWcVYv9zQffk0IC70X-6pmhc0vZjM1U2IHJpGb8KPvUpeWu5ZSiN92bZIVHpuRjC9Y1DW78yp_zWfIXruTJyUzvbsfZo9-gh1WZS0x7Hs3r84Q7301ssm4B4XiUBfyHqJHOVgg"/>
+<div class="absolute inset-0 bg-black/40 flex items-center justify-center">
+<span class="material-symbols-outlined text-white" style="font-size: 32px;">play_circle</span>
+</div>
+</div>
+<div class="flex-grow">
+<h4 class="font-headline-lg text-headline-lg text-on-surface mb-2 line-clamp-1">The Future of Local LLMs and Ollama</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-3 mb-4">
+                            This video explores the rapid evolution of local language models, focusing on how Ollama is democratizing access to high-performance AI. Key takeaways include the efficiency of quantization and the benefits of private data processing.
+                        </p>
+<div class="flex flex-wrap gap-2">
+<span class="px-2 py-1 bg-surface-container-highest rounded text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">AI</span>
+<span class="px-2 py-1 bg-surface-container-highest rounded text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">Privacy</span>
+<span class="px-2 py-1 bg-surface-container-highest rounded text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">Computing</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Secondary Info Card -->
+<div class="md:col-span-4 bg-surface-container-high border border-outline-variant rounded-xl p-6 flex flex-col justify-between">
+<div>
+<h3 class="font-label-md text-label-md text-on-surface-variant mb-4">Usage Statistics</h3>
+<div class="space-y-stack-gap">
+<div class="flex justify-between items-end">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Summaries today</span>
+<span class="font-headline-lg text-headline-lg text-primary">12/50</span>
+</div>
+<div class="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[24%]"></div>
+</div>
+<div class="flex justify-between items-end pt-2">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Tokens processed</span>
+<span class="font-label-md text-label-md text-on-surface">142.8k</span>
+</div>
+</div>
+</div>
+<button class="w-full mt-6 py-2 px-4 border border-outline rounded-lg font-label-md text-label-md text-on-surface hover:bg-surface-container-highest transition-colors">
+                    View Analytics
+                </button>
+</div>
+</section>
+</div>
+</main>
+<script>
+    // Micro-interaction for hover states on the dashboard card
+    document.querySelectorAll('input, select').forEach(el => {
+        el.addEventListener('focus', () => {
+            const label = el.closest('.space-y-2')?.querySelector('label');
+            if (label) label.classList.add('text-primary');
+        });
+        el.addEventListener('blur', () => {
+            const label = el.closest('.space-y-2')?.querySelector('label');
+            if (label) label.classList.remove('text-primary');
+        });
+    });
+
+    // Simple button active effect enhancement
+    const buttons = document.querySelectorAll('button');
+    buttons.forEach(btn => {
+        btn.addEventListener('mousedown', () => btn.classList.add('scale-95'));
+        btn.addEventListener('mouseup', () => btn.classList.remove('scale-95'));
+        btn.addEventListener('mouseleave', () => btn.classList.remove('scale-95'));
+    });
+</script>
+</body></html>

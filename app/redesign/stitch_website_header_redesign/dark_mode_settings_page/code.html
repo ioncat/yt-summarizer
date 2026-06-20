@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Settings - Nexus Summarizer</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "inverse-primary": "#ffb3b1",
+                      "status-online": "#286b33",
+                      "tertiary-fixed": "#acf4ad",
+                      "on-secondary": "#ffffff",
+                      "surface-container-low": "#1e2122",
+                      "outline": "#897270",
+                      "status-online-container": "#60a465",
+                      "primary-fixed": "#ffdad8",
+                      "on-surface-variant": "#dcc0bf",
+                      "secondary-container": "#354a54",
+                      "on-secondary-fixed-variant": "#354a54",
+                      "on-secondary-fixed": "#071e27",
+                      "tertiary": "#acf4ad",
+                      "on-tertiary-fixed": "#002107",
+                      "error-container": "#93000a",
+                      "surface-container-highest": "#323536",
+                      "primary-container": "#a03e40",
+                      "on-background": "#e1e3e4",
+                      "tertiary-container": "#286b33",
+                      "on-tertiary-fixed-variant": "#08521e",
+                      "surface-container-lowest": "#0e1112",
+                      "surface-dim": "#111415",
+                      "surface-bright": "#373a3b",
+                      "error": "#ffdad6",
+                      "on-error": "#690005",
+                      "secondary-fixed": "#cfe6f3",
+                      "inverse-on-surface": "#191c1d",
+                      "outline-variant": "#564241",
+                      "inverse-surface": "#e1e3e4",
+                      "on-tertiary-container": "#a2e9a3",
+                      "surface-container-high": "#282b2c",
+                      "on-surface": "#e1e3e4",
+                      "primary-fixed-dim": "#ffb3b1",
+                      "on-secondary-container": "#cfe6f3",
+                      "background": "#191c1d",
+                      "secondary-fixed-dim": "#b4cad7",
+                      "primary": "#ffb3b1",
+                      "surface-container": "#1e2122",
+                      "on-tertiary": "#003910",
+                      "surface-variant": "#564241",
+                      "on-error-container": "#ffdad6",
+                      "surface": "#191c1d",
+                      "on-primary": "#560a12",
+                      "surface-tint": "#ffb3b1",
+                      "on-primary-fixed-variant": "#81272a",
+                      "on-primary-fixed": "#410007",
+                      "on-primary-container": "#ffdad8",
+                      "tertiary-fixed-dim": "#91d793",
+                      "secondary": "#b4cad7"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "unit": "4px",
+                      "stack-gap": "1rem",
+                      "sidebar-width": "16rem",
+                      "section-gap": "2.5rem",
+                      "container-padding-mobile": "1rem",
+                      "container-padding-desktop": "2rem",
+                      "gutter": "1.5rem"
+              },
+              "fontFamily": {
+                      "label-md": ["Inter"],
+                      "headline-lg": ["Inter"],
+                      "label-sm": ["Inter"],
+                      "body-sm": ["Inter"],
+                      "headline-xl": ["Inter"],
+                      "headline-lg-mobile": ["Inter"],
+                      "tag-uppercase": ["Inter"],
+                      "body-md": ["Inter"]
+              },
+              "fontSize": {
+                      "label-md": ["14px", {"lineHeight": "16px", "fontWeight": "500"}],
+                      "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "label-sm": ["12px", {"lineHeight": "14px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                      "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "headline-xl": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "tag-uppercase": ["11px", {"lineHeight": "12px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .pulse {
+            animation: pulse-animation 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse-animation {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #1e2122;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #564241;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface overflow-x-hidden transition-colors duration-300">
+<!-- SideNavBar Shell -->
+<aside class="fixed left-0 top-0 h-full w-sidebar-width bg-surface-container flex flex-col py-unit gap-stack-gap z-50 border-r border-outline-variant/30">
+<div class="px-gutter py-4">
+<h1 class="font-headline-lg text-headline-lg font-bold text-primary">Nexus Summarizer</h1>
+<p class="font-label-sm text-label-sm text-on-surface-variant opacity-70">v2.4.1 Premium</p>
+</div>
+<nav class="flex-1 flex flex-col px-4 gap-1">
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high transition-colors rounded-full font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high transition-colors rounded-full font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined">video_library</span>
+<span>Projects</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high transition-colors rounded-full font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined">folder_special</span>
+<span>Library</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 bg-primary-container text-on-primary-container rounded-full font-label-md text-label-md transition-all duration-200 active:scale-95" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high transition-colors rounded-full font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span>Analytics</span>
+</a>
+</nav>
+<div class="px-4 mt-auto space-y-2">
+<button class="w-full py-3 bg-primary-container text-on-primary-container font-label-md text-label-md rounded-full flex items-center justify-center gap-2 hover:opacity-90 active:scale-95 transition-all">
+<span class="material-symbols-outlined">add</span>
+            New Ingestion
+        </button>
+<div class="pt-4 border-t border-outline-variant space-y-1">
+<a class="flex items-center gap-3 px-4 py-2 text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-high rounded-full" href="#">
+<span class="material-symbols-outlined">help</span>
+<span>Support</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-high rounded-full" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span>Sign Out</span>
+</a>
+</div>
+<div class="flex items-center gap-3 px-4 py-4">
+<img class="w-8 h-8 rounded-full object-cover border border-outline-variant" data-alt="Nexus User" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDMndv-4ebqxG5P5w4_oBRhDDCBJf1VnbBwRFdRBK_011aD7AuhfpI93vzulLYvJDAZtvKdOkr_QS4OCEvTdJm_v0sVxak5j0e8CjrZuzG5y5TsX1FBTSSvaeLjgDLJbtKp93ORx1CWEyGqMkm3FCXFeiSjQoByuOa4S6E7zfuBhE6fm8HYV-8DXz6JDkdsyVjSlVlZzo3HbTIMuuEv1JdsJTPr-H8V9DyR9dMbtfjQQJInMoDg9RrBHWdfBl8xGwRIFmny7JG1Tsk"/>
+<div>
+<p class="font-label-md text-label-md text-on-surface">Nexus User</p>
+<p class="text-[10px] text-on-surface-variant uppercase tracking-tighter font-bold">Administrator</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- TopAppBar Shell -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-background/80 backdrop-blur-md border-b border-outline-variant/30 flex items-center justify-between px-gutter z-40">
+<div class="flex items-center gap-stack-gap">
+<div class="relative">
+<input class="bg-surface-container-low border border-outline-variant/30 rounded-full px-10 py-2 w-64 font-label-md text-label-md text-on-surface focus:ring-2 focus:ring-primary/20 transition-all placeholder-on-surface-variant/50" placeholder="Search parameters..." type="text"/>
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+</div>
+<nav class="hidden md:flex gap-4 ml-6">
+<a class="font-label-md text-label-md text-primary font-bold border-b-2 border-primary py-5" href="#">General</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary py-5 transition-colors" href="#">AI Cleanup</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary py-5 transition-colors" href="#">Summarization</a>
+</nav>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4 border-r border-outline-variant/30 pr-6">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-status-online-container pulse"></div>
+<span class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">API</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-status-online-container pulse"></div>
+<span class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">Ollama</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-status-online-container pulse"></div>
+<span class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">System</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 hover:bg-surface-container-low rounded-full transition-colors active:scale-95">
+<span class="material-symbols-outlined text-on-surface-variant">sensors</span>
+</button>
+<button class="p-2 hover:bg-surface-container-low rounded-full transition-colors active:scale-95">
+<span class="material-symbols-outlined text-on-surface-variant">memory</span>
+</button>
+<button class="p-2 hover:bg-surface-container-low rounded-full transition-colors active:scale-95">
+<span class="material-symbols-outlined text-on-surface-variant">speed</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="ml-sidebar-width pt-24 pb-12 px-gutter min-h-screen">
+<div class="max-w-[1200px] mx-auto space-y-stack-gap">
+<!-- Page Header -->
+<div class="mb-8">
+<h2 class="font-headline-xl text-headline-xl text-on-surface">Settings</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Configure the application. All settings are stored in the database.</p>
+</div>
+<!-- Tabbed Interface Card -->
+<div class="bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-xl overflow-hidden">
+<!-- Tab Header -->
+<div class="flex border-b border-outline-variant/30 px-gutter bg-surface-container/30">
+<button class="tab-btn py-4 px-6 font-label-md text-label-md border-b-2 border-primary text-primary font-bold transition-all" id="tab-general" onclick="switchTab('general')">General</button>
+<button class="tab-btn py-4 px-6 font-label-md text-label-md border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-all" id="tab-cleanup" onclick="switchTab('cleanup')">AI Cleanup</button>
+<button class="tab-btn py-4 px-6 font-label-md text-label-md border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-all" id="tab-summarization" onclick="switchTab('summarization')">Summarization</button>
+</div>
+<!-- Tab Content: General -->
+<div class="tab-content p-gutter space-y-6" id="content-general">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-gutter">
+<div class="space-y-1.5">
+<label class="font-label-md text-label-md text-on-surface flex items-center gap-1">
+                            Ollama URL <span class="text-error">*</span>
+</label>
+<input class="w-full bg-surface-container border border-outline-variant/30 rounded-lg p-3 font-body-sm text-body-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all" type="text" value="http://localhost:11434"/>
+</div>
+<div class="space-y-1.5">
+<label class="font-label-md text-label-md text-on-surface flex items-center gap-1">
+                            yt-dlp path <span class="text-error">*</span>
+</label>
+<input class="w-full bg-surface-container border border-outline-variant/30 rounded-lg p-3 font-body-sm text-body-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all" type="text" value="C:/ytdlp/yt-dlp.exe"/>
+<p class="text-[11px] text-on-surface-variant italic">Path to yt-dlp executable on the server.</p>
+</div>
+</div>
+<div class="space-y-1.5">
+<label class="font-label-md text-label-md text-on-surface flex items-center gap-1">
+                        Cookies path <span class="text-error">*</span>
+</label>
+<div class="flex gap-2">
+<input class="flex-1 bg-surface-container border border-outline-variant/30 rounded-lg p-3 font-body-sm text-body-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all" type="text" value="E:\My files\0 My_Dev\my_prj\yt-summarizer\app\data\cookies.txt"/>
+<button class="px-6 bg-surface-container-high text-on-surface font-label-md text-label-md rounded-lg hover:bg-surface-bright transition-colors active:scale-95 border border-outline-variant/20">Upload</button>
+</div>
+<p class="text-[11px] text-on-surface-variant">Export from Chrome via "Get cookies.txt LOCALLY" extension.</p>
+</div>
+<div class="w-1/4 space-y-1.5">
+<label class="font-label-md text-label-md text-on-surface">Parallel workers</label>
+<input class="w-full bg-surface-container border border-outline-variant/30 rounded-lg p-3 font-body-sm text-body-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all" type="number" value="2"/>
+<p class="text-[11px] text-on-surface-variant">Number of paragraphs/chunks processed simultaneously.</p>
+</div>
+</div>
+<!-- Tab Content: Cleanup -->
+<div class="tab-content hidden p-gutter space-y-6" id="content-cleanup">
+<div class="space-y-1.5">
+<label class="font-label-md text-label-md text-on-surface flex items-center gap-1">
+                        Model <span class="text-error">*</span>
+</label>
+<select class="w-full bg-surface-container border border-outline-variant/30 rounded-lg p-3 font-body-sm text-body-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all appearance-none">
+<option>gemma4:e2b</option>
+<option>llama3:latest</option>
+<option>mistral:latest</option>
+</select>
+</div>
+<div class="space-y-1.5">
+<label class="font-label-md text-label-md text-on-surface">System prompt</label>
+<textarea class="custom-scrollbar w-full bg-surface-container border border-outline-variant/30 rounded-lg p-3 font-body-sm text-body-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all" rows="4">You are a professional text editor specializing in cleaning up auto-generated subtitle transcripts. Your task is to improve readability while preserving ALL original content and meaning.</textarea>
+</div>
+<div class="space-y-1.5">
+<label class="font-label-md text-label-md text-on-surface">User prompt template</label>
+<textarea class="custom-scrollbar w-full bg-surface-container border border-outline-variant/30 rounded-lg p-3 font-body-sm text-body-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all" rows="8">Clean up this auto-generated subtitle text. Apply these rules... {text}</textarea>
+</div>
+</div>
+<!-- Tab Content: Summarization -->
+<div class="tab-content hidden p-gutter space-y-6" id="content-summarization">
+<div class="flex items-start gap-3 p-4 bg-surface-container-high/50 rounded-lg border border-outline-variant/30">
+<input class="mt-1 rounded text-primary focus:ring-primary bg-surface-container border-outline-variant/30" id="force-map" type="checkbox"/>
+<div>
+<label class="font-label-md text-label-md text-on-surface block" for="force-map">Force Map-Reduce mode</label>
+<p class="text-[11px] text-on-surface-variant">Overrides auto-detection — always use Map-Reduce regardless of text length.</p>
+</div>
+</div>
+<div class="space-y-1.5">
+<label class="font-label-md text-label-md text-on-surface flex items-center gap-1">
+                        Model <span class="text-error">*</span>
+</label>
+<select class="w-full bg-surface-container border border-outline-variant/30 rounded-lg p-3 font-body-sm text-body-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all appearance-none">
+<option>gemma4:e2b</option>
+<option>llama3:latest</option>
+<option>phi3:mini</option>
+</select>
+</div>
+<div class="border border-outline-variant/30 rounded-lg overflow-hidden">
+<div class="bg-surface-container flex border-b border-outline-variant/30">
+<button class="px-6 py-2.5 font-label-md text-label-md bg-surface-container-lowest text-primary border-b-2 border-primary">Single Pass</button>
+<button class="px-6 py-2.5 font-label-md text-label-md text-on-surface-variant hover:bg-surface-container-high transition-colors">Map-Reduce</button>
+</div>
+<div class="p-gutter space-y-6">
+<div class="space-y-1.5">
+<label class="font-label-md text-label-md text-on-surface">System prompt</label>
+<textarea class="custom-scrollbar w-full bg-surface-container border border-outline-variant/30 rounded-lg p-3 font-body-sm text-body-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all" rows="3">You are a helpful assistant that creates concise, accurate summaries.</textarea>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer Actions -->
+<div class="bg-surface-container/50 p-gutter flex flex-col gap-3 border-t border-outline-variant/30">
+<button class="w-full py-4 bg-primary text-on-primary font-bold text-label-md rounded-lg shadow-lg active:scale-[0.99] transition-all hover:opacity-90">Save Settings</button>
+<button class="w-full py-4 bg-surface-container-high/40 text-on-surface-variant font-label-md text-label-md rounded-lg hover:bg-surface-container-high active:scale-[0.99] transition-all border border-outline-variant/10">Reset to defaults</button>
+</div>
+</div>
+<!-- Additional Context Section (Bento style hint) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-stack-gap">
+<div class="bg-surface-container p-6 rounded-xl border border-outline-variant/30 flex items-center gap-4 group hover:border-primary/50 transition-colors">
+<span class="material-symbols-outlined text-primary text-3xl group-hover:scale-110 transition-transform">database</span>
+<div>
+<p class="font-label-md text-label-md text-on-surface">Database</p>
+<p class="text-xs text-on-surface-variant">PostgreSQL v15.2</p>
+</div>
+</div>
+<div class="bg-surface-container p-6 rounded-xl border border-outline-variant/30 flex items-center gap-4 group hover:border-primary/50 transition-colors">
+<span class="material-symbols-outlined text-primary text-3xl group-hover:scale-110 transition-transform">dns</span>
+<div>
+<p class="font-label-md text-label-md text-on-surface">Server Load</p>
+<p class="text-xs text-on-surface-variant">12% Utilization</p>
+</div>
+</div>
+<div class="bg-surface-container p-6 rounded-xl border border-outline-variant/30 flex items-center gap-4 group hover:border-primary/50 transition-colors">
+<span class="material-symbols-outlined text-primary text-3xl group-hover:scale-110 transition-transform">security</span>
+<div>
+<p class="font-label-md text-label-md text-on-surface">Encrypted</p>
+<p class="text-xs text-on-surface-variant">AES-256 GCM</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<script>
+    function switchTab(tabId) {
+        // Hide all contents
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.add('hidden');
+        });
+        // Show target content
+        document.getElementById('content-' + tabId).classList.remove('hidden');
+
+        // Reset tab styles
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('border-primary', 'text-primary', 'font-bold');
+            btn.classList.add('border-transparent', 'text-on-surface-variant');
+        });
+        // Set active tab style
+        const activeTab = document.getElementById('tab-' + tabId);
+        activeTab.classList.remove('border-transparent', 'text-on-surface-variant');
+        activeTab.classList.add('border-primary', 'text-primary', 'font-bold');
+    }
+
+    // Pulse animation script for health indicators
+    document.querySelectorAll('.pulse').forEach((el, index) => {
+        el.style.animationDelay = (index * 0.4) + 's';
+    });
+</script>
+</body></html>

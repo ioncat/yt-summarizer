@@ -1,0 +1,514 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Nexus Summarizer - Design System &amp; UI Kit</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-dim": "#d9dadb",
+                        "on-background": "#191c1d",
+                        "surface-container-high": "#e7e8e9",
+                        "outline-variant": "#dcc0bf",
+                        "on-surface": "#191c1d",
+                        "status-online-container": "#60a465",
+                        "inverse-on-surface": "#f0f1f2",
+                        "on-tertiary": "#ffffff",
+                        "primary-fixed": "#ffdad8",
+                        "surface-tint": "#a03e40",
+                        "secondary": "#4c616c",
+                        "tertiary-fixed-dim": "#91d793",
+                        "primary": "#81272b",
+                        "on-tertiary-container": "#a2e9a3",
+                        "surface-variant": "#e1e3e4",
+                        "on-secondary-fixed-variant": "#354a54",
+                        "background": "#f8f9fa",
+                        "surface-container": "#edeeef",
+                        "status-online": "#286b33",
+                        "on-surface-variant": "#564241",
+                        "on-error": "#ffffff",
+                        "on-primary": "#ffffff",
+                        "on-tertiary-fixed": "#002107",
+                        "on-tertiary-fixed-variant": "#08521e",
+                        "secondary-fixed": "#cfe6f3",
+                        "surface-container-low": "#f3f4f5",
+                        "surface-container-highest": "#e1e3e4",
+                        "on-error-container": "#93000a",
+                        "primary-container": "#a03e40",
+                        "error-container": "#ffdad6",
+                        "surface-bright": "#f8f9fa",
+                        "on-secondary": "#ffffff",
+                        "secondary-container": "#cfe6f3",
+                        "secondary-fixed-dim": "#b4cad7",
+                        "tertiary": "#08521d",
+                        "tertiary-fixed": "#acf4ad",
+                        "tertiary-container": "#286b33",
+                        "surface-container-lowest": "#ffffff",
+                        "on-primary-fixed-variant": "#81272a",
+                        "error": "#ba1a1a",
+                        "on-secondary-container": "#526772",
+                        "surface": "#f8f9fa",
+                        "on-secondary-fixed": "#071e27",
+                        "inverse-surface": "#2e3132",
+                        "on-primary-fixed": "#410007",
+                        "primary-fixed-dim": "#ffb3b1",
+                        "on-primary-container": "#ffcdcb",
+                        "inverse-primary": "#ffb3b1",
+                        "outline": "#897270"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "section-gap": "2.5rem",
+                        "container-padding-mobile": "1rem",
+                        "stack-gap": "1rem",
+                        "sidebar-width": "16rem",
+                        "unit": "4px",
+                        "gutter": "1.5rem",
+                        "container-padding-desktop": "2rem"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "tag-uppercase": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "headline-xl": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "headline-lg-mobile": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-md": ["14px", {"lineHeight": "16px", "fontWeight": "500"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "tag-uppercase": ["11px", {"lineHeight": "12px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "label-sm": ["12px", {"lineHeight": "14px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "headline-xl": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .pulse-online {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex">
+<!-- SideNavBar (Shared Component) -->
+<aside class="fixed left-0 top-0 h-full w-sidebar-width bg-surface-container-low flex flex-col py-6 px-4 gap-stack-gap border-r border-outline-variant">
+<div class="mb-8">
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">Nexus Summarizer</h1>
+<p class="text-[10px] font-bold text-on-surface-variant tracking-widest uppercase mt-1">v2.4.1 Premium</p>
+</div>
+<button class="w-full bg-primary text-on-primary rounded-xl py-3 px-4 flex items-center justify-center gap-2 mb-6 font-label-md text-label-md active:scale-95 transition-all">
+<span class="material-symbols-outlined">add_circle</span>
+            New Summary
+        </button>
+<nav class="flex flex-col gap-1 flex-grow">
+<!-- Active State Logic: Documentation screen is the 'Resources' equivalent in the library context -->
+<a class="flex items-center gap-3 text-on-surface-variant px-4 py-3 hover:bg-surface-container-high transition-colors duration-200 active:scale-95" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-md text-label-md">Overview</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant px-4 py-3 hover:bg-surface-container-high transition-colors duration-200 active:scale-95" href="#">
+<span class="material-symbols-outlined">description</span>
+<span class="font-label-md text-label-md">Summaries</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant px-4 py-3 hover:bg-surface-container-high transition-colors duration-200 active:scale-95" href="#">
+<span class="material-symbols-outlined">insights</span>
+<span class="font-label-md text-label-md">Analytics</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant px-4 py-3 hover:bg-surface-container-high transition-colors duration-200 active:scale-95" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-label-md text-label-md">Team</span>
+</a>
+<!-- Using "Archive" as the resources/documentation anchor here -->
+<a class="flex items-center gap-3 bg-primary-container text-on-primary-container rounded-xl px-4 py-3 active:scale-95 transition-all duration-200" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-label-md text-label-md">Archive</span>
+</a>
+</nav>
+<div class="mt-auto border-t border-outline-variant pt-6 flex flex-col gap-1">
+<a class="flex items-center gap-3 text-on-surface-variant px-4 py-3 hover:bg-surface-container-high transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">help</span>
+<span class="font-label-md text-label-md">Help Center</span>
+</a>
+<div class="flex items-center gap-3 px-4 py-4 mt-2">
+<img class="w-10 h-10 rounded-full bg-surface-dim object-cover" data-alt="Close-up professional portrait of a tech product manager in a modern office setting. The lighting is crisp and natural, with a focus on a confident expression. Corporate modern style, shallow depth of field, high-end photography." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB-69sDyYi8VMrRBo77uEYcl_Nqqc4FdEoW2xdgig355tslc3z6Qch8G5hIVpvfs2dFqCRfTqmkUr474pjHhuN2m1NWu_xtwhD0N4mFqnEOVTZOzbS1FFskJcosPo1ZcXcDlrR5RDndf_4P2409wIFKwlaG7lJGY0S8NGLcfB-gwmWzBu1cOhHpnaSZJaPWsbLZ8QqEscb9rxHRgo4xfgqSLHfJ6u4XUolo7V2UatFVXc0U9Me46F-mLzBoKX3WP-o2GorwFDt5Dpo">
+<div class="overflow-hidden">
+<p class="font-label-md text-label-md truncate">Alex Rivera</p>
+<p class="text-[10px] text-on-surface-variant uppercase">Admin Account</p>
+</div>
+<button class="ml-auto text-on-surface-variant hover:text-primary">
+<span class="material-symbols-outlined">logout</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-sidebar-width flex-grow min-h-screen">
+<!-- TopAppBar (Shared Component) -->
+<header class="sticky top-0 z-10 bg-surface border-b border-outline-variant flex justify-between items-center w-full px-container-desktop h-16 max-w-[1200px] mx-auto">
+<div class="flex items-center gap-6">
+<h2 class="font-headline-lg text-headline-lg font-bold text-primary">Library Ref</h2>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-on-surface-variant font-label-md text-label-md hover:text-primary transition-colors duration-200" href="#">Dashboard</a>
+<a class="text-on-surface-variant font-label-md text-label-md hover:text-primary transition-colors duration-200" href="#">History</a>
+<a class="text-primary font-bold border-b-2 border-primary pb-1 font-label-md text-label-md" href="#">Resources</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 px-3 py-1 bg-surface-container-low rounded-full">
+<span class="w-2 h-2 rounded-full bg-status-online pulse-online"></span>
+<span class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">System Online</span>
+</div>
+<div class="flex items-center gap-3 ml-4">
+<button class="text-on-surface-variant hover:text-primary active:scale-95 transition-all">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary active:scale-95 transition-all">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+</div>
+</header>
+<div class="max-w-[1200px] mx-auto p-gutter space-y-section-gap pb-24">
+<!-- Section 1: Brand Identity -->
+<section>
+<div class="flex items-center gap-4 mb-gutter">
+<div class="w-2 h-8 bg-primary rounded-full"></div>
+<h3 class="font-headline-lg text-headline-lg">Brand Identity</h3>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-stack-gap">
+<div class="bg-surface-container-lowest border border-outline-variant p-gutter rounded-xl shadow-sm">
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase mb-4">Core Logo (Wordmark)</p>
+<div class="flex items-end gap-2">
+<span class="font-headline-xl text-headline-xl font-extrabold text-primary">Nexus Summarizer</span>
+<span class="mb-1 text-on-surface-variant font-label-md text-label-md">v2.4.1</span>
+</div>
+<p class="mt-4 font-body-md text-body-md text-on-surface-variant">
+                            Nexus Summarizer embodies a Corporate Modern aesthetic. The primary color, Nexus Red (#a03e40), signals reliability and technical precision.
+                        </p>
+</div>
+<div class="grid grid-cols-2 gap-stack-gap">
+<div class="bg-primary text-on-primary p-gutter rounded-xl flex flex-col justify-between aspect-video">
+<p class="font-tag-uppercase text-tag-uppercase">PRIMARY / NEXUS RED</p>
+<p class="font-headline-lg text-headline-lg">#81272b</p>
+</div>
+<div class="bg-primary-container text-on-primary-container p-gutter rounded-xl flex flex-col justify-between aspect-video">
+<p class="font-tag-uppercase text-tag-uppercase">PRIMARY CONTAINER</p>
+<p class="font-headline-lg text-headline-lg">#a03e40</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Section 2: Color Palette Grid -->
+<section>
+<div class="flex items-center gap-4 mb-gutter">
+<div class="w-2 h-8 bg-secondary rounded-full"></div>
+<h3 class="font-headline-lg text-headline-lg">Color Palette Tokens</h3>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-stack-gap">
+<!-- Light Mode Tokens -->
+<div class="space-y-4">
+<h4 class="font-label-md text-label-md font-bold uppercase tracking-widest text-on-surface-variant">Light Mode Foundations</h4>
+<div class="grid grid-cols-2 gap-2">
+<div class="h-16 bg-background border border-outline-variant rounded p-2 flex flex-col justify-between">
+<span class="text-[10px] font-bold">Background</span>
+<span class="text-[10px]">#f8f9fa</span>
+</div>
+<div class="h-16 bg-surface-container border border-outline-variant rounded p-2 flex flex-col justify-between">
+<span class="text-[10px] font-bold">Surface</span>
+<span class="text-[10px]">#edeeef</span>
+</div>
+<div class="h-16 bg-surface-container-low border border-outline-variant rounded p-2 flex flex-col justify-between">
+<span class="text-[10px] font-bold">Surface Low</span>
+<span class="text-[10px]">#f3f4f5</span>
+</div>
+<div class="h-16 bg-surface-dim border border-outline-variant rounded p-2 flex flex-col justify-between">
+<span class="text-[10px] font-bold">Surface Dim</span>
+<span class="text-[10px]">#d9dadb</span>
+</div>
+</div>
+</div>
+<!-- Dark Mode Comparison (Mocked visualization) -->
+<div class="space-y-4">
+<h4 class="font-label-md text-label-md font-bold uppercase tracking-widest text-on-surface-variant">Dark Mode Tokens (Reference)</h4>
+<div class="grid grid-cols-2 gap-2">
+<div class="h-16 bg-[#121212] text-white rounded p-2 flex flex-col justify-between">
+<span class="text-[10px] font-bold">App Bg</span>
+<span class="text-[10px]">#121212</span>
+</div>
+<div class="h-16 bg-[#1e1e1e] text-white rounded p-2 flex flex-col justify-between">
+<span class="text-[10px] font-bold">Surface</span>
+<span class="text-[10px]">#1e1e1e</span>
+</div>
+<div class="h-16 bg-[#141414] text-white rounded p-2 flex flex-col justify-between">
+<span class="text-[10px] font-bold">Surface Dim</span>
+<span class="text-[10px]">#141414</span>
+</div>
+<div class="h-16 bg-[#333333] text-white rounded p-2 flex flex-col justify-between">
+<span class="text-[10px] font-bold">Outline</span>
+<span class="text-[10px]">#333333</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Section 3: Typography Stack -->
+<section>
+<div class="flex items-center gap-4 mb-gutter">
+<div class="w-2 h-8 bg-tertiary rounded-full"></div>
+<h3 class="font-headline-lg text-headline-lg">Typography Stack</h3>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden">
+<div class="p-gutter border-b border-outline-variant grid grid-cols-4 items-center">
+<span class="font-tag-uppercase text-tag-uppercase text-on-surface-variant">Scale Name</span>
+<span class="col-span-3 font-tag-uppercase text-tag-uppercase text-on-surface-variant">Visual Reference</span>
+</div>
+<div class="p-gutter border-b border-outline-variant grid grid-cols-4 items-baseline">
+<span class="font-label-sm text-label-sm">Headline XL</span>
+<h1 class="col-span-3 font-headline-xl text-headline-xl">Corporate intelligence, simplified.</h1>
+</div>
+<div class="p-gutter border-b border-outline-variant grid grid-cols-4 items-baseline">
+<span class="font-label-sm text-label-sm">Headline LG</span>
+<h2 class="col-span-3 font-headline-lg text-headline-lg">System Dashboard &amp; Analytics</h2>
+</div>
+<div class="p-gutter border-b border-outline-variant grid grid-cols-4 items-baseline">
+<span class="font-label-sm text-label-sm">Body MD</span>
+<p class="col-span-3 font-body-md text-body-md">The Nexus Summarizer uses high-fidelity data ingestion to create concise, actionable insights for high-productivity corporate teams.</p>
+</div>
+<div class="p-gutter grid grid-cols-4 items-baseline">
+<span class="font-label-sm text-label-sm">Label MD</span>
+<span class="col-span-3 font-label-md text-label-md">Last updated 2 minutes ago</span>
+</div>
+</div>
+</section>
+<!-- Section 4: Interactive Elements & Forms -->
+<section>
+<div class="flex items-center gap-4 mb-gutter">
+<div class="w-2 h-8 bg-primary rounded-full"></div>
+<h3 class="font-headline-lg text-headline-lg">Interactive Elements</h3>
+</div>
+<div class="grid grid-cols-1 gap-stack-gap md:grid-cols-4">
+<!-- Buttons Column -->
+<div class="space-y-stack-gap">
+<h4 class="font-label-md text-label-md font-bold text-on-surface-variant mb-4">Button States</h4>
+<button class="w-full bg-primary text-on-primary rounded-xl px-6 py-3 font-label-md text-label-md shadow-sm hover:brightness-110 active:scale-95 transition-all">Primary Action</button>
+<button class="w-full bg-surface-container-high text-on-surface rounded-xl px-6 py-3 font-label-md text-label-md hover:bg-surface-dim active:scale-95 transition-all">Secondary Action</button>
+<button class="w-full border-2 border-outline-variant text-on-surface-variant rounded-xl px-6 py-3 font-label-md text-label-md hover:border-primary hover:text-primary active:scale-95 transition-all">Outlined Action</button>
+</div>
+<!-- Form Fields Column -->
+<div class="space-y-stack-gap">
+<h4 class="font-label-md text-label-md font-bold text-on-surface-variant mb-4">Form Inputs</h4>
+<div class="space-y-2">
+<label class="font-label-sm text-label-sm block">System Search</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-surface-container-low border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all" placeholder="Filter summaries..." type="text">
+</div>
+</div>
+<div class="space-y-2">
+<label class="font-label-sm text-label-sm block">Output Format</label>
+<select class="w-full px-4 py-2 bg-surface-container-low border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all">
+<option>Executive Summary</option>
+<option>Technical Breakdown</option>
+<option>Key Findings</option>
+</select>
+</div>
+</div>
+<!-- Toggles & Status Column -->
+<div class="space-y-stack-gap">
+<h4 class="font-label-md text-label-md font-bold text-on-surface-variant mb-4">Toggles &amp; Status</h4>
+<div class="flex items-center justify-between p-3 bg-surface-container rounded-xl">
+<span class="font-label-md text-label-md">Real-time Sync</span>
+<div class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox">
+<div class="w-11 h-6 bg-surface-dim peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</div>
+</div>
+<div class="flex items-center justify-between p-3 bg-surface-container rounded-xl">
+<span class="font-label-md text-label-md">Auto-Archive</span>
+<div class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox">
+<div class="w-11 h-6 bg-surface-dim peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</div>
+</div>
+</div>
+<div class="space-y-stack-gap">
+    <h4 class="font-label-md text-label-md font-bold text-on-surface-variant mb-4">Selection Controls</h4>
+    <div class="space-y-4">
+        <div class="space-y-2">
+            <p class="font-label-sm text-label-sm font-bold">Checkboxes</p>
+            <label class="flex items-center gap-3 cursor-pointer group">
+                <input type="checkbox" checked="" class="w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary/20">
+                <span class="font-body-sm text-body-sm">Nexus Red Checked</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer group">
+                <input type="checkbox" class="w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary/20">
+                <span class="font-body-sm text-body-sm">Unchecked State</span>
+            </label>
+            <label class="flex items-center gap-3 opacity-50 cursor-not-allowed">
+                <input type="checkbox" disabled="" class="w-5 h-5 rounded border-outline-variant bg-surface-dim">
+                <span class="font-body-sm text-body-sm">Disabled Checkbox</span>
+            </label>
+        </div>
+        <div class="space-y-2">
+            <p class="font-label-sm text-label-sm font-bold">Radio Buttons</p>
+            <label class="flex items-center gap-3 cursor-pointer group">
+                <input type="radio" name="demo-radio" checked="" class="w-5 h-5 border-outline-variant text-primary focus:ring-primary/20">
+                <span class="font-body-sm text-body-sm">Selected Option</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer group">
+                <input type="radio" name="demo-radio" class="w-5 h-5 border-outline-variant text-primary focus:ring-primary/20">
+                <span class="font-body-sm text-body-sm">Unselected Option</span>
+            </label>
+            <label class="flex items-center gap-3 opacity-50 cursor-not-allowed">
+                <input type="radio" disabled="" class="w-5 h-5 border-outline-variant bg-surface-dim">
+                <span class="font-body-sm text-body-sm">Disabled Radio</span>
+            </label>
+        </div>
+    </div>
+</div></div><div class="grid grid-cols-1 md:grid-cols-2 gap-stack-gap mt-gutter md:grid-cols-4" style="opacity: 0;">
+    <div class="space-y-stack-gap">
+        <h4 class="font-label-md text-label-md font-bold text-on-surface-variant mb-4">Standard Select</h4>
+        <div class="space-y-2">
+            <label class="font-label-sm text-label-sm block">Default State</label>
+            <select class="w-full px-4 py-2 bg-surface-container-low border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all">
+                <option disabled="" selected="">Choose option...</option>
+                <option>Option 1</option>
+                <option>Option 2</option>
+            </select>
+        </div>
+    </div>
+    <div class="space-y-stack-gap">
+        <h4 class="font-label-md text-label-md font-bold text-on-surface-variant mb-4">Dropdown Menu State</h4>
+        <div class="relative">
+            <div class="w-full px-4 py-2 bg-surface-container-low border border-primary rounded-t-xl flex justify-between items-center">
+                <span class="text-body-sm">Select Item...</span>
+                <span class="material-symbols-outlined">expand_less</span>
+            </div>
+            <div class="absolute top-full left-0 w-full bg-surface-container-lowest border-x border-b border-outline-variant rounded-b-xl shadow-lg overflow-hidden z-10">
+                <div class="px-4 py-2 hover:bg-surface-container-high cursor-pointer text-body-sm">Item One</div>
+                <div class="px-4 py-2 bg-primary-container text-on-primary-container cursor-pointer text-body-sm">Item Two (Hover/Active)</div>
+                <div class="px-4 py-2 hover:bg-surface-container-high cursor-pointer text-body-sm">Item Three</div>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+<!-- Section 5: Badges & Data Displays -->
+<section>
+<div class="flex items-center gap-4 mb-gutter">
+<div class="w-2 h-8 bg-status-online-container rounded-full"></div>
+<h3 class="font-headline-lg text-headline-lg">Badges &amp; Metadata Tags</h3>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-gutter shadow-sm grid grid-cols-1 md:grid-cols-2 gap-gutter">
+<div>
+<h4 class="font-label-md text-label-md font-bold mb-4">Processing Status</h4>
+<div class="flex flex-wrap gap-3">
+<span class="flex items-center gap-1.5 px-3 py-1 bg-tertiary-container/10 text-tertiary border border-tertiary/20 rounded-full font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span> Done
+                            </span>
+<span class="flex items-center gap-1.5 px-3 py-1 bg-primary-container/10 text-primary border border-primary/20 rounded-full font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-sm pulse-online">pending</span> Processing
+                            </span>
+<span class="flex items-center gap-1.5 px-3 py-1 bg-error-container/10 text-error border border-error/20 rounded-full font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-sm">error</span> Failed
+                            </span>
+</div>
+</div>
+<div>
+<h4 class="font-label-md text-label-md font-bold mb-4">Content Metadata</h4>
+<div class="flex flex-wrap gap-2">
+<span class="px-2.5 py-1 bg-surface-container-highest text-on-surface-variant rounded-lg font-tag-uppercase text-tag-uppercase">SHORT</span>
+<span class="px-2.5 py-1 bg-surface-container-highest text-on-surface-variant rounded-lg font-tag-uppercase text-tag-uppercase">XL</span>
+<span class="px-2.5 py-1 bg-surface-container-highest text-on-surface-variant rounded-lg font-tag-uppercase text-tag-uppercase">LONG STRUCTURED</span>
+<span class="px-2.5 py-1 bg-surface-container-highest text-on-surface-variant rounded-lg font-tag-uppercase text-tag-uppercase">EN</span>
+<span class="px-2.5 py-1 bg-surface-container-highest text-on-surface-variant rounded-lg font-tag-uppercase text-tag-uppercase">RU</span>
+<span class="px-2.5 py-1 bg-surface-container-highest text-on-surface-variant rounded-lg font-tag-uppercase text-tag-uppercase">UK</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Section 6: Cards & Layout Samples -->
+<section>
+<div class="flex items-center gap-4 mb-gutter">
+<div class="w-2 h-8 bg-primary rounded-full"></div>
+<h3 class="font-headline-lg text-headline-lg">Component Patterns</h3>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter">
+<!-- Metric Card -->
+<div class="bg-surface-container-lowest border border-outline-variant p-gutter rounded-xl shadow-sm hover:shadow-md transition-all">
+<div class="flex justify-between items-start mb-4">
+<span class="p-2 bg-secondary-container text-on-secondary-container rounded-lg">
+<span class="material-symbols-outlined">speed</span>
+</span>
+<span class="text-status-online font-label-sm text-label-sm">+12%</span>
+</div>
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">Inference Speed</p>
+<p class="font-headline-lg text-headline-lg font-bold">142ms <span class="text-body-sm font-normal text-on-surface-variant">avg</span></p>
+</div>
+<!-- Summary Card (Bento Style) -->
+<div class="md:col-span-2 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden flex flex-col md:flex-row">
+<div class="md:w-1/3 h-48 md:h-auto relative overflow-hidden">
+<img class="absolute inset-0 w-full h-full object-cover" data-alt="A stylized 3D digital visualization of a neural network processing data streams. The network glows with deep red pulses of light against a clean, light-mode background. The aesthetic is professional, architectural, and highly technical, representing efficient data ingestion." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDzV3fdmsMX1uYqWOnqg0Bi5XWp59F4miEvoo1thkPVpahCQPvhIrlFQru7WORPWSIY4XB10on_d5ri1oe7aMTTkE9qTK7j1yX8ZLaJ1_oHqzwVuvskDtLAE5YkLz3jsPGCbVhQRUeCg41RhIEuIQ9Q3_6SE5LaVkmiiB9pckLqOna_V6wtCkB85n5NnfB8zMRCmCwLpQ0RAzdvFEEEp846ZN7iqThyTAjeW8IsUmWpJ56WK8jaB-Z2dyTmQ87HHVOOziH1SCBiTAo">
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/80 to-transparent md:hidden"></div>
+</div>
+<div class="p-gutter flex-grow">
+<div class="flex items-center gap-2 mb-2">
+<span class="px-2 py-0.5 bg-primary-container text-on-primary-container rounded font-tag-uppercase text-tag-uppercase">AI MODEL v4</span>
+<span class="text-on-surface-variant font-label-sm text-label-sm">Active Now</span>
+</div>
+<h4 class="font-headline-lg-mobile text-headline-lg-mobile font-bold mb-2">System Health &amp; Live Ingestion</h4>
+<p class="font-body-md text-body-md text-on-surface-variant mb-6">Monitoring live performance across all API endpoints. Currently processing 4,200 tokens per minute with 99.8% accuracy.</p>
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-2 text-primary font-label-md text-label-md hover:underline">
+                                    View Full Logs <span class="material-symbols-outlined text-sm">open_in_new</span>
+</button>
+<button class="flex items-center gap-2 text-on-surface-variant font-label-md text-label-md hover:text-on-surface">
+                                    Refresh <span class="material-symbols-outlined text-sm">refresh</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Floating Action Button (Shared Component Logic) -->
+<!-- Prohibit suppression on Dashboard-style screens; keep for Library/Resources -->
+<button class="fixed bottom-8 right-8 w-14 h-14 bg-primary text-on-primary rounded-full shadow-lg flex items-center justify-center active:scale-95 transition-all hover:brightness-110 z-20 group">
+<span class="material-symbols-outlined">help</span>
+<span class="absolute right-full mr-4 bg-inverse-surface text-inverse-on-surface px-3 py-1 rounded-lg font-label-sm text-label-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Open Support</span>
+</button>
+
+
+</body></html>

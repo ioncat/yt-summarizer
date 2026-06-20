@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>History - Nexus Summarizer</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-high": "#2c2c2c",
+                        "error": "#ffb4ab",
+                        "surface-container-low": "#1e1e1e",
+                        "on-primary-container": "#ffffff",
+                        "primary-fixed": "#ffdad8",
+                        "on-error-container": "#ffdad6",
+                        "inverse-surface": "#f0f1f2",
+                        "secondary-fixed": "#cfe6f3",
+                        "on-secondary-fixed-variant": "#354a54",
+                        "tertiary-fixed": "#acf4ad",
+                        "primary-container": "#81272b",
+                        "on-error": "#690005",
+                        "background": "#121212",
+                        "on-primary": "#ffffff",
+                        "on-surface": "#e1e3e4",
+                        "on-secondary-container": "#b4cad7",
+                        "surface-variant": "#444748",
+                        "on-surface-variant": "#c4c7c8",
+                        "error-container": "#93000a",
+                        "outline": "#897270",
+                        "secondary": "#b4cad7",
+                        "outline-variant": "#444748",
+                        "inverse-on-surface": "#191c1d",
+                        "surface-container-highest": "#333333",
+                        "secondary-fixed-dim": "#b4cad7",
+                        "surface-tint": "#ffb3b1",
+                        "surface-dim": "#121212",
+                        "surface-bright": "#38393a",
+                        "primary": "#ffb3b1",
+                        "on-tertiary": "#00390f",
+                        "on-tertiary-fixed": "#002107",
+                        "tertiary-container": "#00531d",
+                        "surface": "#121212",
+                        "on-secondary-fixed": "#071e27",
+                        "tertiary": "#91d793",
+                        "status-online": "#a2e9a3",
+                        "on-primary-fixed": "#410007",
+                        "inverse-primary": "#81272b",
+                        "primary-fixed-dim": "#ffb3b1",
+                        "tertiary-fixed-dim": "#91d793",
+                        "surface-container-lowest": "#0b0b0b",
+                        "on-secondary": "#1e333d",
+                        "secondary-container": "#354a54",
+                        "on-primary-fixed-variant": "#81272a",
+                        "on-background": "#e1e3e4",
+                        "status-online-container": "#00531d",
+                        "on-tertiary-fixed-variant": "#08521e",
+                        "on-tertiary-container": "#acf4ad",
+                        "surface-container": "#232323"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "sidebar-width": "16rem",
+                        "section-gap": "2.5rem",
+                        "unit": "4px",
+                        "gutter": "1.5rem",
+                        "container-padding-mobile": "1rem",
+                        "container-padding-desktop": "2rem",
+                        "stack-gap": "1rem"
+                    },
+                    "fontFamily": {
+                        "tag-uppercase": ["Inter"],
+                        "headline-lg-mobile": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "label-md": ["Inter"],
+                        "body-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "headline-xl": ["Inter"],
+                        "body-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "tag-uppercase": ["11px", {"lineHeight": "12px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "label-sm": ["12px", {"lineHeight": "14px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "label-md": ["14px", {"lineHeight": "16px", "fontWeight": "500"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "headline-xl": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        .active-nav { font-variation-settings: 'FILL' 1; }
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            background-color: #a2e9a3;
+            box-shadow: 0 0 0 0 rgba(162, 233, 163, 0.4);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(162, 233, 163, 0.4); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(162, 233, 163, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(162, 233, 163, 0); }
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container overflow-x-hidden">
+<!-- SideNavBar -->
+<aside class="w-sidebar-width h-screen fixed left-0 top-0 bg-surface-container-lowest border-r border-outline-variant flex flex-col p-4 gap-stack-gap z-50">
+<div class="mb-8 px-2">
+<h1 class="font-headline-lg text-headline-lg text-primary">Nexus Summarizer</h1>
+<p class="font-label-sm text-label-sm text-on-surface-variant">AI Video Insights</p>
+</div>
+<nav class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high transition-colors duration-200 font-body-md text-body-md rounded-lg active:scale-95 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="add_circle">add_circle</span>
+<span>New</span>
+</a>
+<!-- Active State Logic: History -->
+<a class="flex items-center gap-3 px-4 py-3 bg-primary-container text-on-primary-container font-semibold rounded-lg active:scale-95 transition-transform" href="#">
+<span class="material-symbols-outlined active-nav" data-icon="history">history</span>
+<span>History</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high transition-colors duration-200 font-body-md text-body-md rounded-lg active:scale-95 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="queue_music">queue_music</span>
+<span>Queue</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high transition-colors duration-200 font-body-md text-body-md rounded-lg active:scale-95 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span>Benchmarks</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high transition-colors duration-200 font-body-md text-body-md rounded-lg active:scale-95 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+</aside>
+<!-- TopNavBar -->
+<header class="h-16 fixed top-0 right-0 w-[calc(100%-16rem)] bg-surface border-b border-outline-variant shadow-sm flex justify-between items-center px-gutter z-40">
+<div class="flex items-center flex-1 max-w-xl">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-label-md">search</span>
+<input class="w-full bg-surface-container-low border-none rounded-full pl-10 pr-4 py-2 focus:ring-2 focus:ring-primary/40 text-on-surface text-body-sm placeholder-on-surface-variant" placeholder="Global search..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4 text-on-surface-variant">
+<div class="flex items-center gap-2">
+<span class="pulse-dot"></span>
+<span class="font-label-sm text-label-sm">API: ONLINE</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="pulse-dot"></span>
+<span class="font-label-sm text-label-sm">Ollama: READY</span>
+</div>
+</div>
+<div class="flex items-center gap-3 ml-4">
+<button class="material-symbols-outlined p-2 text-on-surface-variant hover:bg-surface-container-high rounded-full transition-colors" data-icon="monitor_heart">monitor_heart</button>
+<button class="material-symbols-outlined p-2 text-on-surface-variant hover:bg-surface-container-high rounded-full transition-colors" data-icon="api">api</button>
+<button class="material-symbols-outlined p-2 text-on-surface-variant hover:bg-surface-container-high rounded-full transition-colors" data-icon="smart_toy">smart_toy</button>
+<div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center overflow-hidden ml-2 ring-1 ring-outline-variant">
+<img class="w-full h-full object-cover" data-alt="User Avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCNkrqMto2s0RihJQMT97XkD_gjGJKyKIJ7I09pUPSBzPsf8A1tansk61inYrn_z8o8pZQX-2jWL5jbEQ66FIcf6XX_k0Tk54K0CK6e-b5Wy9fzUOaqdd6U_LzvLm0gljFhjNhRWVFqhvawJjORC90yVExTKH3C4WA2tTnpHHdsM9aVSDuS5Dw3iM-9pVJH7LXbF9bXIm2E2hePVeRFBcxV07-xDpIG_8CNmILtGC6AenkW5qNhM7A1VHOJqky_U2D-7nBHSHaJRME"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="ml-sidebar-width mt-16 p-gutter min-h-[calc(100vh-4rem)]">
+<div class="max-w-[1200px] mx-auto py-8">
+<!-- History Content Card -->
+<div class="bg-surface-container-low rounded-xl shadow-lg border border-outline-variant overflow-hidden">
+<!-- Card Header Actions -->
+<div class="p-6 border-b border-outline-variant space-y-6">
+<div class="flex justify-between items-center">
+<h2 class="font-headline-xl text-headline-xl text-on-surface">History</h2>
+<div class="flex items-center gap-2">
+<button class="bg-surface-container-high text-on-surface px-4 py-2 rounded-lg font-label-md text-label-md hover:bg-surface-container-highest transition-colors active:scale-95">Select</button>
+</div>
+</div>
+<div class="flex flex-col md:flex-row gap-4 items-center">
+<div class="relative flex-1 group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">search</span>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg pl-10 pr-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-on-surface text-body-md outline-none placeholder-on-surface-variant" placeholder="Search by title or channel..." type="text"/>
+</div>
+<button class="flex items-center gap-2 border border-outline-variant px-5 py-2.5 rounded-lg text-on-surface hover:bg-surface-container-high transition-colors font-label-md text-label-md">
+<span class="material-symbols-outlined" data-icon="grade">grade</span>
+                        Favorites
+                    </button>
+</div>
+</div>
+<!-- History List -->
+<div class="divide-y divide-outline-variant">
+<!-- Row 1 -->
+<div class="p-4 md:px-6 md:py-5 flex items-center gap-4 hover:bg-surface-container-high transition-colors group">
+<button class="material-symbols-outlined text-on-surface-variant/40 hover:text-amber-400 transition-colors" data-icon="star">star</button>
+<div class="flex-1 min-w-0">
+<h3 class="font-body-md text-body-md text-on-surface truncate font-semibold mb-0.5">Мой публичный портфель из стейблкоинов провалился</h3>
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-on-surface-variant font-body-sm text-body-sm">
+<span>CryptoInside</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>15.06.2026</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>17 537 chars</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<div class="flex gap-0.5 text-status-online">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+<span class="bg-surface-container-highest text-on-surface px-2 py-0.5 rounded text-tag-uppercase font-tag-uppercase flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">description</span> Short
+                        </span>
+<span class="bg-surface-container-highest text-on-surface px-2 py-0.5 rounded text-tag-uppercase font-tag-uppercase">RU</span>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity border border-error text-error px-3 py-1 rounded font-label-sm text-label-sm hover:bg-error hover:text-on-error active:scale-95">Delete</button>
+</div>
+</div>
+<!-- Row 2 -->
+<div class="p-4 md:px-6 md:py-5 flex items-center gap-4 hover:bg-surface-container-high transition-colors group">
+<button class="material-symbols-outlined text-on-surface-variant/40 hover:text-amber-400 transition-colors" data-icon="star">star</button>
+<div class="flex-1 min-w-0">
+<h3 class="font-body-md text-body-md text-on-surface truncate font-semibold mb-0.5">Простые подходы к системному улучшению AI-продуктов</h3>
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-on-surface-variant font-body-sm text-body-sm">
+<span>ШВМ - Программы по AI и высшей математике</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>04.06.2026</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>65 851 chars</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<div class="flex gap-0.5 text-status-online">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+<span class="bg-error-container text-on-error-container px-2 py-0.5 rounded text-tag-uppercase font-tag-uppercase flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">menu_book</span> XL
+                        </span>
+<span class="bg-surface-container-highest text-on-surface px-2 py-0.5 rounded text-tag-uppercase font-tag-uppercase">RU</span>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity border border-error text-error px-3 py-1 rounded font-label-sm text-label-sm hover:bg-error hover:text-on-error active:scale-95">Delete</button>
+</div>
+</div>
+<!-- Row 3 -->
+<div class="p-4 md:px-6 md:py-5 flex items-center gap-4 hover:bg-surface-container-high transition-colors group">
+<button class="material-symbols-outlined text-on-surface-variant/40 hover:text-amber-400 transition-colors" data-icon="star">star</button>
+<div class="flex-1 min-w-0">
+<h3 class="font-body-md text-body-md text-on-surface truncate font-semibold mb-0.5">Тебе врут про скорость локальных LLM. Как я выжал 7...</h3>
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-on-surface-variant font-body-sm text-body-sm">
+<span>johenews</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>04.06.2026</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>19 844 chars</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<div class="flex gap-0.5 text-status-online">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+<span class="bg-surface-container-highest text-on-surface px-2 py-0.5 rounded text-tag-uppercase font-tag-uppercase flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">description</span> Short
+                        </span>
+<span class="bg-surface-container-highest text-on-surface px-2 py-0.5 rounded text-tag-uppercase font-tag-uppercase">RU</span>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity border border-error text-error px-3 py-1 rounded font-label-sm text-label-sm hover:bg-error hover:text-on-error active:scale-95">Delete</button>
+</div>
+</div>
+<!-- Row 4 -->
+<div class="p-4 md:px-6 md:py-5 flex items-center gap-4 hover:bg-surface-container-high transition-colors group">
+<button class="material-symbols-outlined text-on-surface-variant/40 hover:text-amber-400 transition-colors" data-icon="star">star</button>
+<div class="flex-1 min-w-0">
+<h3 class="font-body-md text-body-md text-on-surface truncate font-semibold mb-0.5">ФУРСА: Куди ІНВЕСТУВАТИ, коли СВІТ «ТРЯСЕ»?...</h3>
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-on-surface-variant font-body-sm text-body-sm">
+<span>Саша і Сенс</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>03.06.2026</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>36 129 chars</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<div class="flex gap-0.5 text-status-online">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+<span class="bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded text-tag-uppercase font-tag-uppercase flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">article</span> Long Structured
+                        </span>
+<span class="bg-surface-container-highest text-on-surface px-2 py-0.5 rounded text-tag-uppercase font-tag-uppercase">UK</span>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity border border-error text-error px-3 py-1 rounded font-label-sm text-label-sm hover:bg-error hover:text-on-error active:scale-95">Delete</button>
+</div>
+</div>
+<!-- Row 5 -->
+<div class="p-4 md:px-6 md:py-5 flex items-center gap-4 hover:bg-surface-container-high transition-colors group">
+<button class="material-symbols-outlined text-amber-400" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</button>
+<div class="flex-1 min-w-0">
+<h3 class="font-body-md text-body-md text-on-surface truncate font-semibold mb-0.5">Ex-Google CEO just exposed the whole AI sh*tshow</h3>
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-on-surface-variant font-body-sm text-body-sm">
+<span>Mo Bitar</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>02.06.2026</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>7 460 chars</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<div class="flex gap-0.5 text-status-online">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+<span class="bg-surface-container-highest text-on-surface px-2 py-0.5 rounded text-tag-uppercase font-tag-uppercase flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">description</span> Short
+                        </span>
+<span class="bg-surface-container-highest text-on-surface px-2 py-0.5 rounded text-tag-uppercase font-tag-uppercase">EN</span>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity border border-error text-error px-3 py-1 rounded font-label-sm text-label-sm hover:bg-error hover:text-on-error active:scale-95">Delete</button>
+</div>
+</div>
+<!-- Row 6 -->
+<div class="p-4 md:px-6 md:py-5 flex items-center gap-4 hover:bg-surface-container-high transition-colors group">
+<button class="material-symbols-outlined text-on-surface-variant/40 hover:text-amber-400 transition-colors" data-icon="star">star</button>
+<div class="flex-1 min-w-0">
+<h3 class="font-body-md text-body-md text-on-surface truncate font-semibold mb-0.5">Why Sam Altman &amp; Elon Musk Are Lying About AI | Scott ...</h3>
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-on-surface-variant font-body-sm text-body-sm">
+<span>Enlightened PodClips</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>02.06.2026</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>8 245 chars</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<div class="flex gap-0.5 text-status-online">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+<span class="bg-surface-container-highest text-on-surface px-2 py-0.5 rounded text-tag-uppercase font-tag-uppercase flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">description</span> Short
+                        </span>
+<span class="bg-surface-container-highest text-on-surface px-2 py-0.5 rounded text-tag-uppercase font-tag-uppercase">EN</span>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity border border-error text-error px-3 py-1 rounded font-label-sm text-label-sm hover:bg-error hover:text-on-error active:scale-95">Delete</button>
+</div>
+</div>
+<!-- Row 7 -->
+<div class="p-4 md:px-6 md:py-5 flex items-center gap-4 hover:bg-surface-container-high transition-colors group">
+<button class="material-symbols-outlined text-on-surface-variant/40 hover:text-amber-400 transition-colors" data-icon="star">star</button>
+<div class="flex-1 min-w-0">
+<h3 class="font-body-md text-body-md text-on-surface truncate font-semibold mb-0.5">Батарея Tesla УМРЕТ?: 20 неудобных вопросов об EV о...</h3>
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-on-surface-variant font-body-sm text-body-sm">
+<span>Charge &amp; Cheers</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>02.06.2026</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>23 182 chars</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<div class="flex gap-0.5 text-status-online">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+<span class="bg-surface-container-highest text-on-surface px-2 py-0.5 rounded text-tag-uppercase font-tag-uppercase flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">description</span> Short
+                        </span>
+<span class="bg-surface-container-highest text-on-surface px-2 py-0.5 rounded text-tag-uppercase font-tag-uppercase">RU</span>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity border border-error text-error px-3 py-1 rounded font-label-sm text-label-sm hover:bg-error hover:text-on-error active:scale-95">Delete</button>
+</div>
+</div>
+</div>
+<!-- Pagination Footer -->
+<div class="p-6 bg-surface-container-highest/20 flex justify-center">
+<button class="text-primary font-label-md text-label-md hover:underline decoration-2 underline-offset-4">Show More Activity</button>
+</div>
+</div>
+<!-- Summary Statistics -->
+<div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="bg-surface-container-low p-6 rounded-xl border border-outline-variant">
+<p class="text-on-surface-variant font-label-sm text-label-sm uppercase mb-2">Total Summaries</p>
+<div class="flex items-end gap-2">
+<span class="text-headline-xl font-headline-xl text-primary">1,284</span>
+<span class="text-status-online font-label-sm text-label-sm pb-1">+12 this week</span>
+</div>
+</div>
+<div class="bg-surface-container-low p-6 rounded-xl border border-outline-variant">
+<p class="text-on-surface-variant font-label-sm text-label-sm uppercase mb-2">Time Saved</p>
+<div class="flex items-end gap-2">
+<span class="text-headline-xl font-headline-xl text-on-surface">42h 15m</span>
+<span class="text-on-surface-variant font-label-sm text-label-sm pb-1">AI Efficiency</span>
+</div>
+</div>
+<div class="bg-surface-container-low p-6 rounded-xl border border-outline-variant">
+<p class="text-on-surface-variant font-label-sm text-label-sm uppercase mb-2">Knowledge Density</p>
+<div class="flex items-end gap-2">
+<span class="text-headline-xl font-headline-xl text-on-surface">8.4M</span>
+<span class="text-on-surface-variant font-label-sm text-label-sm pb-1">Chars Processed</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<script>
+    // Star toggle micro-interaction
+    document.querySelectorAll('[data-icon="star"]').forEach(star => {
+        star.addEventListener('click', function() {
+            const isFilled = this.style.fontVariationSettings.includes("'FILL' 1");
+            if (isFilled) {
+                this.style.fontVariationSettings = "'FILL' 0";
+                this.classList.replace('text-amber-400', 'text-on-surface-variant/40');
+            } else {
+                this.style.fontVariationSettings = "'FILL' 1";
+                this.classList.replace('text-on-surface-variant/40', 'text-amber-400');
+            }
+        });
+    });
+
+    // Search bar focus effect
+    const mainSearch = document.querySelector('input[placeholder="Search by title or channel..."]');
+    mainSearch.addEventListener('focus', () => {
+        mainSearch.parentElement.classList.add('ring-2', 'ring-primary/20');
+    });
+    mainSearch.addEventListener('blur', () => {
+        mainSearch.parentElement.classList.remove('ring-2', 'ring-primary/20');
+    });
+</script>
+</body></html>

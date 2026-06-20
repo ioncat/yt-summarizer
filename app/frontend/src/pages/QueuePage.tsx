@@ -1,24 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { getQueue, deleteQueueItem, clearQueuePending, clearQueueFailed, QueueItem } from '../api'
 
-const STATUS_ICON: Record<string, string> = {
-  pending: '⏸',
-  processing: '⏳',
-  done: '✓',
-  failed: '✗',
-  skipped: '—',
-}
-
-const STATUS_CLASS: Record<string, string> = {
-  pending: 'queue-status--pending',
-  processing: 'queue-status--processing',
-  done: 'queue-status--done',
-  failed: 'queue-status--failed',
-  skipped: 'queue-status--skipped',
-}
-
-/** Derive active stage from progress string. */
 function activeStage(progress: string | null): string | null {
   if (!progress) return null
   if (progress.startsWith('extracting')) return 'extract'
@@ -45,6 +28,8 @@ function formatTime(iso: string | null) {
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+const STATUS_ORDER: Record<string, number> = { processing: 0, pending: 1, failed: 2, done: 3, skipped: 4 }
+
 export default function QueuePage() {
   const [items, setItems] = useState<QueueItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -55,16 +40,13 @@ export default function QueuePage() {
     try {
       const data = await getQueue()
       setItems(data.items)
-    } catch {
-      // ignore
-    } finally {
+    } catch { /* ignore */ } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
     load()
-    // Always poll: 3s when active items present, 5s when idle (picks up new items added externally)
     pollRef.current = setInterval(load, 3000)
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -83,9 +65,7 @@ export default function QueuePage() {
     try {
       const res = await clearQueuePending()
       if (res.cleared > 0) load()
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   }
 
   async function handleClearFailed() {
@@ -93,160 +73,250 @@ export default function QueuePage() {
     try {
       const res = await clearQueueFailed()
       if (res.cleared > 0) setItems(prev => prev.filter(i => i.status !== 'failed'))
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   }
 
   const pendingCount = items.filter(i => i.status === 'pending').length
-  const failedCount = items.filter(i => i.status === 'failed').length
+  const failedCount  = items.filter(i => i.status === 'failed').length
   const processingItem = items.find(i => i.status === 'processing')
 
-  const STATUS_ORDER: Record<string, number> = { processing: 0, pending: 1, failed: 2, done: 3, skipped: 4 }
   const sortedItems = [...items].sort((a, b) => {
     const sd = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)
     if (sd !== 0) return sd
-    // Within same status: newest first
     return new Date(b.added_at).getTime() - new Date(a.added_at).getTime()
   })
 
   return (
-    <div className="container">
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-          <h2 style={{ margin: 0 }}>⏱ Processing Queue</h2>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+    <div className="p-6 md:p-8 max-w-[1200px] mx-auto">
+      <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden">
+
+        {/* Header */}
+        <div className="p-6 flex justify-between items-center border-b border-outline-variant">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-primary text-[28px]">timer</span>
+            <h2 className="text-headline-lg font-bold text-on-surface">Processing Queue</h2>
+          </div>
+          <div className="flex gap-3 flex-wrap">
             {failedCount > 0 && (
-              <button className="btn btn-danger btn-sm" onClick={handleClearFailed}>
+              <button
+                onClick={handleClearFailed}
+                className="px-4 py-2 border border-error text-error rounded-lg text-label-md font-semibold hover:bg-error-container transition-colors"
+              >
                 Clean failed ({failedCount})
               </button>
             )}
             {pendingCount > 0 && (
-              <button className="btn btn-secondary btn-sm" onClick={handleClearPending}>
+              <button
+                onClick={handleClearPending}
+                className="px-4 py-2 bg-surface-container-high text-on-surface-variant rounded-lg text-label-md font-semibold hover:bg-surface-container-highest transition-colors"
+              >
                 Clear pending ({pendingCount})
               </button>
             )}
-            <Link to="/" className="btn btn-secondary btn-sm">← Home</Link>
+            <Link
+              to="/"
+              className="px-4 py-2 bg-surface-container-high text-on-surface-variant rounded-lg text-label-md font-semibold hover:bg-surface-container-highest transition-colors flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-[18px]">keyboard_backspace</span>
+              Home
+            </Link>
           </div>
         </div>
 
-        {loading && <div className="empty">Loading…</div>}
-
-        {!loading && items.length === 0 && (
-          <div className="empty">No items in queue. <Link to="/">Add videos →</Link></div>
+        {/* Processing banner */}
+        {processingItem && (
+          <div className="px-6 py-4 bg-secondary-container/30 border-b border-outline-variant">
+            <div className="flex items-center gap-4 text-body-md flex-wrap">
+              <span className="material-symbols-outlined text-secondary pulse-dot">sync</span>
+              <span className="font-medium text-on-surface">
+                Processing:{' '}
+                <span className="text-primary font-semibold">{shortUrl(processingItem.url)}</span>
+              </span>
+              {processingItem.pipeline_stages.length > 0 && (
+                <div className="flex items-center gap-1 text-label-sm">
+                  {processingItem.pipeline_stages.map((s, i) => {
+                    const cur = activeStage(processingItem.progress)
+                    const isActive = cur === s
+                    return (
+                      <span key={s} className="flex items-center gap-1">
+                        {i > 0 && (
+                          <span className="material-symbols-outlined text-[14px] text-outline">arrow_forward</span>
+                        )}
+                        <span className={isActive ? 'text-primary font-bold' : 'text-on-surface-variant'}>
+                          {s}
+                        </span>
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+              {processingItem.progress && (
+                <span className="ml-auto text-secondary italic text-body-sm">{processingItem.progress}</span>
+              )}
+            </div>
+          </div>
         )}
 
-        {!loading && items.length > 0 && (
-          <div className="queue-list">
-            {processingItem && (
-              <div className="queue-processing-banner">
-                <span className="tab-spinner" style={{ marginRight: '0.5rem' }} />
-                Processing: <strong>{shortUrl(processingItem.url)}</strong>
-                {processingItem.pipeline_stages.length > 0 && (
-                  <span className="meta-chip" style={{ marginLeft: '0.5rem' }}>
-                    {processingItem.pipeline_stages.join(' → ')}
-                  </span>
-                )}
-                {processingItem.progress && (
-                  <span className="meta-chip" style={{ marginLeft: '0.5rem', opacity: 0.85 }}>
-                    {processingItem.progress}
-                  </span>
-                )}
-              </div>
-            )}
+        {/* Loading */}
+        {loading && (
+          <div className="py-16 text-center text-secondary text-body-md">Loading…</div>
+        )}
 
-            <table className="queue-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>URL</th>
-                  <th>Pipeline</th>
-                  <th>Status</th>
-                  <th>Added</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedItems.map((item, idx) => (
-                  <>
-                    <tr key={item.id} className={`queue-row queue-row--${item.status}`}>
-                      <td className="queue-cell-num">{idx + 1}</td>
-                      <td className="queue-cell-url">
-                        {item.status === 'done' && item.video_id ? (
-                          <Link to={`/result/${item.video_id}`}>{shortUrl(item.url)}</Link>
-                        ) : (
-                          <span title={item.url}>{shortUrl(item.url)}</span>
-                        )}
-                      </td>
-                      <td className="queue-cell-pipeline">
-                        {item.status === 'processing' ? (
-                          <span>
+        {/* Empty */}
+        {!loading && items.length === 0 && (
+          <div className="py-16 text-center">
+            <span className="material-symbols-outlined text-[48px] text-outline-variant block mb-3">inbox</span>
+            <p className="text-body-md text-secondary">
+              Queue is empty.{' '}
+              <Link to="/" className="text-primary font-semibold hover:underline">Add videos →</Link>
+            </p>
+          </div>
+        )}
+
+        {/* Table */}
+        {!loading && items.length > 0 && (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-surface-container-low border-b border-outline-variant">
+                    <th className="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider">#</th>
+                    <th className="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider">URL</th>
+                    <th className="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider">Pipeline</th>
+                    <th className="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider text-center">Status</th>
+                    <th className="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider text-right">Added</th>
+                    <th className="px-6 py-4 w-10" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant/30">
+                  {sortedItems.map((item, idx) => (
+                    <Fragment key={item.id}>
+                      <tr className={`transition-colors ${
+                        item.status === 'processing' ? 'bg-secondary-container/10 hover:bg-secondary-container/20'
+                        : item.status === 'failed'   ? 'bg-error-container/5 hover:bg-error-container/20'
+                        : 'hover:bg-surface-container-high'
+                      }`}>
+                        <td className="px-6 py-5 text-on-surface-variant text-body-sm">{idx + 1}</td>
+
+                        {/* URL */}
+                        <td className="px-6 py-5 text-body-sm">
+                          {item.status === 'done' && item.video_id ? (
+                            <Link to={`/result/${item.video_id}`} className="text-primary font-medium hover:underline">
+                              {shortUrl(item.url)}
+                            </Link>
+                          ) : (
+                            <span className="text-primary font-medium" title={item.url}>{shortUrl(item.url)}</span>
+                          )}
+                        </td>
+
+                        {/* Pipeline */}
+                        <td className="px-6 py-5">
+                          <div className="flex items-center gap-1 text-label-sm flex-wrap">
                             {item.pipeline_stages.map((s, i) => {
-                              const cur = activeStage(item.progress)
+                              const cur = item.status === 'processing' ? activeStage(item.progress) : null
+                              const curIdx = cur ? item.pipeline_stages.indexOf(cur) : -1
                               const isActive = cur === s
-                              const isDone = cur ? item.pipeline_stages.indexOf(cur) > i : false
+                              const isDone = curIdx > -1 && curIdx > i
                               return (
-                                <span key={s}>
-                                  {i > 0 && <span style={{ opacity: 0.4 }}> → </span>}
-                                  <span style={{
-                                    fontWeight: isActive ? 700 : undefined,
-                                    color: isActive ? 'var(--accent)' : isDone ? 'var(--ok)' : undefined,
-                                    opacity: (!isActive && !isDone) ? 0.5 : undefined,
-                                  }}>{s}</span>
+                                <span key={s} className="flex items-center gap-1">
+                                  {i > 0 && <span className="text-outline text-[12px]">→</span>}
+                                  <span className={
+                                    isActive ? 'text-primary font-bold'
+                                    : isDone  ? 'text-tertiary'
+                                    : 'text-on-surface-variant'
+                                  }>{s}</span>
                                 </span>
                               )
                             })}
-                          </span>
-                        ) : (
-                          item.pipeline_stages.join(' → ')
-                        )}
-                      </td>
-                      <td className="queue-cell-status">
-                        <span className={`queue-status ${STATUS_CLASS[item.status] ?? ''}`}>
-                          {STATUS_ICON[item.status] ?? item.status} {item.status}
-                        </span>
-                        {item.status === 'processing' && item.progress && (
-                          <span style={{ display: 'block', fontSize: '0.78rem', opacity: 0.7, marginTop: '2px' }}>
-                            {item.progress}
-                          </span>
-                        )}
-                        {item.status === 'failed' && item.error_message && (
-                          <button
-                            className="queue-error-toggle"
-                            onClick={() => setExpandedError(expandedError === item.id ? null : item.id)}
-                          >
-                            {expandedError === item.id ? '▲' : '▼'}
-                          </button>
-                        )}
-                      </td>
-                      <td className="queue-cell-time">{formatTime(item.added_at)}</td>
-                      <td className="queue-cell-actions">
-                        {item.status === 'pending' && (
-                          <button
-                            className="queue-delete-btn"
-                            title="Remove from queue"
-                            onClick={() => handleDelete(item.id)}
-                          >
-                            ✕
-                          </button>
-                        )}
-                        {item.status === 'processing' && (
-                          <span className="queue-delete-btn queue-delete-btn--disabled" title="Cannot remove while processing">✕</span>
-                        )}
-                      </td>
-                    </tr>
-                    {expandedError === item.id && item.error_message && (
-                      <tr key={`err-${item.id}`} className="queue-row-error">
-                        <td colSpan={6}>
-                          <div className="queue-error-msg">{item.error_message}</div>
+                          </div>
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-6 py-5">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {item.status === 'processing' && (
+                              <>
+                                <span className="material-symbols-outlined text-[18px] text-secondary pulse-dot">hourglass_top</span>
+                                <span className="text-secondary font-semibold text-body-sm">processing</span>
+                              </>
+                            )}
+                            {item.status === 'pending' && (
+                              <>
+                                <span className="material-symbols-outlined text-[18px] text-on-surface-variant">schedule</span>
+                                <span className="text-on-surface-variant font-semibold text-body-sm">pending</span>
+                              </>
+                            )}
+                            {item.status === 'done' && (
+                              <>
+                                <span className="material-symbols-outlined text-[18px] text-tertiary">check_circle</span>
+                                <span className="text-tertiary font-semibold text-body-sm">done</span>
+                              </>
+                            )}
+                            {item.status === 'failed' && (
+                              <>
+                                <span className="material-symbols-outlined text-[18px] text-error">error</span>
+                                <span className="text-error font-semibold text-body-sm">failed</span>
+                                {item.error_message && (
+                                  <button
+                                    onClick={() => setExpandedError(expandedError === item.id ? null : item.id)}
+                                    className="material-symbols-outlined text-[16px] text-error hover:text-on-surface transition-colors"
+                                  >
+                                    {expandedError === item.id ? 'expand_less' : 'expand_more'}
+                                  </button>
+                                )}
+                              </>
+                            )}
+                            {item.status === 'skipped' && (
+                              <span className="text-on-surface-variant text-body-sm">skipped</span>
+                            )}
+                          </div>
+                          {item.status === 'processing' && item.progress && (
+                            <p className="text-label-sm text-secondary text-center mt-1 opacity-80">{item.progress}</p>
+                          )}
+                        </td>
+
+                        {/* Added */}
+                        <td className="px-6 py-5 text-right text-on-surface-variant text-label-sm whitespace-nowrap">
+                          {formatTime(item.added_at)}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-6 py-5 text-center">
+                          {item.status === 'pending' && (
+                            <button
+                              onClick={() => handleDelete(item.id)}
+                              title="Remove from queue"
+                              className="material-symbols-outlined text-[18px] text-outline hover:text-error transition-colors"
+                            >
+                              close
+                            </button>
+                          )}
                         </td>
                       </tr>
-                    )}
-                  </>
-                ))}
-              </tbody>
-            </table>
-          </div>
+
+                      {/* Error expansion */}
+                      {expandedError === item.id && item.error_message && (
+                        <tr className="bg-error-container/10">
+                          <td colSpan={6} className="px-6 py-3">
+                            <p className="text-body-sm text-error font-mono whitespace-pre-wrap break-all">
+                              {item.error_message}
+                            </p>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-surface-container-low border-t border-outline-variant">
+              <span className="text-label-sm text-on-surface-variant">
+                Showing {items.length} item{items.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -8,6 +8,37 @@ const LANG_LABELS: Record<string, string> = {
 
 type Stage = 'extracting' | 'cleaning' | 'summarizing'
 
+const STAGES: { id: Stage; label: string; icon: string }[] = [
+  { id: 'extracting',  label: 'Extracting subtitles', icon: 'closed_caption' },
+  { id: 'cleaning',    label: 'Cleaning with AI',     icon: 'auto_awesome'   },
+  { id: 'summarizing', label: 'Summarizing',           icon: 'summarize'      },
+]
+
+function StageIcon({ status }: { status: 'active' | 'done' | 'pending' }) {
+  if (status === 'done') {
+    return (
+      <span
+        className="material-symbols-outlined text-[22px] text-tertiary"
+        style={{ fontVariationSettings: "'FILL' 1" }}
+      >
+        check_circle
+      </span>
+    )
+  }
+  if (status === 'active') {
+    return (
+      <span className="material-symbols-outlined text-[22px] text-primary pulse-dot">
+        pending
+      </span>
+    )
+  }
+  return (
+    <span className="material-symbols-outlined text-[22px] text-outline-variant">
+      radio_button_unchecked
+    </span>
+  )
+}
+
 export default function ProcessingPage() {
   const { taskId, videoId } = useParams<{ taskId: string; videoId: string }>()
   const [searchParams] = useSearchParams()
@@ -45,7 +76,6 @@ export default function ProcessingPage() {
                 if (result.cleanup_status !== 'processing') {
                   clearInterval(cleanupIntervalRef.current!)
                   cleanupIntervalRef.current = null
-                  // Stage ③: try summarization (fails gracefully if model not configured)
                   setStage('summarizing')
                   try {
                     await startSummary(videoId)
@@ -95,7 +125,7 @@ export default function ProcessingPage() {
       clearInterval(interval)
       if (cleanupIntervalRef.current) clearInterval(cleanupIntervalRef.current)
     }
-  }, [taskId, videoId, navigate, autoPipeline])
+  }, [taskId, videoId, navigate, autoPipeline]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleStopPipeline() {
     if (!videoId) return
@@ -104,7 +134,7 @@ export default function ProcessingPage() {
       cleanupIntervalRef.current = null
     }
     try {
-      if (stage === 'cleaning') await cancelCleanup(videoId)
+      if (stage === 'cleaning')    await cancelCleanup(videoId)
       if (stage === 'summarizing') await cancelSummary(videoId)
     } catch (err) {
       console.error('[Processing] stopPipeline cancel failed:', err)
@@ -125,61 +155,121 @@ export default function ProcessingPage() {
     }
   }
 
+  const stageOrder: Stage[] = ['extracting', 'cleaning', 'summarizing']
+  const currentIdx = stageOrder.indexOf(stage)
+
+  function stageStatus(id: Stage): 'active' | 'done' | 'pending' {
+    const idx = stageOrder.indexOf(id)
+    if (idx < currentIdx) return 'done'
+    if (idx === currentIdx) return 'active'
+    return 'pending'
+  }
+
+  const statusText = stage === 'cleaning'
+    ? 'AI cleanup running…'
+    : stage === 'summarizing'
+    ? 'Summarizing…'
+    : 'This usually takes 15–30 seconds'
+
   return (
-    <div className="container">
-      <div className="card">
-        <div className="status-box">
+    <div className="p-6 md:p-8 max-w-[1200px] mx-auto flex items-start justify-center">
+      <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm w-full max-w-md mt-12">
+
+        {/* Header */}
+        <div className="px-8 pt-8 pb-6 border-b border-outline-variant">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-primary text-[28px]">
+              {error ? 'error' : 'hourglass_top'}
+            </span>
+            <h2 className="text-headline-lg font-bold text-on-surface">
+              {error ? 'Processing Failed' : 'Processing'}
+            </h2>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="px-8 py-8 space-y-6">
+
           {!error ? (
             <>
               {autoPipeline ? (
-                <div className="pipeline-stages">
-                  <div className={`pipeline-stage ${stage === 'extracting' ? 'active' : 'done'}`}>
-                    <span className="stage-icon">{stage === 'extracting' ? <span className="tab-spinner" /> : '✓'}</span>
-                    <span>Extracting subtitles</span>
-                  </div>
-                  <div className={`pipeline-stage ${stage === 'cleaning' ? 'active' : stage === 'extracting' ? 'pending' : 'done'}`}>
-                    <span className="stage-icon">{stage === 'cleaning' ? <span className="tab-spinner" /> : stage === 'extracting' ? '②' : '✓'}</span>
-                    <span>Cleaning with AI</span>
-                  </div>
-                  <div className={`pipeline-stage ${stage === 'summarizing' ? 'active' : 'pending'}`}>
-                    <span className="stage-icon">{stage === 'summarizing' ? <span className="tab-spinner" /> : '③'}</span>
-                    <span>Summarizing</span>
-                  </div>
-                  {(stage === 'cleaning' || stage === 'summarizing') && (
-                    <button
-                      className="btn btn-secondary"
-                      onClick={handleStopPipeline}
-                      style={{ marginTop: '1.5rem' }}
-                    >
-                      ✕ Stop pipeline
-                    </button>
-                  )}
+                /* Pipeline stepper */
+                <div className="space-y-0">
+                  {STAGES.map((s, i) => {
+                    const status = stageStatus(s.id)
+                    return (
+                      <div key={s.id} className="flex items-start gap-4">
+                        {/* Icon + connector */}
+                        <div className="flex flex-col items-center">
+                          <StageIcon status={status} />
+                          {i < STAGES.length - 1 && (
+                            <div className={`w-0.5 h-8 mt-1 ${
+                              stageOrder.indexOf(s.id) < currentIdx
+                                ? 'bg-tertiary'
+                                : 'bg-outline-variant'
+                            }`} />
+                          )}
+                        </div>
+
+                        {/* Label */}
+                        <div className="pb-8 pt-0.5">
+                          <p className={`text-body-md font-semibold ${
+                            status === 'active'  ? 'text-primary'
+                            : status === 'done'  ? 'text-tertiary'
+                            : 'text-on-surface-variant opacity-50'
+                          }`}>
+                            {s.label}
+                          </p>
+                          {status === 'active' && (
+                            <p className="text-body-sm text-secondary mt-0.5">{statusText}</p>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               ) : (
-                <>
-                  <div className="spinner" />
-                  <p style={{ fontSize: '1.1rem', fontWeight: 600 }}>Extracting subtitles…</p>
-                </>
+                /* Single-stage spinner */
+                <div className="flex flex-col items-center gap-4 py-6">
+                  <span className="material-symbols-outlined text-[48px] text-primary pulse-dot">
+                    pending
+                  </span>
+                  <p className="text-body-md font-semibold text-on-surface">Extracting subtitles…</p>
+                  <p className="text-body-sm text-secondary">{statusText}</p>
+                </div>
               )}
-              <p style={{ color: '#888', marginTop: '1rem', fontSize: '0.9rem' }}>
-                {stage === 'cleaning' ? 'AI cleanup running…' : stage === 'summarizing' ? 'Summarizing…' : 'This usually takes 15–30 seconds'}
-              </p>
+
+              {/* Stop button */}
+              {autoPipeline && (stage === 'cleaning' || stage === 'summarizing') && (
+                <div className="pt-2">
+                  <button
+                    onClick={handleStopPipeline}
+                    className="w-full py-2.5 border border-outline-variant text-on-surface-variant text-label-md rounded-lg hover:border-error hover:text-error transition-colors active:scale-[0.98] flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">stop_circle</span>
+                    Stop pipeline
+                  </button>
+                </div>
+              )}
             </>
           ) : (
+            /* Error state */
             <>
-              <div className="error-box" style={{ marginBottom: '1rem' }}>{error}</div>
+              <div className="flex items-start gap-3 p-4 bg-error-container/20 border border-error/30 rounded-lg">
+                <span className="material-symbols-outlined text-error text-[18px] flex-shrink-0 mt-0.5">warning</span>
+                <p className="text-body-sm text-on-error-container">{error}</p>
+              </div>
+
               {availableLangs.length > 0 && (
-                <div style={{ marginTop: '1rem' }}>
-                  <p style={{ fontSize: '0.9rem', color: '#555', marginBottom: '0.75rem' }}>
-                    Try one of the available languages:
-                  </p>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <div className="space-y-3">
+                  <p className="text-body-sm text-secondary">Try one of the available languages:</p>
+                  <div className="flex flex-wrap gap-2">
                     {availableLangs.map(lang => (
                       <button
                         key={lang}
-                        className="btn btn-secondary"
                         disabled={retrying}
                         onClick={() => retryWithLang(lang)}
+                        className="px-4 py-2 bg-surface-container-high text-on-surface text-label-md rounded-lg hover:bg-surface-dim transition-colors active:scale-[0.98] disabled:opacity-50"
                       >
                         {LANG_LABELS[lang] ?? lang.toUpperCase()}
                       </button>
@@ -189,6 +279,7 @@ export default function ProcessingPage() {
               )}
             </>
           )}
+
         </div>
       </div>
     </div>
