@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>YT Summarizer - Video Summary</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-variant": "#e1e3e4",
+                      "status-online": "#286b33",
+                      "primary-fixed-dim": "#ffb3b1",
+                      "primary": "#81272b",
+                      "on-surface-variant": "#564241",
+                      "surface-tint": "#a03e40",
+                      "tertiary-fixed-dim": "#91d793",
+                      "on-error": "#ffffff",
+                      "tertiary-fixed": "#acf4ad",
+                      "surface-container-lowest": "#ffffff",
+                      "surface-container-low": "#f3f4f5",
+                      "error-container": "#ffdad6",
+                      "on-tertiary-container": "#a2e9a3",
+                      "surface-dim": "#d9dadb",
+                      "surface-bright": "#f8f9fa",
+                      "secondary-fixed-dim": "#b4cad7",
+                      "on-tertiary-fixed": "#002107",
+                      "outline-variant": "#dcc0bf",
+                      "on-primary": "#ffffff",
+                      "on-tertiary-fixed-variant": "#08521e",
+                      "on-surface": "#191c1d",
+                      "on-background": "#191c1d",
+                      "on-tertiary": "#ffffff",
+                      "surface-container": "#edeeef",
+                      "on-secondary-container": "#526772",
+                      "surface-container-highest": "#e1e3e4",
+                      "inverse-primary": "#ffb3b1",
+                      "status-online-container": "#60a465",
+                      "on-error-container": "#93000a",
+                      "on-secondary-fixed-variant": "#354a54",
+                      "secondary-container": "#cfe6f3",
+                      "surface-container-high": "#e7e8e9",
+                      "outline": "#897270",
+                      "inverse-on-surface": "#f0f1f2",
+                      "on-secondary": "#ffffff",
+                      "primary-container": "#a03e40",
+                      "on-primary-fixed-variant": "#81272a",
+                      "primary-fixed": "#ffdad8",
+                      "tertiary": "#08521d",
+                      "inverse-surface": "#2e3132",
+                      "surface": "#f8f9fa",
+                      "on-primary-fixed": "#410007",
+                      "secondary": "#4c616c",
+                      "secondary-fixed": "#cfe6f3",
+                      "on-primary-container": "#ffcdcb",
+                      "background": "#f8f9fa",
+                      "error": "#ba1a1a",
+                      "on-secondary-fixed": "#071e27",
+                      "tertiary-container": "#286b33"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "section-gap": "2.5rem",
+                      "stack-gap": "1rem",
+                      "container-padding-mobile": "1rem",
+                      "sidebar-width": "16rem",
+                      "unit": "4px",
+                      "gutter": "1.5rem",
+                      "container-padding-desktop": "2rem"
+              },
+              "fontFamily": {
+                      "label-sm": ["Inter"],
+                      "body-sm": ["Inter"],
+                      "body-md": ["Inter"],
+                      "tag-uppercase": ["Inter"],
+                      "headline-xl": ["Inter"],
+                      "headline-lg-mobile": ["Inter"],
+                      "headline-lg": ["Inter"],
+                      "label-md": ["Inter"]
+              },
+              "fontSize": {
+                      "label-sm": ["12px", {"lineHeight": "14px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                      "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "tag-uppercase": ["11px", {"lineHeight": "12px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                      "headline-xl": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "label-md": ["14px", {"lineHeight": "16px", "fontWeight": "500"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .pulse-dot {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .4; }
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #dcc0bf;
+            border-radius: 10px;
+        }
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(8px);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex overflow-hidden">
+<!-- SideNavBar (Authority: JSON/Design System) -->
+<aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-low border-r border-outline-variant flex flex-col p-4 gap-stack-gap z-50">
+<div class="flex flex-col gap-2 mb-6 px-2">
+<h1 class="font-headline-lg text-headline-lg font-bold text-primary">YT Summarizer</h1>
+<p class="font-body-sm text-body-sm text-secondary">AI Productivity Suite</p>
+</div>
+<nav class="flex-1 flex flex-col gap-1">
+<!-- New -->
+<button class="flex items-center gap-3 px-3 py-2 text-secondary hover:bg-surface-container-highest transition-all rounded-lg font-label-md text-label-md">
+<span class="material-symbols-outlined" data-icon="add_circle">add_circle</span>
+                New
+            </button>
+<!-- History (Active based on context of viewing a saved summary) -->
+<button class="flex items-center gap-3 px-3 py-2 bg-primary-container text-on-primary-container rounded-lg font-label-md text-label-md scale-[0.98]">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+                History
+            </button>
+<!-- Queue -->
+<button class="flex items-center gap-3 px-3 py-2 text-secondary hover:bg-surface-container-highest transition-all rounded-lg font-label-md text-label-md">
+<span class="material-symbols-outlined" data-icon="queue_play_next">queue_play_next</span>
+                Queue
+            </button>
+<!-- Benchmarks -->
+<button class="flex items-center gap-3 px-3 py-2 text-secondary hover:bg-surface-container-highest transition-all rounded-lg font-label-md text-label-md">
+<span class="material-symbols-outlined" data-icon="speed">speed</span>
+                Benchmarks
+            </button>
+</nav>
+<div class="mt-auto flex flex-col gap-1 border-t border-outline-variant pt-4">
+<button class="flex items-center gap-3 px-3 py-2 text-secondary hover:bg-surface-container-highest transition-all rounded-lg font-label-md text-label-md">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+                Settings
+            </button>
+<div class="flex items-center gap-3 px-3 py-2 mt-2">
+<div class="w-8 h-8 rounded-full overflow-hidden bg-primary-container">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a software engineer in a high-tech minimalist office, soft cinematic lighting, neutral gray tones, corporate modern aesthetic, 8k resolution." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCSX3ehgI02LRYtc3lR0iriQMJOUmCpaPoiNdM7Pjd9GxL8JcFcYCU94N4gfRys9geqQSS_rxY6wA_yq1QbOlBdRKLkCiDnJvk8mjR5N1l5F4PmhIhyn-DzSUzuM2RCnPDj53-BxVoBB9QaAzAwV2fyqpA7_92NRt-E1EQv8yS46PT5HC6YqdlaUnA4SxHiNHuorK11MsVsXYJMdyDPD5DS1fgpklFRXtc1ZvnsNMERcjZqbZeFhCQLlKA49D_e5oI4S-JHN3XFmso"/>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm font-bold text-on-surface">Mo Bitar</span>
+<span class="text-[10px] uppercase font-tag-uppercase text-secondary">Premium User</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="ml-64 flex-1 flex flex-col min-h-screen relative overflow-hidden">
+<!-- TopAppBar (Authority: JSON) -->
+<header class="h-16 flex items-center justify-between px-gutter bg-surface-container-lowest border-b border-outline-variant z-40">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<span class="font-headline-lg text-headline-lg font-bold text-primary">Nexus Summarizer</span>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<!-- Status Indicators -->
+<div class="flex items-center gap-4 text-secondary font-label-sm text-label-sm">
+<div class="flex items-center gap-2">
+<span class="text-status-online flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-status-online pulse-dot"></span>
+                            Systems Health
+                        </span>
+<span class="material-symbols-outlined text-[16px]" data-icon="sensors">sensors</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-status-online flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-status-online"></span>
+                            API
+                        </span>
+<span class="material-symbols-outlined text-[16px]" data-icon="api">api</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-status-online flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-status-online"></span>
+                            Ollama
+                        </span>
+<span class="material-symbols-outlined text-[16px]" data-icon="database">database</span>
+</div>
+</div>
+<!-- Theme Toggle & Actions -->
+<div class="flex items-center gap-2 border-l border-outline-variant pl-6">
+<button class="p-2 hover:bg-surface-container-high rounded-full transition-colors text-secondary">
+<span class="material-symbols-outlined" data-icon="dark_mode">dark_mode</span>
+</button>
+<button class="p-2 hover:bg-surface-container-high rounded-full transition-colors text-secondary">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Fluid Grid Content -->
+<div class="flex-1 overflow-y-auto p-gutter custom-scrollbar pb-32">
+<div class="max-w-[1200px] mx-auto space-y-section-gap">
+<!-- Main Summary Card -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden">
+<!-- Card Header -->
+<div class="p-6 border-b border-outline-variant">
+<div class="flex justify-between items-start mb-4">
+<h2 class="font-headline-xl text-headline-xl text-on-surface max-w-4xl">Ex-Google CEO just exposed the whole AI sh*tshow</h2>
+<button class="text-secondary hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[28px]" data-icon="star">star</span>
+</button>
+</div>
+<div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-secondary font-body-sm text-body-sm">
+<div class="flex items-center gap-1">
+<span class="font-semibold text-on-surface">Channel:</span> Mo Bitar
+                            </div>
+<div class="flex items-center gap-1">
+<span class="font-semibold text-on-surface">Duration:</span> 6:41
+                            </div>
+<div class="flex items-center gap-1">
+<span class="font-semibold text-on-surface">Language:</span> EN
+                            </div>
+<div class="flex items-center gap-1">
+<span class="font-semibold text-on-surface">Characters:</span> 894
+                            </div>
+<div class="flex items-center gap-1">
+<span class="font-semibold text-on-surface">Saved:</span> 02.06.2026, 17:06
+                            </div>
+</div>
+</div>
+<!-- Metadata Ribbon -->
+<div class="px-6 py-3 bg-surface-container-low border-b border-outline-variant flex flex-wrap gap-4 text-label-sm text-secondary items-center">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="timer">timer</span>
+                            Summarized in 0:32
+                        </div>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<div class="flex items-center gap-2 font-bold text-on-surface">
+                            gemma4:e2b
+                        </div>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<div class="px-2 py-0.5 rounded-full bg-primary-container/20 text-primary font-bold">
+                            Single Pass
+                        </div>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<div>88% compressed</div>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<div>02.06.2026, 17:17</div>
+</div>
+<!-- Controls & Actions -->
+<div class="p-6 space-y-6">
+<div class="flex flex-wrap items-center gap-4">
+<div class="relative min-w-[200px]">
+<select class="w-full bg-surface-container-low border border-outline-variant rounded-lg px-4 py-2 text-label-md font-label-md focus:ring-2 focus:ring-primary/20 transition-all outline-none appearance-none">
+<option>gemma4:e2b</option>
+<option>llama3:8b</option>
+<option>mistral:7b</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-2.5 text-secondary pointer-events-none" data-icon="expand_more">expand_more</span>
+</div>
+<button class="flex items-center gap-2 px-6 py-2 bg-primary-container text-on-primary-container rounded-lg font-label-md text-label-md active:scale-95 transition-all shadow-sm">
+<span class="material-symbols-outlined" data-icon="refresh">refresh</span>
+                                Re-run summary
+                            </button>
+<button class="flex items-center gap-2 px-6 py-2 bg-surface-container-high text-secondary border border-outline-variant rounded-lg font-label-md text-label-md hover:bg-surface-container-highest active:scale-95 transition-all">
+<span class="material-symbols-outlined" data-icon="balance">balance</span>
+                                Benchmark
+                            </button>
+<div class="h-8 w-px bg-outline-variant mx-2"></div>
+<button class="flex items-center gap-2 px-6 py-2 bg-white text-secondary border border-outline-variant rounded-lg font-label-md text-label-md hover:bg-surface-container-low active:scale-95 transition-all">
+<span class="material-symbols-outlined" data-icon="content_copy">content_copy</span>
+                                Copy text
+                            </button>
+<button class="flex items-center gap-2 px-6 py-2 bg-white text-secondary border border-outline-variant rounded-lg font-label-md text-label-md hover:bg-surface-container-low active:scale-95 transition-all">
+<span class="material-symbols-outlined" data-icon="open_in_new">open_in_new</span>
+                                Open video
+                            </button>
+<button class="flex items-center gap-2 px-6 py-2 bg-white text-error border border-error/30 rounded-lg font-label-md text-label-md hover:bg-error/5 active:scale-95 transition-all">
+<span class="material-symbols-outlined" data-icon="delete">delete</span>
+                                Delete
+                            </button>
+</div>
+<!-- Content Tabs -->
+<div class="border-b border-outline-variant">
+<div class="flex gap-8">
+<button class="px-4 py-3 text-secondary font-label-md text-label-md hover:text-on-surface transition-colors">Subtitles</button>
+<button class="px-4 py-3 text-secondary font-label-md text-label-md hover:text-on-surface transition-colors">Cleaned</button>
+<button class="px-4 py-3 text-primary font-bold font-label-md text-label-md border-b-2 border-primary relative">
+                                    Summary
+                                    <span class="absolute -top-1 -right-1 flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+</span>
+</button>
+<div class="ml-auto flex items-center gap-4 mb-2">
+<button class="p-2 bg-surface-container-high rounded text-secondary hover:bg-surface-container-highest">
+<span class="material-symbols-outlined" data-icon="translate">translate</span>
+</button>
+<span class="px-3 py-1 bg-primary/10 text-primary text-[10px] font-bold rounded border border-primary/20">MD</span>
+</div>
+</div>
+</div>
+<!-- Summary Body -->
+<div class="prose prose-sm max-w-none text-on-surface font-body-md text-body-md leading-relaxed py-4">
+<ul class="space-y-4 list-none pl-0">
+<li class="flex gap-4">
+<span class="text-primary mt-1 flex-shrink-0">•</span>
+<span>Token consumption for advanced models is extremely high, with one user spending <strong class="text-on-surface font-bold">$1.3 million in 30 days</strong>.</span>
+</li>
+<li class="flex gap-4">
+<span class="text-primary mt-1 flex-shrink-0">•</span>
+<span>The notion that AI costs will diminish due to diminishing costs is a deception; token prices have been increasing, with costs doubling between model versions.</span>
+</li>
+<li class="flex gap-4">
+<span class="text-primary mt-1 flex-shrink-0">•</span>
+<span>The trajectory of AI pricing suggests that access is becoming more exclusive, as evidenced by the locking up of models and the desire for access among developers.</span>
+</li>
+<li class="flex gap-4">
+<span class="text-primary mt-1 flex-shrink-0">•</span>
+<span>AI facilitates much faster iteration towards product market fit (PMF) than traditional methods, allowing users to test ideas quickly.</span>
+</li>
+<li class="flex gap-4">
+<span class="text-primary mt-1 flex-shrink-0">•</span>
+<span>Companies are optimizing for fixing issues rapidly, even if it means shipping slightly buggy features, as seen in the approach of companies like Anthropic.</span>
+</li>
+<li class="flex gap-4">
+<span class="text-primary mt-1 flex-shrink-0">•</span>
+<span>The author concludes that the dilemma of AI being for the rich remains unsolved, as there is no apparent incentive for AI to become cheaper for everyone.</span>
+</li>
+</ul>
+</div>
+</div>
+</section>
+<!-- Statistics Widgets (Bento Pattern) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-stack-gap">
+<div class="p-6 bg-white border border-outline-variant rounded-xl shadow-sm">
+<div class="text-secondary font-label-sm text-label-sm mb-2">Cost Efficiency</div>
+<div class="flex items-end gap-2">
+<span class="font-headline-lg text-headline-lg font-bold text-on-surface">8.4x</span>
+<span class="text-status-online font-label-sm text-label-sm mb-1">vs GPT-4o</span>
+</div>
+</div>
+<div class="p-6 bg-white border border-outline-variant rounded-xl shadow-sm">
+<div class="text-secondary font-label-sm text-label-sm mb-2">Insight Density</div>
+<div class="flex items-end gap-2">
+<span class="font-headline-lg text-headline-lg font-bold text-on-surface">High</span>
+<span class="text-secondary font-label-sm text-label-sm mb-1">0.92 Quality Score</span>
+</div>
+</div>
+<div class="p-6 bg-white border border-outline-variant rounded-xl shadow-sm">
+<div class="text-secondary font-label-sm text-label-sm mb-2">Processing Load</div>
+<div class="flex items-end gap-2">
+<span class="font-headline-lg text-headline-lg font-bold text-on-surface">Minimal</span>
+<span class="text-tertiary font-label-sm text-label-sm mb-1">Local Inference</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Sticky Bottom Chat Bar -->
+<footer class="absolute bottom-0 left-0 right-0 p-6 glass-effect border-t border-outline-variant z-50">
+<div class="max-w-[1200px] mx-auto relative group">
+<div class="absolute -top-12 left-0 font-label-sm text-label-sm text-secondary bg-surface-container-low px-3 py-1 rounded-t-lg border-x border-t border-outline-variant transition-opacity opacity-100">
+                    Ask a follow-up question about the video
+                </div>
+<div class="flex items-center gap-3 bg-white border-2 border-outline-variant rounded-full p-2 pl-6 pr-2 shadow-sm focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/5 transition-all">
+<input class="flex-1 bg-transparent border-none focus:ring-0 font-body-md text-body-md text-on-surface placeholder:text-secondary/60" placeholder="Ask about the video..." type="text"/>
+<button class="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center hover:scale-105 active:scale-95 transition-transform">
+<span class="material-symbols-outlined" data-icon="send">send</span>
+</button>
+</div>
+</div>
+</footer>
+</main>
+<script>
+        // Micro-interaction: Active tab logic
+        const tabs = document.querySelectorAll('.border-b button');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => {
+                    t.classList.remove('text-primary', 'font-bold', 'border-b-2', 'border-primary');
+                    t.classList.add('text-secondary');
+                    // Remove ping if it was on summary
+                    const ping = t.querySelector('span.flex');
+                    if(ping) ping.remove();
+                });
+                tab.classList.remove('text-secondary');
+                tab.classList.add('text-primary', 'font-bold', 'border-b-2', 'border-primary');
+            });
+        });
+
+        // Search Input simulation
+        const chatInput = document.querySelector('input');
+        chatInput.addEventListener('focus', () => {
+            chatInput.parentElement.classList.add('border-primary');
+        });
+        chatInput.addEventListener('blur', () => {
+            chatInput.parentElement.classList.remove('border-primary');
+        });
+    </script>
+</body></html>
