@@ -180,6 +180,14 @@ All 5 epics done. Full stack running:
 - **Pipeline guard in handleSummarize**: if `cleanup_status` is null and `cleaned_text` is absent → `confirm()` dialog "Run cleanup → summarize pipeline?"; on confirm → `handleCleanup()` + `autoSummarizeAfterCleanupRef = true`; when cleanup reaches `done` → auto-starts summary without switching to Cleaned tab
 - **Behavior docs**: `docs/system-behavior.md` — Mermaid diagrams: Activity (full pipeline), StateDiagram × 3 (Task / Cleanup / Summary), StateDiagram (ResultPage UI), dependency graph
 
+#### Epic 36 ✅ — Frontend Redesign + UX Fixes (20.06.2026)
+- **Tailwind CSS v4.3.1** + `@tailwindcss/vite`, `@theme inline` CSS-based config, MD3 tokens, Material Symbols Outlined, `.dark` class dark mode. All 8 pages rebuilt.
+- **Boxed Layout**: toggle in Settings → General → Display (ARIA switch, left-aligned). `CustomEvent<boolean>('yt-boxed-layout-changed')` → App.tsx listener. Box: `max-w-[1600px] rounded-[32px] shadow-2xl`. Bg via inline `style` with React `theme` state (light: `#e2e8f0→#cbd5e1`, dark: `#3f3f46→#27272a`). Note: Tailwind v4 `dark:from-*/to-*` don't work at runtime — use inline style.
+- **Queue `force=true` bug fix**: ResultPage `queueBulkAdd` calls passed `force=false` (default) → existing videos silently skipped as duplicates. All 4 calls now `force=true`: `handleCleanup`, `handleSummarize` (both paths), `handleMindmap`.
+- **Chat bar**: floating centered (`fixed bottom-6 left-0 md:left-64 right-0`), inner `max-w-[1200px] mx-auto flex justify-center` + `max-w-2xl` → aligns with content card in both normal and boxed layout. `rounded-2xl shadow-2xl backdrop-blur-md`.
+- **Mind Map tab**: `'mindmap'` added to `Tab` type. Full tab (`subtitles | cleaned | summary | mind map | chat`). Actions bar: `Generate mind map` / `Regenerate mind map` button (`account_tree` icon). Empty state with large icon. `mindmapEnabled` toggle removed entirely.
+- **MD toggle**: removed from tab header toolbar. Now lives as small pill (`px-2 py-0.5 text-[10px]`) inside content area of Summary and Cleaned tabs (`flex justify-end mb-2`). Chat assistant messages always render ReactMarkdown (no toggle there).
+
 #### Epic 25 ✅ — Chapter Heading Preservation & Rendering
 - `text_cleaner.py`: paragraphs starting with `## ` → bypass LLM entirely, pass through unchanged
 - System prompts updated in `text_cleaner.py` + `text_summarizer.py` (single-pass, MAP, REDUCE, extract): instruct model to preserve `## ` headings and place blank lines before/after them

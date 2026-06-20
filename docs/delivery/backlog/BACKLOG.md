@@ -165,6 +165,12 @@ Small improvements and fixes that don't warrant a standalone epic.
 | 04.06.2026 | **History search** — search field by title+author, server-side `ILIKE` filtering, 350ms debounce |
 | 04.06.2026 | **Favorites** — `is_favorite BOOLEAN` in `videos` (migration); `POST /api/result/{id}/favorite` toggle; `?favorites_only=true` on `/history`; ★/☆ button in ResultPage + HistoryPage rows + "☆ Favorites" filter |
 | 23.05.2026 | **Known issue: chapter titles language mismatch** — ~~yt-dlp extracts `info["chapters"]` in the language of the user's YouTube interface (via cookies). Workaround: switch YouTube interface to the video's language before extracting.~~ **Resolved 23.05.2026**: YouTube API translates `info["chapters"]` to English server-side regardless of cookies, headers, or client-type (confirmed by diagnostics). Fix: `_parse_description_chapters()` — takes timecodes from `info["description"]` (never auto-translated by YouTube, always in the author's language). Fallback to `info["chapters"]` with `[CHAPTER_SOURCE]` warning in log. Script check: heading script vs subtitle language — warning on mismatch. |
+| 20.06.2026 | **Queue `force=true` bug fix** — ResultPage `queueBulkAdd` calls used `force=false` (default) → existing videos silently skipped as duplicates, nothing queued. All 4 calls (`handleCleanup`, `handleSummarize` ×2, `handleMindmap`) now pass `force=true`. |
+| 20.06.2026 | **Chat bar redesign** — floating centered bar: `fixed bottom-6 left-0 md:left-64 right-0` + inner `max-w-[1200px] mx-auto flex justify-center max-w-2xl`. Aligns with content card in both normal and Boxed Layout modes. `rounded-2xl shadow-2xl backdrop-blur-md`. |
+| 20.06.2026 | **Mind Map tab** — `'mindmap'` added to `Tab` type; full tab in ResultPage (`subtitles \| cleaned \| summary \| mind map \| chat`); `Generate mind map` / `Regenerate mind map` button in actions bar (`account_tree` icon); empty state with large icon; `mindmapEnabled` toggle removed. |
+| 20.06.2026 | **MD toggle relocated** — removed from shared tab toolbar; now lives as small pill inside content area of Summary and Cleaned tabs only. Chat assistant messages always use ReactMarkdown (no toggle). |
+
+| Epic 36: Frontend Redesign | Tailwind CSS v4.3.1 + Material Design 3 tokens + Material Symbols Outlined icons. All 8 pages rebuilt from Stitch design files. Boxed Layout feature (floating centered container, toggle in Settings → General → Display). Dark/light mode via `.dark` class. | ✅ Done — 20.06.2026 |
 
 ---
 

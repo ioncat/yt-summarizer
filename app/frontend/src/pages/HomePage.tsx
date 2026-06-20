@@ -195,7 +195,7 @@ export default function HomePage() {
               <input
                 id="url"
                 type="text"
-                className={inputBase + ' pl-12'}
+                className={inputBase + ' !pl-12'}
                 placeholder="https://www.youtube.com/watch?v=..."
                 value={url}
                 onChange={e => setUrl(e.target.value)}

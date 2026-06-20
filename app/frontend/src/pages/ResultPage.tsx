@@ -16,7 +16,7 @@ import { renderText } from '../utils/renderText'
 
 const MindmapView = lazy(() => import('../components/MindmapView'))
 
-type Tab = 'subtitles' | 'cleaned' | 'summary' | 'chat'
+type Tab = 'subtitles' | 'cleaned' | 'summary' | 'mindmap' | 'chat'
 
 function MarkdownContent({ text }: { text: string }) {
   return (
@@ -60,7 +60,6 @@ export default function ResultPage() {
   const [markdownEnabled, setMarkdownEnabled] = useState(() =>
     localStorage.getItem('yt-md-enabled') === 'true'
   )
-  const [mindmapEnabled, setMindmapEnabled] = useState(false)
   const [mindmapError, setMindmapError]     = useState('')
   const mindmapPollRef          = useRef<ReturnType<typeof setInterval> | null>(null)
   const prevMindmapStatusRef    = useRef<string | null | undefined>(undefined)
@@ -465,7 +464,7 @@ export default function ResultPage() {
     requestNotifyPermission()
     try {
       setCleanupError('')
-      await queueBulkAdd([result.url], ['cleanup'])
+      await queueBulkAdd([result.url], ['cleanup'], true)
       setQueuedMsg('cleanup')
       stopPolling()
       pollRef.current = setInterval(() => loadResult(false), 3000)
@@ -485,7 +484,7 @@ export default function ResultPage() {
       if (!confirmed) return
       try {
         setSummaryError('')
-        await queueBulkAdd([result.url], ['cleanup', 'summary'])
+        await queueBulkAdd([result.url], ['cleanup', 'summary'], true)
         setQueuedMsg('cleanup+summary')
         stopPolling()
         pollRef.current = setInterval(() => loadResult(false), 3000)
@@ -498,7 +497,7 @@ export default function ResultPage() {
     requestNotifyPermission()
     try {
       setSummaryError('')
-      await queueBulkAdd([result.url], ['summary'])
+      await queueBulkAdd([result.url], ['summary'], true)
       setQueuedMsg('summary')
       stopSummaryPolling()
       summaryPollRef.current = setInterval(() => loadResult(false), 3000)
@@ -514,7 +513,7 @@ export default function ResultPage() {
     try {
       setMindmapError('')
       if (force) setResult(r => r ? { ...r, mindmap_text: null, mindmap_status: null } : r)
-      await queueBulkAdd([result.url], ['mindmap'])
+      await queueBulkAdd([result.url], ['mindmap'], true)
       setQueuedMsg('mindmap')
       stopMindmapPolling()
       mindmapPollRef.current = setInterval(() => loadResult(false), 3000)
@@ -777,6 +776,20 @@ export default function ResultPage() {
                 </>
               )}
 
+              {/* Mindmap tab controls */}
+              {activeTab === 'mindmap' && (
+                result.mindmap_status === 'processing' ? (
+                  <button onClick={async () => { await cancelMindmap(videoId!); stopMindmapPolling(); setResult(r => r ? { ...r, mindmap_status: null } : r) }} className={btnSecondary}>
+                    <span className="material-symbols-outlined text-[18px]">stop_circle</span>Stop
+                  </button>
+                ) : (
+                  <button onClick={() => handleMindmap(!!result.mindmap_text)} className={btnAi}>
+                    <span className="material-symbols-outlined text-[18px]">account_tree</span>
+                    {result.mindmap_text ? 'Regenerate mind map' : 'Generate mind map'}
+                  </button>
+                )
+              )}
+
               {/* Benchmark (all tabs except chat) */}
               {activeTab !== 'chat' && (
                 <a href={`/benchmark/${result.video_id}`} className={btnSecondary}>
@@ -835,18 +848,27 @@ export default function ResultPage() {
                 </p>
               </div>
             )}
+            {activeTab === 'mindmap' && (result.mindmap_status === 'failed' || mindmapError) && (
+              <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3">
+                <p className="text-body-sm text-on-error-container">
+                  {mindmapError || 'Mind map generation failed. Check Ollama and model settings.'}
+                </p>
+              </div>
+            )}
 
             {/* Tabs bar */}
             <div className="-mx-6 px-6 border-b border-outline-variant">
               <div className="flex items-end gap-8">
-                {(['subtitles', 'cleaned', 'summary'] as Tab[]).map(tab => {
+                {(['subtitles', 'cleaned', 'summary', 'mindmap'] as Tab[]).map(tab => {
                   const isActive = activeTab === tab
                   const isProcessing =
                     (tab === 'cleaned'  && result.cleanup_status === 'processing') ||
-                    (tab === 'summary'  && result.summary_status === 'processing')
+                    (tab === 'summary'  && result.summary_status === 'processing') ||
+                    (tab === 'mindmap'  && result.mindmap_status === 'processing')
                   const label =
                     tab === 'subtitles' ? 'Subtitles' :
-                    tab === 'cleaned'   ? 'Cleaned'   : 'Summary'
+                    tab === 'cleaned'   ? 'Cleaned'   :
+                    tab === 'summary'   ? 'Summary'   : 'Mind Map'
                   return (
                     <button
                       key={tab}
@@ -873,39 +895,24 @@ export default function ResultPage() {
                     Chat <span className="text-[11px]">({chatHistory.length})</span>
                   </button>
                 )}
-
-                {/* Right side toggles */}
-                <div className="ml-auto flex items-center gap-2 pb-2">
-                  {activeTab === 'summary' && result.summary_text && (
-                    <button
-                      onClick={async () => {
-                        if (!mindmapEnabled) {
-                          setMindmapEnabled(true)
-                          if (!result.mindmap_text && result.mindmap_status !== 'processing') await handleMindmap()
-                        } else {
-                          setMindmapEnabled(false)
-                        }
-                      }}
-                      title={mindmapEnabled ? 'Mindmap ON — click for text' : 'Text view — click for mindmap'}
-                      className={`px-3 py-1 rounded border text-label-sm font-bold transition-colors ${mindmapEnabled ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant text-secondary hover:bg-surface-container-high'}`}
-                    >🗺</button>
-                  )}
-                  <button
-                    onClick={() => {
-                      const next = !markdownEnabled
-                      setMarkdownEnabled(next)
-                      localStorage.setItem('yt-md-enabled', String(next))
-                    }}
-                    title={markdownEnabled ? 'Markdown ON — click for plain text' : 'Click to enable Markdown rendering'}
-                    className={`px-3 py-1 rounded border text-[10px] font-bold tracking-wider transition-colors ${markdownEnabled ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant text-secondary hover:bg-surface-container-high'}`}
-                  >MD</button>
-                </div>
               </div>
             </div>
           </div>
 
           {/* ── Tab content ── */}
           <div className="px-6 pb-8">
+
+            {/* MD toggle pill — shown inside content for summary and cleaned tabs */}
+            {(activeTab === 'summary' || activeTab === 'cleaned') && (
+              <div className="flex justify-end mb-2">
+                <button
+                  onClick={() => { const next = !markdownEnabled; setMarkdownEnabled(next); localStorage.setItem('yt-md-enabled', String(next)) }}
+                  title={markdownEnabled ? 'Markdown ON — click for plain text' : 'Enable Markdown rendering'}
+                  className={`px-2 py-0.5 rounded border text-[10px] font-bold tracking-wider transition-colors ${markdownEnabled ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant text-secondary hover:bg-surface-container-high'}`}
+                >MD</button>
+              </div>
+            )}
+
             {activeTab === 'summary' ? (
               !result.summary_text ? (
                 <div className="py-12 text-center text-secondary text-body-md">
@@ -913,38 +920,31 @@ export default function ResultPage() {
                     : result.summary_status === 'failed' ? 'Summary failed. Click "Re-run summary" to try again.'
                     : 'No summary yet. Click "Summarize" above to generate one.'}
                 </div>
-              ) : mindmapEnabled ? (
-                result.mindmap_status === 'processing' ? (
-                  <div className="py-12 flex items-center justify-center gap-3 text-secondary text-body-md">
-                    <span className="material-symbols-outlined pulse-dot">account_tree</span>
-                    Generating mindmap…
-                    <button
-                      onClick={async () => {
-                        await cancelMindmap(videoId!)
-                        stopMindmapPolling()
-                        setResult(r => r ? { ...r, mindmap_status: null } : r)
-                      }}
-                      className="ml-4 flex items-center gap-1 text-error border border-error/30 px-3 py-1.5 rounded-lg text-label-sm hover:bg-error/5 transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">stop_circle</span>Stop
-                    </button>
-                  </div>
-                ) : result.mindmap_status === 'failed' || mindmapError ? (
-                  <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3 text-on-error-container text-body-sm">
-                    {mindmapError || 'Mindmap generation failed. Check Ollama and model settings.'}
-                  </div>
-                ) : result.mindmap_text ? (
-                  <Suspense fallback={<div className="py-8 text-center text-secondary text-body-md">Loading…</div>}>
-                    <MindmapView text={result.mindmap_text} title={result.title ?? undefined} onRegenerate={() => handleMindmap(true)} />
-                  </Suspense>
-                ) : (
-                  <div className="py-12 text-center text-secondary text-body-md">Generating mindmap…</div>
-                )
               ) : (
                 <>
                   {markdownEnabled ? <MarkdownContent text={result.summary_text!} /> : <div className="formatted-text">{renderText(result.summary_text!)}</div>}
                   {chatBarVisible && <div className="h-20" />}
                 </>
+              )
+            ) : activeTab === 'mindmap' ? (
+              result.mindmap_status === 'processing' ? (
+                <div className="py-12 flex items-center justify-center gap-3 text-secondary text-body-md">
+                  <span className="material-symbols-outlined pulse-dot">account_tree</span>
+                  Generating mind map…
+                </div>
+              ) : result.mindmap_status === 'failed' || mindmapError ? (
+                <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3 text-on-error-container text-body-sm">
+                  {mindmapError || 'Mind map generation failed. Check Ollama and model settings.'}
+                </div>
+              ) : result.mindmap_text ? (
+                <Suspense fallback={<div className="py-8 text-center text-secondary text-body-md">Loading…</div>}>
+                  <MindmapView text={result.mindmap_text} title={result.title ?? undefined} onRegenerate={() => handleMindmap(true)} />
+                </Suspense>
+              ) : (
+                <div className="py-16 text-center text-secondary text-body-md">
+                  <span className="material-symbols-outlined text-[48px] block mb-4 text-outline-variant">account_tree</span>
+                  No mind map yet. Click "Generate mind map" above to create one.
+                </div>
               )
             ) : activeTab === 'chat' ? (
               chatHistory.length === 0 ? (
@@ -957,7 +957,7 @@ export default function ResultPage() {
                     {chatHistory.map((msg, i) => (
                       <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
                         {msg.content
-                          ? (markdownEnabled && msg.role === 'assistant'
+                          ? (msg.role === 'assistant'
                               ? <ReactMarkdown>{msg.content}</ReactMarkdown>
                               : msg.content)
                           : (msg.role === 'assistant' && isChatting
@@ -991,10 +991,12 @@ export default function ResultPage() {
         </div>
       </div>
 
-      {/* ── Fixed chat input bar ── */}
+      {/* ── Floating chat input bar ── */}
       {chatBarVisible && (
-        <div className="fixed bottom-0 left-0 right-0 md:left-64 z-30 px-6 py-4 bg-white/90 backdrop-blur-md border-t border-outline-variant dark:bg-surface-container-low/90">
-          <div className="max-w-[1200px] mx-auto space-y-2">
+        <div className="fixed bottom-6 left-0 md:left-64 right-0 z-30 px-6 md:px-8 pointer-events-none">
+          <div className="max-w-[1200px] mx-auto flex justify-center pointer-events-none">
+          <div className="w-full max-w-2xl pointer-events-auto">
+          <div className="bg-surface/95 dark:bg-surface-container-low/95 backdrop-blur-md border border-outline-variant rounded-2xl shadow-2xl px-5 py-4 space-y-2">
             {(() => {
               const sourceLen = (result.cleaned_text ?? result.formatted_text ?? '').length
               return sourceLen > CHAT_WARN_CHARS ? (
@@ -1004,7 +1006,7 @@ export default function ResultPage() {
             {chatHistory.length === 0 && (
               <p className="text-label-sm text-secondary">Ask a follow-up question about the video</p>
             )}
-            <div className="flex items-center gap-3 bg-white border-2 border-outline-variant rounded-full px-5 py-2 focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/5 transition-all shadow-sm">
+            <div className="flex items-center gap-3 bg-surface-container-low border border-outline-variant rounded-xl px-4 py-2 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
               <textarea
                 ref={chatInputRef}
                 rows={1}
@@ -1033,6 +1035,8 @@ export default function ResultPage() {
                 }
               </button>
             </div>
+          </div>
+          </div>
           </div>
         </div>
       )}

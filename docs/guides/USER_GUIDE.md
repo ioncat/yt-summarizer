@@ -69,7 +69,7 @@ YouTube URL
 ⑤ Chat Q&A       — ask questions about the content (preserves context)
 ```
 
-Each stage's output is stored separately in SQLite and shown as its own tab in the Result page: **Subtitles · Cleaned · Summary**. You can re-run any stage independently.
+Each stage's output is stored separately in SQLite and shown as its own tab in the Result page: **Subtitles · Cleaned · Summary · Mind Map · Chat**. You can re-run any stage independently.
 
 ---
 
@@ -185,9 +185,17 @@ Generates a summary using the auto-selected mode. Live chunk/chapter counter whi
 
 **Compression ratio** shown in meta when done: `82% compressed`. Lower = more aggressive condensation. Full Extract typically shows close to 0% (lossless).
 
+### Mind Map
+
+Dedicated **Mind Map** tab after Summary. Click **Generate mind map** in the actions bar to produce a Mermaid-based visual map of the content. While generating, a **Stop** button appears. Regenerate anytime — overwrites previous map.
+
+Empty state shows a placeholder icon until the first map is generated.
+
 ### Chat Q&A
 
-On the Summary tab, ask follow-up questions about the video. Backend proxies to Ollama with full context (source text + summary hidden in system message). Multi-turn dialogue, copyable. Streaming response.
+Separate **Chat** tab appears after you send the first message. Ask follow-up questions about the video. Backend proxies to Ollama with full context (source text + summary hidden in system message). Multi-turn dialogue; each message has individual **Copy** and **Delete** buttons. Header has **⎘ Copy chat** (copies full history) and **🗑 Clear chat** (resets history). Chat input bar floats at the bottom of the screen, visible on Summary and Chat tabs.
+
+Streaming response. Chat history is persisted — survives page reload.
 
 ### Benchmark — model comparison (Epic 26)
 
@@ -214,6 +222,10 @@ If the video creator defined chapters, subtitles are grouped by chapter boundari
 
 If the fallback is used, a `[CHAPTER_SOURCE]` warning appears in the server log. A language mismatch (e.g. Latin-script chapter titles on a Cyrillic-language video) is also logged explicitly.
 
+### Markdown rendering
+
+**MD** toggle button inside the **Summary** and **Cleaned** tab content areas (top-right corner of each). Enables Markdown rendering for `## headings`, bold, italics. Default off. Setting persisted in localStorage.
+
 ### Auto-pipeline
 
 Checkbox on the Home page: "Run AI cleanup automatically" — runs Extract → Cleanup → Summarize in one go. Pre-flight check validates that all required settings are configured before starting.
@@ -238,6 +250,7 @@ Permission is requested lazily on first action.
 | **yt-dlp path** | Full path to the `yt-dlp` executable |
 | **Cookies path** | Path to YouTube cookies file (Netscape format). Required to avoid 429 errors |
 | **Parallel workers** *(Epic 29)* | Number of paragraphs/chunks processed in parallel. Default 1. Must match `OLLAMA_NUM_PARALLEL` on your Ollama server for actual speedup |
+| **Boxed layout** | Wraps the entire app in a centered rounded container with shadow. Best on large or ultrawide monitors. Toggle persists in localStorage. |
 
 ### AI Cleanup tab
 
