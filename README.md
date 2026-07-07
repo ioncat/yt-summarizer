@@ -22,7 +22,11 @@ The goal: turn a watch-or-skip guess into a fast, informed decision.
 → **[User Guide](docs/guides/USER_GUIDE.md)** — features, settings, troubleshooting, FAQ  
 → **[System Behavior](docs/engineering/system-behavior.md)** — pipeline activity diagram + state diagrams (Mermaid)
 
-<img src="docs/screenshots/home.png" width="800" alt="Main application screen - add link and start pipeline">
+<img src="docs/screenshots/yt-main.png" width="800" alt="Main application screen — add link and start pipeline">
+
+<img src="docs/screenshots/yt-summary.png" width="800" alt="Result page — summary tab with meta and chat bar">
+
+<img src="docs/screenshots/yt-diagram.png" width="800" alt="Pipeline architecture diagram">
 
 ---
 
@@ -40,7 +44,7 @@ YouTube URL → Extract → Format → AI Cleanup → Summarize → Chat Q&A
               + VTT       + chapters  text       (Single / Map-Reduce / Full Extract)
 ```
 
-Each stage's output is stored separately in SQLite and shown as its own tab: **Subtitles · Cleaned · Summary**.
+Each stage's output is stored separately in SQLite and shown as its own tab: **Subtitles · Cleaned · Summary · Mind Map · Chat**.
 
 **Key features:**
 - **AI via Ollama** — connect any local or remote LLM
