@@ -141,6 +141,7 @@ Improve summarization quality beyond single-pass. Map-reduce or chunked approach
 | [Epic 34: Bulk URL Queue](./epics/EPIC-34.md) | Bulk URL input on HomePage (textarea, one per line); `processing_queue` DB table; asyncio queue worker (sequential, one video at a time); configurable pipeline stages per batch (extract / +cleanup / full); Queue status page `/queue` with per-item status | ✅ Done |
 | [Epic 35: Playlist Import](./epics/EPIC-35.md) | Paste YouTube playlist URL → yt-dlp flat-playlist extract → preview list with checkboxes → add selected to queue (Epic 34); auto-detect playlist URL in Bulk Add panel; 200-video limit | 🔵 Planned — depends on Epic 34 |
 | [Epic 37: Suggested Questions](./epics/EPIC-37.md) | After summary is ready, LLM generates 3–5 short content-specific questions shown as clickable chips near the chat bar. Click → sends as chat message. Lazy trigger (on first Summary tab open). `suggested_questions` JSON column in DB. Lowers cold-start barrier to chat. | 🔵 Planned — depends on Epic 15 |
+| [Epic 38: pytest API Tests](./epics/EPIC-38.md) | Full pytest suite for all API endpoints. In-process via `httpx.AsyncClient + ASGITransport`, in-memory SQLite DB, mocked yt-dlp (subprocess) + Ollama (respx). 8 test files: health, settings, process/status, result, cleanup, summary, queue, history. ~4–5h. | 🔵 Planned |
 
 ---
 
@@ -193,6 +194,7 @@ Small ideas and technical improvements that don't warrant an epic. Can be implem
 
 | Idea | Description | Complexity |
 |------|-------------|------------|
+| **[Testing] pytest API** | Promoted to **[Epic 38](./epics/EPIC-38.md)**. | — |
 | **[Testing] Playwright E2E** | Critical-path automation: (1) submit URL → queue → view result, (2) History page load + search + favorite, (3) Queue page with active item. Covers both frontend and backend integration in one shot. Most valuable during redesign phase — catches regressions per page. Run against dev server (`localhost:3001` + `localhost:8000`). Baseline: `npx playwright test`. | ~3–4h setup + ~1h per critical path |
 | **[Testing] Visual regression (Playwright screenshots)** | After each redesign page is done — capture baseline screenshots with `toHaveScreenshot()`. Future changes auto-compare vs baseline. Especially useful after redesign branch merges to catch unintended CSS drift. Store baselines in `tests/screenshots/`. | ~1h after Playwright is wired up |
 | **[Testing] pytest API tests** | FastAPI endpoint contract tests: submit URL, get result, settings CRUD, queue endpoints. Validates JSON shape, status codes, error responses. Runs without browser — fast CI step. Use `httpx.AsyncClient` with `ASGITransport`. Requires test DB (separate SQLite file). | ~3h |
