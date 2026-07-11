@@ -159,7 +159,7 @@ export default function HomePage() {
   }
 
   const inputBase = 'w-full px-4 py-3 bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-body-md text-on-surface'
-  const selectBase = inputBase + ' appearance-none cursor-pointer'
+  const selectBase = inputBase + ' appearance-none cursor-pointer !pr-10'
 
   return (
     <div className="flex-grow flex flex-col items-center justify-start p-6 md:p-12 max-w-[1200px] mx-auto w-full gap-8 pt-8">
@@ -205,39 +205,45 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Language + Pipeline row */}
+          {/* Pipeline + Language row */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-2">
-              <label className="text-label-md text-on-surface-variant font-medium" htmlFor="lang">
-                Subtitle language
-              </label>
-              <select
-                id="lang"
-                className={selectBase}
-                value={language}
-                onChange={e => setLanguage(e.target.value)}
-              >
-                {LANGUAGES.map(l => (
-                  <option key={l.value} value={l.value}>{l.label}</option>
-                ))}
-              </select>
-            </div>
-
             <div className="flex flex-col gap-2">
               <label className="text-label-md text-on-surface-variant font-medium" htmlFor="pipeline">
                 Pipeline
               </label>
-              <select
-                id="pipeline"
-                className={selectBase}
-                value={pipeline}
-                onChange={e => setPipeline(e.target.value)}
-                disabled={autoPipeline}
-              >
-                {PIPELINE_PRESETS.map(p => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  id="pipeline"
+                  className={selectBase}
+                  value={pipeline}
+                  onChange={e => setPipeline(e.target.value)}
+                  disabled={autoPipeline}
+                >
+                  {PIPELINE_PRESETS.map(p => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </select>
+                <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-secondary text-[20px]">expand_more</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-label-md text-on-surface-variant font-medium" htmlFor="lang">
+                Subtitle language
+              </label>
+              <div className="relative">
+                <select
+                  id="lang"
+                  className={selectBase}
+                  value={language}
+                  onChange={e => setLanguage(e.target.value)}
+                >
+                  {LANGUAGES.map(l => (
+                    <option key={l.value} value={l.value}>{l.label}</option>
+                  ))}
+                </select>
+                <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-secondary text-[20px]">expand_more</span>
+              </div>
             </div>
           </div>
 
@@ -275,14 +281,14 @@ export default function HomePage() {
             <button
               type="submit"
               disabled={loading || !url.trim()}
-              className="flex-grow bg-primary text-on-primary py-4 px-6 rounded-lg text-label-md font-bold transition-all hover:opacity-90 active:scale-[0.98] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-grow bg-primary text-on-primary py-4 px-6 rounded-lg text-label-md font-bold transition-all hover:opacity-90 active:scale-[0.98] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {loading ? 'Submitting…' : 'Add to queue'}
             </button>
             <button
               type="button"
               onClick={() => { setBulkOpen(o => !o); setBulkResult(null); setBulkError('') }}
-              className="flex-grow bg-surface-container-high text-on-surface-variant py-4 px-6 rounded-lg text-label-md font-medium transition-all hover:bg-surface-container-highest active:scale-[0.98]"
+              className="flex-grow bg-surface-container-high text-on-surface-variant py-4 px-6 rounded-lg text-label-md font-medium transition-all hover:bg-surface-container-highest active:scale-[0.98] cursor-pointer"
             >
               {bulkOpen ? '✕ Cancel bulk' : 'Bulk add'}
             </button>
@@ -315,16 +321,19 @@ export default function HomePage() {
               <label className="text-label-md text-on-surface-variant font-medium" htmlFor="bulk-pipeline">
                 Pipeline
               </label>
-              <select
-                id="bulk-pipeline"
-                className={selectBase}
-                value={bulkPipeline}
-                onChange={e => setBulkPipeline(e.target.value)}
-              >
-                {PIPELINE_PRESETS.map(p => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  id="bulk-pipeline"
+                  className={selectBase}
+                  value={bulkPipeline}
+                  onChange={e => setBulkPipeline(e.target.value)}
+                >
+                  {PIPELINE_PRESETS.map(p => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </select>
+                <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-secondary text-[20px]">expand_more</span>
+              </div>
             </div>
 
             {bulkError && (

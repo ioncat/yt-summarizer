@@ -1,4 +1,4 @@
-import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { Routes, Route, NavLink, Link, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import HomePage from './pages/HomePage'
 import ProcessingPage from './pages/ProcessingPage'
@@ -46,7 +46,9 @@ function SidebarContent({ queueActive }: { queueActive: number }) {
   return (
     <>
       <div className="mb-8 px-2">
-        <h1 className="text-headline-lg font-bold text-primary">YT Summarizer</h1>
+        <Link to="/" className="no-underline hover:no-underline cursor-pointer">
+          <h1 className="text-headline-lg font-bold text-primary">YT Summarizer</h1>
+        </Link>
         <p className="text-label-md text-secondary mt-0.5">AI Productivity Suite</p>
       </div>
       <nav className="flex-grow flex flex-col gap-1">
