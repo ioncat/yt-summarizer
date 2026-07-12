@@ -29,8 +29,8 @@ dev:
 
 # Backend: FastAPI
 backend:
-	@echo "Starting backend on http://localhost:8000"
-	cd app/backend && $(PYTHON) -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+	@echo "Starting backend on http://localhost:9010"
+	cd app/backend && $(PYTHON) -m uvicorn main:app --reload --host 0.0.0.0 --port 9010
 
 # Frontend: React
 frontend:

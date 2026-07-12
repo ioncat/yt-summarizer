@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # Infrastructure — not user-facing, required to start the server
     backend_host: str = "0.0.0.0"
-    backend_port: int = 8000
+    backend_port: int = 9010
     debug: bool = True
 
     database_path: str = "../data/db/yt_summarizer.sqlite"
