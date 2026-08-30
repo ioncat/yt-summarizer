@@ -682,7 +682,7 @@ async def update_settings(
     body: StageSettingsRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if stage not in ("cleanup", "summarization", "summarization_extract", "summarization_combine"):
+    if stage not in ("cleanup", "summarization", "summarization_extract", "summarization_combine", "chat"):
         raise HTTPException(status_code=400, detail="Unknown stage")
     return await save_stage_settings(
         db, stage, body.system_prompt, body.user_prompt_template, body.model
@@ -691,7 +691,7 @@ async def update_settings(
 
 @router.delete("/settings/{stage}")
 async def reset_settings(stage: str, db: Annotated[AsyncSession, Depends(get_db)]):
-    if stage not in ("cleanup", "summarization", "summarization_extract", "summarization_combine"):
+    if stage not in ("cleanup", "summarization", "summarization_extract", "summarization_combine", "chat"):
         raise HTTPException(status_code=400, detail="Unknown stage")
     return await reset_stage_settings(db, stage)
 
