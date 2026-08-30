@@ -800,6 +800,23 @@ export default function ResultPage() {
                 )
               )}
 
+              {/* Chat tab controls */}
+              {activeTab === 'chat' && (
+                <div className="relative min-w-[180px]">
+                  <select
+                    value={chatModel || summaryModel}
+                    onChange={e => handleChatModelChange(e.target.value)}
+                    disabled={models.length === 0}
+                    title={models.length === 0 ? 'Ollama offline' : 'Model for chat'}
+                    className={`${selectCls} w-full pr-8`}
+                  >
+                    <option value="">— chat model —</option>
+                    {models.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <span className="material-symbols-outlined absolute right-2 top-2.5 text-secondary pointer-events-none text-[16px]">expand_more</span>
+                </div>
+              )}
+
               {/* Benchmark (all tabs except chat) */}
               {activeTab !== 'chat' && (
                 <a href={`/benchmark/${result.video_id}`} className={btnSecondary}>
@@ -1013,25 +1030,9 @@ export default function ResultPage() {
                 <p className="text-label-sm text-secondary">⚠ Text is very long ({Math.round(sourceLen / 1000)}K chars) — response quality may vary</p>
               ) : null
             })()}
-            <div className="flex items-center justify-between gap-2">
-              {chatHistory.length === 0
-                ? <p className="text-label-sm text-secondary">Ask a follow-up question about the video</p>
-                : <span />
-              }
-              <div className="relative flex-shrink-0">
-                <select
-                  value={chatModel || summaryModel}
-                  onChange={e => handleChatModelChange(e.target.value)}
-                  disabled={models.length === 0}
-                  title={models.length === 0 ? 'Ollama offline' : 'Model for chat'}
-                  className="bg-surface-container-low border border-outline-variant rounded-lg pl-2 pr-6 py-1 text-label-sm text-on-surface appearance-none cursor-pointer disabled:opacity-50 outline-none focus:ring-2 focus:ring-primary/20"
-                >
-                  <option value="">— chat model —</option>
-                  {models.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-                <span className="material-symbols-outlined absolute right-1 top-1 text-secondary pointer-events-none text-[14px]">expand_more</span>
-              </div>
-            </div>
+            {chatHistory.length === 0 && (
+              <p className="text-label-sm text-secondary">Ask a follow-up question about the video</p>
+            )}
             <div className="flex items-center gap-3 bg-surface-container-low border border-outline-variant rounded-xl px-4 py-2 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
               <textarea
                 ref={chatInputRef}

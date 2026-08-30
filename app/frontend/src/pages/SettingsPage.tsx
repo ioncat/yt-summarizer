@@ -477,7 +477,7 @@ function StagePanel({ stage, initial, models, modelsOnline, hideModel }: StagePa
 // Page
 // ---------------------------------------------------------------------------
 
-type TabId = 'general' | 'cleanup' | 'summarization'
+type TabId = 'general' | 'cleanup' | 'summarization' | 'chat'
 type SummSubTab = 'single_pass' | 'map_reduce'
 type MapReduceStep = 'extract' | 'combine'
 
@@ -485,6 +485,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'general',       label: 'General' },
   { id: 'cleanup',       label: 'AI Cleanup' },
   { id: 'summarization', label: 'Summarization' },
+  { id: 'chat',          label: 'Chat' },
 ]
 
 export default function SettingsPage() {
@@ -497,6 +498,7 @@ export default function SettingsPage() {
   const [summarization, setSummarization] = useState<StageSettings | null>(null)
   const [summExtract, setSummExtract]   = useState<StageSettings | null>(null)
   const [summCombine, setSummCombine]   = useState<StageSettings | null>(null)
+  const [chat, setChat]                 = useState<StageSettings | null>(null)
   const [models, setModels]             = useState<string[]>([])
   const [modelsOnline, setModelsOnline] = useState(true)
   const [error, setError]               = useState('')
@@ -509,6 +511,7 @@ export default function SettingsPage() {
         setSummarization(s.summarization)
         setSummExtract(s.summarization_extract)
         setSummCombine(s.summarization_combine)
+        setChat(s.chat)
       })
       .catch(() => setError('Could not load settings'))
 
@@ -523,7 +526,7 @@ export default function SettingsPage() {
     </div>
   )
 
-  if (!appSettings || !cleanup || !summarization || !summExtract || !summCombine) return (
+  if (!appSettings || !cleanup || !summarization || !summExtract || !summCombine || !chat) return (
     <div className="p-6 md:p-8 max-w-[1200px] mx-auto">
       <div className="py-16 text-center text-secondary text-body-md">Loading…</div>
     </div>
@@ -698,6 +701,25 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+            </div>
+          )}
+
+          {/* Chat */}
+          {activeTab === 'chat' && (
+            <div className="space-y-5">
+              <p className="text-body-sm text-on-surface-variant">
+                Model used for chat conversations on the Result page. If not set, falls back to the Summarization model.
+              </p>
+              <div className="space-y-1.5">
+                <label className="text-label-md text-on-surface">Model</label>
+                <ModelOnlyPanel
+                  stage="chat"
+                  initial={chat}
+                  models={models}
+                  modelsOnline={modelsOnline}
+                  onSaved={setChat}
+                />
+              </div>
             </div>
           )}
 
