@@ -230,6 +230,7 @@ export interface AllSettings {
   summarization: StageSettings
   summarization_extract: StageSettings
   summarization_combine: StageSettings
+  chat: StageSettings
 }
 
 export async function getSettings(): Promise<AllSettings> {

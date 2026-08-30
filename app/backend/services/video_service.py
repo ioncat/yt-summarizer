@@ -737,11 +737,13 @@ async def get_all_settings(db: AsyncSession) -> dict:
     summ_row = await _get_stage_row(db, "summarization")
     extract_row = await _get_stage_row(db, "summarization_extract")
     combine_row = await _get_stage_row(db, "summarization_combine")
+    chat_row = await _get_stage_row(db, "chat")
     return {
         "cleanup": _stage_to_dict(cleanup_row, "cleanup"),
         "summarization": _stage_to_dict(summ_row, "summarization"),
         "summarization_extract": _stage_to_dict(extract_row, "summarization_extract"),
         "summarization_combine": _stage_to_dict(combine_row, "summarization_combine"),
+        "chat": _stage_to_dict(chat_row, "chat"),
     }
 
 

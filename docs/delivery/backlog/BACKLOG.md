@@ -142,6 +142,7 @@ Improve summarization quality beyond single-pass. Map-reduce or chunked approach
 | [Epic 35: Playlist Import](./epics/EPIC-35.md) | Paste YouTube playlist URL → yt-dlp flat-playlist extract → preview list with checkboxes → add selected to queue (Epic 34); auto-detect playlist URL in Bulk Add panel; 200-video limit | 🔵 Planned — depends on Epic 34 |
 | [Epic 37: Suggested Questions](./epics/EPIC-37.md) | After summary is ready, LLM generates 3–5 short content-specific questions shown as clickable chips near the chat bar. Click → sends as chat message. Lazy trigger (on first Summary tab open). `suggested_questions` JSON column in DB. Lowers cold-start barrier to chat. | 🔵 Planned — depends on Epic 15 |
 | [Epic 38: pytest API Tests](./epics/EPIC-38.md) | Full pytest suite for all API endpoints. In-process via `httpx.AsyncClient + ASGITransport`, in-memory SQLite DB, mocked yt-dlp (subprocess) + Ollama (respx). 8 test files: health, settings, process/status, result, cleanup, summary, queue, history. ~4–5h. | 🔵 Planned |
+| [Epic 39: Chat Model Selector](./epics/EPIC-39.md) | Dedicated model selector for chat — separate from summary model. Inline dropdown in floating chat bar. Persisted in `pipeline_settings` under stage `chat`. Falls back to summary model if not set. | ✅ Done |
 
 ---
 

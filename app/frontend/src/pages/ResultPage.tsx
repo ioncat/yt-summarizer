@@ -66,6 +66,7 @@ export default function ResultPage() {
   const [reextractLang, setReextractLang] = useState('auto')
   const [cleanupModel, setCleanupModel]   = useState('')
   const [summaryModel, setSummaryModel]   = useState('')
+  const [chatModel, setChatModel]         = useState('')
   const [models, setModels]               = useState<string[]>([])
   const [cleanupElapsedSeconds, setCleanupElapsedSeconds] = useState<number | null>(null)
   const [summaryElapsedSeconds, setSummaryElapsedSeconds] = useState<number | null>(null)
@@ -239,6 +240,7 @@ export default function ResultPage() {
       .then(([s, list]) => {
         setCleanupModel(s.cleanup.model ?? '')
         setSummaryModel(s.summarization.model ?? '')
+        setChatModel(s.chat?.model ?? '')
         setOllamaUrl(s.app.ollama_url ?? '')
         setModels(list)
         cleanupPromptsRef.current = { system_prompt: s.cleanup.system_prompt ?? null, user_prompt_template: s.cleanup.user_prompt_template ?? null }
@@ -279,7 +281,8 @@ export default function ResultPage() {
 
   async function sendChatMessage() {
     const question = chatInput.trim()
-    if (!question || isChatting || !ollamaUrl || !summaryModel || !result) return
+    const activeChatModel = chatModel || summaryModel
+    if (!question || isChatting || !ollamaUrl || !activeChatModel || !result) return
 
     if (ollamaMessagesRef.current.length === 0) {
       const sourceText = result.cleaned_text ?? result.formatted_text ?? ''
@@ -301,7 +304,7 @@ export default function ResultPage() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: summaryModel, messages: ollamaMessagesRef.current }),
+        body: JSON.stringify({ model: activeChatModel, messages: ollamaMessagesRef.current }),
       })
       if (!response.ok) throw new Error(`Ollama error ${response.status}`)
 
@@ -459,6 +462,13 @@ export default function ResultPage() {
     } catch (err) { console.error('[Result] saveSettings summary model failed:', err) }
   }
 
+  async function handleChatModelChange(newModel: string) {
+    setChatModel(newModel)
+    try {
+      await saveSettings('chat', { system_prompt: null, user_prompt_template: null, model: newModel || null })
+    } catch (err) { console.error('[Result] saveSettings chat model failed:', err) }
+  }
+
   async function handleCleanup() {
     if (!videoId || !result) return
     requestNotifyPermission()
@@ -539,7 +549,7 @@ export default function ResultPage() {
   const cleanupDuration  = result.cleanup_duration_seconds ?? localCleanupDuration
   const summaryDuration  = result.summary_duration_seconds ?? localSummaryDuration
   const chatBarVisible   = (activeTab === 'summary' || activeTab === 'chat')
-    && result.summary_status === 'done' && !!result.summary_text && !!ollamaUrl && !!summaryModel
+    && result.summary_status === 'done' && !!result.summary_text && !!ollamaUrl && !!(chatModel || summaryModel)
 
   const subtitlesCount = result.char_count ?? result.formatted_text?.length ?? null
   const cleanedCount   = result.cleaned_text?.length ?? null
@@ -1003,9 +1013,25 @@ export default function ResultPage() {
                 <p className="text-label-sm text-secondary">⚠ Text is very long ({Math.round(sourceLen / 1000)}K chars) — response quality may vary</p>
               ) : null
             })()}
-            {chatHistory.length === 0 && (
-              <p className="text-label-sm text-secondary">Ask a follow-up question about the video</p>
-            )}
+            <div className="flex items-center justify-between gap-2">
+              {chatHistory.length === 0
+                ? <p className="text-label-sm text-secondary">Ask a follow-up question about the video</p>
+                : <span />
+              }
+              <div className="relative flex-shrink-0">
+                <select
+                  value={chatModel || summaryModel}
+                  onChange={e => handleChatModelChange(e.target.value)}
+                  disabled={models.length === 0}
+                  title={models.length === 0 ? 'Ollama offline' : 'Model for chat'}
+                  className="bg-surface-container-low border border-outline-variant rounded-lg pl-2 pr-6 py-1 text-label-sm text-on-surface appearance-none cursor-pointer disabled:opacity-50 outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="">— chat model —</option>
+                  {models.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <span className="material-symbols-outlined absolute right-1 top-1 text-secondary pointer-events-none text-[14px]">expand_more</span>
+              </div>
+            </div>
             <div className="flex items-center gap-3 bg-surface-container-low border border-outline-variant rounded-xl px-4 py-2 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
               <textarea
                 ref={chatInputRef}
