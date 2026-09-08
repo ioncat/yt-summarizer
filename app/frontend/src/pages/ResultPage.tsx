@@ -286,11 +286,15 @@ export default function ResultPage() {
 
     if (ollamaMessagesRef.current.length === 0) {
       const sourceText = result.cleaned_text ?? result.formatted_text ?? ''
-      const systemPrompt = summaryPromptsRef.current.system_prompt
+      const CHAT_SYSTEM = 'You are a helpful assistant answering questions about a video. ' +
+        'The full transcript is provided below. Answer questions based on the transcript content. ' +
+        'Respond in the same language as the question.'
       ollamaMessagesRef.current = [
-        ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-        { role: 'user', content: sourceText },
-        { role: 'assistant', content: result.summary_text ?? '' },
+        { role: 'system', content: CHAT_SYSTEM },
+        { role: 'user', content: `Video transcript:\n\n${sourceText}` },
+        { role: 'assistant', content: result.summary_text
+            ? `I have read the transcript. Here is a summary:\n\n${result.summary_text}`
+            : 'I have read the transcript.' },
       ]
     }
 
