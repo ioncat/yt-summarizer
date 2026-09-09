@@ -137,6 +137,7 @@ class ProcessingQueueItem(Base):
     db_video_id: Mapped[str | None] = mapped_column(String)       # FK to videos.id (UUID)
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | processing | done | failed | skipped
     pipeline_stages: Mapped[str] = mapped_column(Text, default='["extract"]')  # JSON array
+    language: Mapped[str | None] = mapped_column(String)          # subtitle language; None → "auto"
     error_message: Mapped[str | None] = mapped_column(Text)
     added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime)

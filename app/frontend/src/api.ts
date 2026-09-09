@@ -359,11 +359,12 @@ export async function queueBulkAdd(
   urls: string[],
   pipeline_stages?: string[],
   force = false,
+  language?: string,
 ): Promise<{ added: number; ids: number[]; invalid: string[]; duplicates: string[] }> {
   const res = await fetch(`${BASE}/queue/bulk`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ urls, pipeline_stages: pipeline_stages ?? null, force }),
+    body: JSON.stringify({ urls, pipeline_stages: pipeline_stages ?? null, force, language: language ?? null }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))

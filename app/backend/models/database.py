@@ -43,6 +43,7 @@ async def _migrate_db() -> None:
         ("subtitles_formatted", "mindmap_text", "ALTER TABLE subtitles_formatted ADD COLUMN mindmap_text TEXT"),
         ("subtitles_formatted", "mindmap_status", "ALTER TABLE subtitles_formatted ADD COLUMN mindmap_status TEXT"),
         ("videos", "is_favorite", "ALTER TABLE videos ADD COLUMN is_favorite BOOLEAN DEFAULT 0"),
+        ("processing_queue", "language", "ALTER TABLE processing_queue ADD COLUMN language TEXT"),
     ]
     async with engine.begin() as conn:
         for table, column, sql in migrations:

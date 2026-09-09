@@ -81,7 +81,7 @@ export default function HomePage() {
       }
       setLoading(true)
       try {
-        const res = await queueBulkAdd([trimmedUrl], ['extract', 'cleanup', 'summary'])
+        const res = await queueBulkAdd([trimmedUrl], ['extract', 'cleanup', 'summary'], false, language || undefined)
         if (res.duplicates?.length) {
           const vid = res.duplicates[0].replace(/.*[?&]v=/, '').replace(/[&?].*/, '')
           navigate(`/result/${vid}`)
@@ -103,7 +103,7 @@ export default function HomePage() {
         // Multi-stage → queue
         setLoading(true)
         try {
-          const res = await queueBulkAdd([trimmedUrl], stages)
+          const res = await queueBulkAdd([trimmedUrl], stages, false, language || undefined)
           if (res.duplicates?.length) {
             const vid = res.duplicates[0].replace(/.*[?&]v=/, '').replace(/[&?].*/, '')
             navigate(`/result/${vid}`)

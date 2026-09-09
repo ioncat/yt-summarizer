@@ -799,6 +799,7 @@ class BulkQueueRequest(BaseModel):
     urls: list[str]
     pipeline_stages: list[str] | None = None  # defaults to app_settings queue_default_pipeline
     force: bool = False  # skip dedup check (e.g. re-run stages on already-processed videos)
+    language: str | None = None  # subtitle language; None → "auto" (auto-detect)
 
 
 @router.post("/queue/bulk")
@@ -861,7 +862,7 @@ async def queue_bulk_add(
     # Step 4: add only new
     ids: list[int] = []
     if new_urls:
-        ids = await add_items(db, new_urls, stages)
+        ids = await add_items(db, new_urls, stages, language=body.language or None)
 
     return {"added": len(ids), "ids": ids, "invalid": invalid, "duplicates": duplicates}
 

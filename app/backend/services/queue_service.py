@@ -63,9 +63,15 @@ async def get_duplicate_video_ids(db: AsyncSession, video_ids: list[str]) -> set
     return found
 
 
-async def add_items(db: AsyncSession, urls: list[str], pipeline_stages: list[str]) -> list[int]:
+async def add_items(
+    db: AsyncSession,
+    urls: list[str],
+    pipeline_stages: list[str],
+    language: str | None = None,
+) -> list[int]:
     """Insert queue items. Returns list of inserted IDs.
     video_id (YouTube ID) is stored at insert time for dedup checks.
+    language=None means auto-detect; pass explicit code (e.g. "ru") to force.
     """
     from services.subtitle_extractor import extract_video_id as _extract_video_id
 
@@ -78,10 +84,10 @@ async def add_items(db: AsyncSession, urls: list[str], pipeline_stages: list[str
         vid = _extract_video_id(url)  # always valid here (caller already validated)
         res = await db.execute(
             text(
-                "INSERT INTO processing_queue (url, video_id, status, pipeline_stages, added_at, sort_order) "
-                "VALUES (:url, :vid, 'pending', :stages, datetime('now'), :order)"
+                "INSERT INTO processing_queue (url, video_id, status, pipeline_stages, language, added_at, sort_order) "
+                "VALUES (:url, :vid, 'pending', :stages, :language, datetime('now'), :order)"
             ),
-            {"url": url, "vid": vid, "stages": stages_json, "order": max_order + i + 1},
+            {"url": url, "vid": vid, "stages": stages_json, "language": language, "order": max_order + i + 1},
         )
         ids.append(res.lastrowid)
 
@@ -94,7 +100,7 @@ async def get_queue(db: AsyncSession) -> list[dict]:
     result = await db.execute(
         text(
             "SELECT id, url, video_id, db_video_id, status, pipeline_stages, "
-            "error_message, added_at, started_at, finished_at, sort_order "
+            "error_message, added_at, started_at, finished_at, sort_order, language "
             "FROM processing_queue ORDER BY sort_order, added_at"
         )
     )
@@ -113,6 +119,7 @@ async def get_queue(db: AsyncSession) -> list[dict]:
             "finished_at": r[9],
             "sort_order": r[10],
             "progress": _QUEUE_PROGRESS.get(r[0]),
+            "language": r[11],
         }
         for r in rows
     ]
@@ -189,7 +196,7 @@ async def _pick_next() -> dict | None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             text(
-                "SELECT id, url, pipeline_stages FROM processing_queue "
+                "SELECT id, url, pipeline_stages, language FROM processing_queue "
                 "WHERE status = 'pending' ORDER BY sort_order, added_at LIMIT 1"
             )
         )
@@ -200,6 +207,7 @@ async def _pick_next() -> dict | None:
             "id": row[0],
             "url": row[1],
             "pipeline_stages": json.loads(row[2]) if row[2] else ["extract"],
+            "language": row[3],
         }
 
 
@@ -460,14 +468,15 @@ async def queue_worker() -> None:
         item_id = item["id"]
         url = item["url"]
         pipeline_stages: list[str] = item["pipeline_stages"]
-        logger.info("Queue worker: processing item %d url=%s stages=%s", item_id, url, pipeline_stages)
+        item_language: str = item.get("language") or "auto"
+        logger.info("Queue worker: processing item %d url=%s stages=%s language=%s", item_id, url, pipeline_stages, item_language)
         await _set_processing(item_id)
 
         try:
             # Stage 1: extract (only if requested — skip for already-processed videos)
             if "extract" in pipeline_stages:
                 _QUEUE_PROGRESS[item_id] = "extracting subtitles…"
-                extract_result = await _run_extract(url)
+                extract_result = await _run_extract(url, language=item_language)
                 yt_video_id = extract_result["video_id"]
                 db_video_id = extract_result["db_video_id"]
             else:
