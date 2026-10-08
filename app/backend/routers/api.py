@@ -8,7 +8,8 @@ from typing import Annotated
 
 import os
 
-logger = logging.getLogger("api.mindmap")
+logger = logging.getLogger("api")
+_reextract_logger = logging.getLogger("api.reextract")
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
@@ -286,21 +287,33 @@ async def _run_reextract(video_id: str, language: str = "auto") -> None:
         async with AsyncSessionLocal() as db:
             fmt = await get_result(db, video_id)
             if not fmt:
+                _reextract_logger.warning("reextract: video not found video_id=%s", video_id)
                 return
             url = fmt["url"]
             cookies_path = await get_app_setting(db, "cookies_path")
             ytdlp_path = await get_app_setting(db, "ytdlp_path") or "yt-dlp"
 
+        _reextract_logger.info("reextract: starting video_id=%s url=%s language=%s", video_id, url, language)
         extraction = await asyncio.to_thread(
             extract_subtitles, url, language, cookies_path, ytdlp_path
         )
         if not extraction.success:
+            _reextract_logger.warning(
+                "reextract: extraction failed video_id=%s error_type=%s message=%s available=%s",
+                video_id, extraction.error_type, extraction.error_message, extraction.available_languages,
+            )
             return
+        _reextract_logger.info(
+            "reextract: success video_id=%s detected_lang=%s entries=%d",
+            video_id, extraction.language, len(extraction.subtitles or []),
+        )
         formatted = format_subtitles(
             extraction.subtitles, chapters=extraction.metadata.chapters
         )
         async with AsyncSessionLocal() as db:
             await replace_subtitles_after_reextract(db, video_id, extraction, formatted)
+    except Exception:
+        _reextract_logger.exception("reextract: unexpected error video_id=%s", video_id)
     finally:
         _REEXTRACT_SET.discard(video_id)
 
