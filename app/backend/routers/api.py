@@ -288,9 +288,6 @@ async def _run_reextract(video_id: str, language: str = "auto") -> None:
             if not fmt:
                 return
             url = fmt["url"]
-            # If caller passes "auto", fall back to previously detected language
-            if language == "auto":
-                language = fmt.get("language") or "auto"
             cookies_path = await get_app_setting(db, "cookies_path")
             ytdlp_path = await get_app_setting(db, "ytdlp_path") or "yt-dlp"
 
