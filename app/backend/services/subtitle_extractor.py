@@ -336,29 +336,47 @@ def _detect_language(info: dict) -> str:
     """Detect original video language from yt-dlp metadata.
 
     Priority:
-    1. Key ending in '-orig' in automatic_captions → strip suffix (most reliable)
-    2. First key in subtitles (manually uploaded captions)
-    3. First key in automatic_captions
-    4. Top-level 'language' field
-    5. Fallback 'ru'
+    1. Top-level 'language' field + matching track in subtitles/auto_captions
+       (YouTube's own declaration — most reliable when a track exists for it)
+    2. Key ending in '-orig' in automatic_captions → strip suffix
+    3. First key in subtitles (manually uploaded captions)
+    4. First key in automatic_captions (last resort — ordering unreliable)
+    5. Top-level 'language' field alone (no matching track but still a hint)
+    6. Fallback 'ru'
+
+    Note: iterating automatic_captions key order is unreliable — YouTube often
+    returns translated languages (e.g. 'en') alphabetically before the original
+    (e.g. 'ru'), which caused wrong language detection for non-English videos.
     """
     auto = info.get("automatic_captions", {})
     manual = info.get("subtitles", {})
 
+    # 1. Video's declared language — use when a matching track exists
+    video_lang = info.get("language")
+    if video_lang:
+        lang_base = video_lang.split("-")[0].lower()
+        if lang_base in manual or lang_base in auto:
+            return lang_base
+        orig_key = f"{lang_base}-orig"
+        if orig_key in auto:
+            return lang_base
+
+    # 2. -orig suffix → indicates original (non-translated) auto-caption track
     for key in auto:
         if key.endswith("-orig"):
             return key[:-5]
 
+    # 3. Manual subtitles (always in the video's actual language)
     if manual:
         return next(iter(manual))
 
+    # 4. First auto caption key (ordering unreliable, last resort)
     if auto:
-        first = next(iter(auto))
-        return first
+        return next(iter(auto))
 
-    lang = info.get("language")
-    if lang:
-        return lang
+    # 5. video_lang alone — no matching track, but still a useful hint
+    if video_lang:
+        return video_lang.split("-")[0].lower()
 
     return "ru"
 
