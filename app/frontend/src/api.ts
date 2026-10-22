@@ -404,3 +404,17 @@ export async function clearQueueFailed(): Promise<{ cleared: number }> {
   if (!res.ok) throw new Error('Failed to clear failed items')
   return res.json()
 }
+
+export async function retryQueueItem(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/queue/${id}/retry`, { method: 'POST' })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || 'Failed to retry item')
+  }
+}
+
+export async function retryAllFailed(): Promise<{ retried: number }> {
+  const res = await fetch(`${BASE}/queue/failed/retry`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to retry failed items')
+  return res.json()
+}

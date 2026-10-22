@@ -911,6 +911,26 @@ async def clear_queue_failed(db: Annotated[AsyncSession, Depends(get_db)]):
     return {"cleared": count}
 
 
+@router.post("/queue/failed/retry")
+async def retry_queue_failed(db: Annotated[AsyncSession, Depends(get_db)]):
+    """Reset all failed queue items to pending."""
+    from services.queue_service import retry_all_failed
+    count = await retry_all_failed(db)
+    return {"retried": count}
+
+
+@router.post("/queue/{item_id}/retry")
+async def retry_queue_item(item_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Reset a single failed queue item to pending."""
+    from services.queue_service import retry_item
+    result = await retry_item(db, item_id)
+    if result == "not_found":
+        raise HTTPException(status_code=404, detail="Item not found")
+    if result == "not_failed":
+        raise HTTPException(status_code=409, detail="Item is not in failed state")
+    return {"retried": item_id}
+
+
 @router.delete("/queue/{item_id}")
 async def delete_queue_item(item_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
     """Delete a single pending queue item."""

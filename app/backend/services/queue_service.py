@@ -170,6 +170,40 @@ async def clear_failed(db: AsyncSession) -> int:
     return result.rowcount
 
 
+async def retry_item(db: AsyncSession, item_id: int) -> str:
+    """Reset a failed item back to pending. Returns 'not_found' | 'not_failed' | 'ok'."""
+    result = await db.execute(
+        text("SELECT status FROM processing_queue WHERE id = :id"),
+        {"id": item_id},
+    )
+    row = result.fetchone()
+    if not row:
+        return "not_found"
+    if row[0] != "failed":
+        return "not_failed"
+    await db.execute(
+        text(
+            "UPDATE processing_queue SET status = 'pending', error_message = NULL, "
+            "started_at = NULL, finished_at = NULL WHERE id = :id"
+        ),
+        {"id": item_id},
+    )
+    await db.commit()
+    return "ok"
+
+
+async def retry_all_failed(db: AsyncSession) -> int:
+    """Reset all failed items to pending. Returns count."""
+    result = await db.execute(
+        text(
+            "UPDATE processing_queue SET status = 'pending', error_message = NULL, "
+            "started_at = NULL, finished_at = NULL WHERE status = 'failed'"
+        )
+    )
+    await db.commit()
+    return result.rowcount
+
+
 # ---------------------------------------------------------------------------
 # Worker helpers
 # ---------------------------------------------------------------------------

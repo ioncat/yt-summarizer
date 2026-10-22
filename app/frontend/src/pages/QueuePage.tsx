@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { Link } from 'react-router-dom'
-import { getQueue, deleteQueueItem, clearQueuePending, clearQueueFailed, QueueItem } from '../api'
+import { getQueue, deleteQueueItem, clearQueuePending, clearQueueFailed, retryQueueItem, retryAllFailed, QueueItem } from '../api'
 
 function activeStage(progress: string | null): string | null {
   if (!progress) return null
@@ -76,6 +76,26 @@ export default function QueuePage() {
     } catch { /* ignore */ }
   }
 
+  async function handleRetry(id: number) {
+    try {
+      await retryQueueItem(id)
+      setItems(prev => prev.map(i =>
+        i.id === id ? { ...i, status: 'pending', error_message: null } : i
+      ))
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to retry')
+    }
+  }
+
+  async function handleRetryAllFailed() {
+    try {
+      await retryAllFailed()
+      load()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to retry')
+    }
+  }
+
   const pendingCount = items.filter(i => i.status === 'pending').length
   const failedCount  = items.filter(i => i.status === 'failed').length
   const processingItem = items.find(i => i.status === 'processing')
@@ -97,6 +117,15 @@ export default function QueuePage() {
             <h2 className="text-headline-lg font-bold text-on-surface">Processing Queue</h2>
           </div>
           <div className="flex gap-3 flex-wrap">
+            {failedCount > 0 && (
+              <button
+                onClick={handleRetryAllFailed}
+                className="px-4 py-2 border border-primary text-primary rounded-lg text-label-md font-semibold hover:bg-primary/10 transition-colors flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-[16px]">replay</span>
+                Retry failed ({failedCount})
+              </button>
+            )}
             {failedCount > 0 && (
               <button
                 onClick={handleClearFailed}
@@ -289,6 +318,15 @@ export default function QueuePage() {
                               className="material-symbols-outlined text-[18px] text-outline hover:text-error transition-colors"
                             >
                               close
+                            </button>
+                          )}
+                          {item.status === 'failed' && (
+                            <button
+                              onClick={() => handleRetry(item.id)}
+                              title="Retry"
+                              className="material-symbols-outlined text-[18px] text-outline hover:text-primary transition-colors"
+                            >
+                              replay
                             </button>
                           )}
                         </td>
