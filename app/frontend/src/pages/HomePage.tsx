@@ -12,7 +12,7 @@ const LANGUAGES = [
 const PIPELINE_PRESETS = [
   { value: 'extract', label: 'Extract only', stages: ['extract'] },
   { value: 'cleanup', label: 'Extract + Cleanup', stages: ['extract', 'cleanup'] },
-  { value: 'full', label: 'Full pipeline', stages: ['extract', 'cleanup', 'summary'] },
+  { value: 'full', label: 'Full pipeline', stages: ['extract', 'cleanup', 'summary', 'mindmap'] },
 ]
 
 export default function HomePage() {
@@ -81,7 +81,7 @@ export default function HomePage() {
       }
       setLoading(true)
       try {
-        const res = await queueBulkAdd([trimmedUrl], ['extract', 'cleanup', 'summary'], false, language || undefined)
+        const res = await queueBulkAdd([trimmedUrl], ['extract', 'cleanup', 'summary', 'mindmap'], false, language || undefined)
         if (res.duplicates?.length) {
           const vid = res.duplicates[0].replace(/.*[?&]v=/, '').replace(/[&?].*/, '')
           navigate(`/result/${vid}`)

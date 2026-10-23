@@ -155,6 +155,7 @@ export default function ResultPage() {
       .then(data => {
         const prevCleanup = prevCleanupStatusRef.current
         const prevSummary = prevSummaryStatusRef.current
+        const isFirstLoad = prevMindmapStatusRef.current === undefined
         prevCleanupStatusRef.current = data.cleanup_status
         prevSummaryStatusRef.current = data.summary_status
         prevMindmapStatusRef.current = data.mindmap_status
@@ -167,7 +168,11 @@ export default function ResultPage() {
           }
         }
 
-        if (switchTab) {
+        if (isFirstLoad) {
+          if (data.mindmap_text) setActiveTab('mindmap')
+          else if (data.summary_text) setActiveTab('summary')
+          else setActiveTab('subtitles')
+        } else if (switchTab) {
           if (data.summary_status === 'done') setActiveTab('summary')
           else if (data.cleanup_status === 'done') setActiveTab('cleaned')
           else setActiveTab('subtitles')
@@ -890,16 +895,16 @@ export default function ResultPage() {
             {/* Tabs bar */}
             <div className="-mx-6 px-6 border-b border-outline-variant">
               <div className="flex items-end gap-8">
-                {(['subtitles', 'cleaned', 'summary', 'mindmap'] as Tab[]).map(tab => {
+                {(['mindmap', 'subtitles', 'cleaned', 'summary'] as Tab[]).map(tab => {
                   const isActive = activeTab === tab
                   const isProcessing =
                     (tab === 'cleaned'  && result.cleanup_status === 'processing') ||
                     (tab === 'summary'  && result.summary_status === 'processing') ||
                     (tab === 'mindmap'  && result.mindmap_status === 'processing')
                   const label =
+                    tab === 'mindmap'   ? 'Mind Map'  :
                     tab === 'subtitles' ? 'Subtitles' :
-                    tab === 'cleaned'   ? 'Cleaned'   :
-                    tab === 'summary'   ? 'Summary'   : 'Mind Map'
+                    tab === 'cleaned'   ? 'Cleaned'   : 'Summary'
                   return (
                     <button
                       key={tab}
