@@ -1,6 +1,8 @@
-import { useState, useEffect, FormEvent } from 'react'
+import { useState, useEffect, FormEvent, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { processVideo, getSettings, getHealth, AllSettings, queueBulkAdd, VideoAlreadyExistsError } from '../api'
+import { processVideo, processFile, getSettings, getHealth, AllSettings, queueBulkAdd, VideoAlreadyExistsError } from '../api'
+
+type InputMode = 'url' | 'file'
 
 const LANGUAGES = [
   { value: 'auto', label: 'Auto-detect' },
@@ -15,10 +17,19 @@ const PIPELINE_PRESETS = [
   { value: 'full', label: 'Full pipeline', stages: ['extract', 'cleanup', 'summary', 'mindmap'] },
 ]
 
+function resolveStages(presetValue: string, useStt: boolean): string[] {
+  const preset = PIPELINE_PRESETS.find(p => p.value === presetValue)
+  const stages = preset?.stages ?? ['extract']
+  if (useStt) return stages.map(s => s === 'extract' ? 'transcribe' : s)
+  return stages
+}
+
 export default function HomePage() {
+  const [inputMode, setInputMode] = useState<InputMode>('url')
   const [url, setUrl] = useState('')
   const [language, setLanguage] = useState('auto')
   const [pipeline, setPipeline] = useState('extract')
+  const [useStt, setUseStt] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [missingConfig, setMissingConfig] = useState<string[]>([])
@@ -27,6 +38,12 @@ export default function HomePage() {
     () => localStorage.getItem('yt_summarizer_auto_pipeline') === 'true'
   )
   const [ollamaOnline, setOllamaOnline] = useState(false)
+
+  // File upload state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [fileLanguage, setFileLanguage] = useState('auto')
+  const [fileDragOver, setFileDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Bulk Add panel state
   const [bulkOpen, setBulkOpen] = useState(false)
@@ -63,6 +80,24 @@ export default function HomePage() {
       .catch(err => { console.error('[Home] getSettings failed:', err) })
   }, [])
 
+  async function handleFileSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (!selectedFile) return
+    setError('')
+    setLoading(true)
+    try {
+      const res = await processFile(selectedFile, fileLanguage)
+      navigate(
+        `/processing/${res.task_id}/${res.video_id}?url=${encodeURIComponent('local://' + selectedFile.name)}`,
+        { state: { autoPipeline: false } }
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError('')
@@ -80,8 +115,9 @@ export default function HomePage() {
         }
       }
       setLoading(true)
+      const firstStage = useStt ? 'transcribe' : 'extract'
       try {
-        const res = await queueBulkAdd([trimmedUrl], ['extract', 'cleanup', 'summary', 'mindmap'], false, language || undefined)
+        const res = await queueBulkAdd([trimmedUrl], [firstStage, 'cleanup', 'summary', 'mindmap'], false, language || undefined)
         if (res.duplicates?.length) {
           const vid = res.duplicates[0].replace(/.*[?&]v=/, '').replace(/[&?].*/, '')
           navigate(`/result/${vid}`)
@@ -95,12 +131,10 @@ export default function HomePage() {
         setLoading(false)
       }
     } else {
-      // Use selected pipeline preset stages
-      const preset = PIPELINE_PRESETS.find(p => p.value === pipeline)
-      const stages = preset?.stages ?? ['extract']
+      const stages = resolveStages(pipeline, useStt)
 
-      if (stages.length > 1) {
-        // Multi-stage → queue
+      if (stages.length > 1 || useStt) {
+        // Multi-stage or STT → queue
         setLoading(true)
         try {
           const res = await queueBulkAdd([trimmedUrl], stages, false, language || undefined)
@@ -161,6 +195,8 @@ export default function HomePage() {
   const inputBase = 'w-full px-4 py-3 bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-body-md text-on-surface'
   const selectBase = inputBase + ' appearance-none cursor-pointer !pr-10'
 
+  const ACCEPTED_EXTENSIONS = '.mp4,.mkv,.avi,.mov,.webm,.mp3,.wav,.m4a,.ogg,.flac,.aac,.opus,.wma'
+
   return (
     <div className="flex-grow flex flex-col items-center justify-start p-6 md:p-12 max-w-[1200px] mx-auto w-full gap-8 pt-8">
 
@@ -177,67 +213,173 @@ export default function HomePage() {
 
       {/* Main form card */}
       <div className="w-full max-w-2xl bg-surface-container-lowest border border-outline-variant rounded-xl p-8 shadow-sm">
-        <div className="text-center mb-10">
+        <div className="text-center mb-8">
           <h2 className="text-headline-xl font-bold text-on-surface mb-2">YT Summarizer</h2>
-          <p className="text-body-md text-secondary">Paste a YouTube URL to extract and format subtitles.</p>
+          <p className="text-body-md text-secondary">Extract, clean, and summarize video content.</p>
         </div>
 
-        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-          {/* URL input */}
-          <div className="flex flex-col gap-2">
-            <label className="text-label-md text-on-surface-variant font-medium" htmlFor="url">
-              YouTube URL
-            </label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-secondary text-[20px]">
-                link
-              </span>
-              <input
-                id="url"
-                type="text"
-                className={inputBase + ' !pl-12'}
-                placeholder="https://www.youtube.com/watch?v=..."
-                value={url}
-                onChange={e => setUrl(e.target.value)}
-                required
-                autoFocus
-              />
-            </div>
-          </div>
+        {/* Mode tabs */}
+        <div className="flex gap-1 bg-surface-container-low rounded-lg p-1 mb-6">
+          {(['url', 'file'] as InputMode[]).map(mode => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => { setInputMode(mode); setError('') }}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-label-md font-medium transition-all cursor-pointer ${inputMode === mode ? 'bg-surface-container-highest text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}`}
+            >
+              <span className="material-symbols-outlined text-[18px]">{mode === 'url' ? 'link' : 'upload_file'}</span>
+              {mode === 'url' ? 'YouTube URL' : 'Local File'}
+            </button>
+          ))}
+        </div>
 
-          {/* Pipeline + Language row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* URL form */}
+        {inputMode === 'url' && (
+          <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
             <div className="flex flex-col gap-2">
-              <label className="text-label-md text-on-surface-variant font-medium" htmlFor="pipeline">
-                Pipeline
+              <label className="text-label-md text-on-surface-variant font-medium" htmlFor="url">
+                YouTube URL
               </label>
               <div className="relative">
-                <select
-                  id="pipeline"
-                  className={selectBase}
-                  value={pipeline}
-                  onChange={e => setPipeline(e.target.value)}
-                  disabled={autoPipeline}
-                >
-                  {PIPELINE_PRESETS.map(p => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
-                  ))}
-                </select>
-                <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-secondary text-[20px]">expand_more</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-secondary text-[20px]">link</span>
+                <input
+                  id="url"
+                  type="text"
+                  className={inputBase + ' !pl-12'}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  value={url}
+                  onChange={e => setUrl(e.target.value)}
+                  required
+                  autoFocus
+                />
               </div>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <label className="text-label-md text-on-surface-variant font-medium" htmlFor="lang">
-                Subtitle language
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-label-md text-on-surface-variant font-medium" htmlFor="pipeline">Pipeline</label>
+                <div className="relative">
+                  <select id="pipeline" className={selectBase} value={pipeline} onChange={e => setPipeline(e.target.value)} disabled={autoPipeline}>
+                    {PIPELINE_PRESETS.map(p => (
+                      <option key={p.value} value={p.value}>{p.label}</option>
+                    ))}
+                  </select>
+                  <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-secondary text-[20px]">expand_more</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-label-md text-on-surface-variant font-medium" htmlFor="lang">Language</label>
+                <div className="relative">
+                  <select id="lang" className={selectBase} value={language} onChange={e => setLanguage(e.target.value)}>
+                    {LANGUAGES.map(l => (
+                      <option key={l.value} value={l.value}>{l.label}</option>
+                    ))}
+                  </select>
+                  <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-secondary text-[20px]">expand_more</span>
+                </div>
+              </div>
+            </div>
+
+            {/* STT toggle */}
+            <div className="flex items-center gap-3 pt-1">
+              <input
+                id="use-stt"
+                type="checkbox"
+                className="w-5 h-5 rounded border-outline-variant cursor-pointer accent-primary"
+                checked={useStt}
+                onChange={e => setUseStt(e.target.checked)}
+              />
+              <label htmlFor="use-stt" className="text-label-md text-on-surface cursor-pointer">
+                Use speech-to-text (Whisper) instead of captions
               </label>
+            </div>
+
+            {/* Auto-pipeline checkbox */}
+            <div className="flex items-center gap-3">
+              <input
+                id="auto-pipeline"
+                type="checkbox"
+                className="w-5 h-5 rounded border-outline-variant cursor-pointer accent-primary"
+                checked={autoPipeline}
+                disabled={!ollamaOnline}
+                onChange={e => {
+                  setAutoPipeline(e.target.checked)
+                  localStorage.setItem('yt_summarizer_auto_pipeline', String(e.target.checked))
+                }}
+              />
+              <label htmlFor="auto-pipeline" className={`text-label-md text-on-surface cursor-pointer ${!ollamaOnline ? 'opacity-50' : ''}`}>
+                Run full pipeline (Transcript + Cleanup + Summary)
+                {!ollamaOnline && <span className="ml-2 text-secondary font-normal">— Ollama offline</span>}
+              </label>
+            </div>
+
+            {error && (
+              <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3">
+                <p className="text-body-sm text-on-error-container whitespace-pre-line">{error}</p>
+              </div>
+            )}
+
+            <div className="flex flex-col md:flex-row gap-4 pt-4">
+              <button
+                type="submit"
+                disabled={loading || !url.trim()}
+                className="flex-grow bg-primary text-on-primary py-4 px-6 rounded-lg text-label-md font-bold transition-all hover:opacity-90 active:scale-[0.98] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {loading ? 'Submitting…' : 'Add to queue'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setBulkOpen(o => !o); setBulkResult(null); setBulkError('') }}
+                className="flex-grow bg-surface-container-high text-on-surface-variant py-4 px-6 rounded-lg text-label-md font-medium transition-all hover:bg-surface-container-highest active:scale-[0.98] cursor-pointer"
+              >
+                {bulkOpen ? '✕ Cancel bulk' : 'Bulk add'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* File upload form */}
+        {inputMode === 'file' && (
+          <form className="flex flex-col gap-4" onSubmit={handleFileSubmit}>
+            <div
+              className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${fileDragOver ? 'border-primary bg-primary/5' : 'border-outline-variant hover:border-primary/50'}`}
+              onDragOver={e => { e.preventDefault(); setFileDragOver(true) }}
+              onDragLeave={() => setFileDragOver(false)}
+              onDrop={e => {
+                e.preventDefault()
+                setFileDragOver(false)
+                const f = e.dataTransfer.files[0]
+                if (f) setSelectedFile(f)
+              }}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ACCEPTED_EXTENSIONS}
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) setSelectedFile(f) }}
+              />
+              {selectedFile ? (
+                <div className="flex flex-col items-center gap-2">
+                  <span className="material-symbols-outlined text-primary text-[40px]">audio_file</span>
+                  <p className="text-body-md font-medium text-on-surface">{selectedFile.name}</p>
+                  <p className="text-label-sm text-secondary">{(selectedFile.size / (1024 * 1024)).toFixed(1)} MB</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2 pointer-events-none">
+                  <span className="material-symbols-outlined text-secondary text-[40px]">upload_file</span>
+                  <p className="text-body-md text-on-surface-variant">Drop a file here, or click to browse</p>
+                  <p className="text-label-sm text-secondary">MP4, MKV, AVI, MOV, MP3, WAV, M4A, OGG, FLAC…</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-label-md text-on-surface-variant font-medium" htmlFor="file-lang">Language</label>
               <div className="relative">
-                <select
-                  id="lang"
-                  className={selectBase}
-                  value={language}
-                  onChange={e => setLanguage(e.target.value)}
-                >
+                <select id="file-lang" className={selectBase} value={fileLanguage} onChange={e => setFileLanguage(e.target.value)}>
                   {LANGUAGES.map(l => (
                     <option key={l.value} value={l.value}>{l.label}</option>
                   ))}
@@ -245,55 +387,22 @@ export default function HomePage() {
                 <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-secondary text-[20px]">expand_more</span>
               </div>
             </div>
-          </div>
 
-          {/* Auto-pipeline checkbox */}
-          <div className="flex items-center gap-3 pt-1">
-            <input
-              id="auto-pipeline"
-              type="checkbox"
-              className="w-5 h-5 rounded border-outline-variant cursor-pointer accent-primary"
-              checked={autoPipeline}
-              disabled={!ollamaOnline}
-              onChange={e => {
-                setAutoPipeline(e.target.checked)
-                localStorage.setItem('yt_summarizer_auto_pipeline', String(e.target.checked))
-              }}
-            />
-            <label
-              htmlFor="auto-pipeline"
-              className={`text-label-md text-on-surface cursor-pointer ${!ollamaOnline ? 'opacity-50' : ''}`}
-            >
-              Run full pipeline (Transcript + Cleanup + Summary)
-              {!ollamaOnline && <span className="ml-2 text-secondary font-normal">— Ollama offline</span>}
-            </label>
-          </div>
+            {error && (
+              <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3">
+                <p className="text-body-sm text-on-error-container">{error}</p>
+              </div>
+            )}
 
-          {/* Error */}
-          {error && (
-            <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3">
-              <p className="text-body-sm text-on-error-container whitespace-pre-line">{error}</p>
-            </div>
-          )}
-
-          {/* Action buttons */}
-          <div className="flex flex-col md:flex-row gap-4 pt-4">
             <button
               type="submit"
-              disabled={loading || !url.trim()}
-              className="flex-grow bg-primary text-on-primary py-4 px-6 rounded-lg text-label-md font-bold transition-all hover:opacity-90 active:scale-[0.98] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              disabled={loading || !selectedFile}
+              className="bg-primary text-on-primary py-4 px-6 rounded-lg text-label-md font-bold transition-all hover:opacity-90 active:scale-[0.98] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
-              {loading ? 'Submitting…' : 'Add to queue'}
+              {loading ? 'Uploading…' : 'Upload & Transcribe'}
             </button>
-            <button
-              type="button"
-              onClick={() => { setBulkOpen(o => !o); setBulkResult(null); setBulkError('') }}
-              className="flex-grow bg-surface-container-high text-on-surface-variant py-4 px-6 rounded-lg text-label-md font-medium transition-all hover:bg-surface-container-highest active:scale-[0.98] cursor-pointer"
-            >
-              {bulkOpen ? '✕ Cancel bulk' : 'Bulk add'}
-            </button>
-          </div>
-        </form>
+          </form>
+        )}
       </div>
 
       {/* Bulk Add panel */}

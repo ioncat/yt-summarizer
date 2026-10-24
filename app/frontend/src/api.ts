@@ -45,6 +45,7 @@ export interface ResultResponse {
   mindmap_text: string | null
   mindmap_status: 'processing' | 'done' | 'failed' | null
   is_favorite: boolean
+  subtitle_source?: 'captions' | 'transcript' | null
 }
 
 export interface HistoryItem {
@@ -183,6 +184,24 @@ export async function saveChatHistory(
 
 export async function clearChatHistory(videoId: string): Promise<void> {
   await fetch(`${BASE}/result/${videoId}/chat`, { method: 'DELETE' })
+}
+
+export async function processFile(
+  file: File,
+  language: string = 'auto',
+): Promise<ProcessResponse> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('language', language)
+  const res = await fetch(`${BASE}/process/file`, {
+    method: 'POST',
+    body: form,
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || 'Failed to upload file')
+  }
+  return res.json()
 }
 
 export async function reextractSubtitles(videoId: string, language: string = 'auto'): Promise<void> {

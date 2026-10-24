@@ -556,3 +556,81 @@ def subtitles_to_json(entries: list[SubtitleEntry]) -> str:
         [{"timestamp": e.timestamp, "text": e.text} for e in entries],
         ensure_ascii=False,
     )
+
+
+# ---------------------------------------------------------------------------
+# Audio extraction (for STT pipeline)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class AudioExtractionResult:
+    success: bool
+    audio_path: str | None = None
+    metadata: VideoMetadata | None = None
+    error_message: str | None = None
+
+
+def extract_audio(
+    url: str,
+    output_dir: str,
+    ytdlp_path: str = "yt-dlp",
+    cookies_path: str | None = None,
+    timeout: int = 300,
+) -> AudioExtractionResult:
+    """Download audio from a YouTube URL using yt-dlp.
+
+    Saves to output_dir/{video_id}.mp3. Returns AudioExtractionResult with
+    audio_path and VideoMetadata populated on success.
+    """
+    if not extract_video_id(url):
+        return AudioExtractionResult(success=False, error_message="Invalid YouTube URL")
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    try:
+        stdout, stderr, code = _run_ytdlp(
+            [
+                "--no-playlist",
+                "--print-json",
+                "-x",
+                "--audio-format", "mp3",
+                "--audio-quality", "0",
+                "-o", os.path.join(output_dir, "%(id)s.%(ext)s"),
+                url,
+            ],
+            cookies_path,
+            ytdlp_path=ytdlp_path,
+            timeout=timeout,
+        )
+
+        if not stdout.strip():
+            return AudioExtractionResult(success=False, error_message=f"Audio download failed: {stderr[:300]}")
+
+        try:
+            info = json.loads(stdout.strip())
+        except json.JSONDecodeError:
+            return AudioExtractionResult(success=False, error_message="Failed to parse yt-dlp output")
+
+        metadata = _build_metadata(info)
+        video_id = info.get("id", "")
+
+        audio_path: str | None = None
+        for fname in os.listdir(output_dir):
+            if fname.startswith(video_id) and fname.endswith(".mp3"):
+                audio_path = os.path.join(output_dir, fname)
+                break
+        if not audio_path:
+            for fname in os.listdir(output_dir):
+                if not fname.endswith(".json") and not fname.endswith(".vtt"):
+                    audio_path = os.path.join(output_dir, fname)
+                    break
+
+        if not audio_path:
+            return AudioExtractionResult(success=False, error_message="Audio file not found after download")
+
+        return AudioExtractionResult(success=True, audio_path=audio_path, metadata=metadata)
+
+    except subprocess.TimeoutExpired:
+        return AudioExtractionResult(success=False, error_message="Audio download timed out")
+    except Exception as e:
+        return AudioExtractionResult(success=False, error_message=f"Unexpected error: {type(e).__name__}: {e}")

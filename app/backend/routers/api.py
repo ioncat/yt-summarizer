@@ -11,7 +11,7 @@ import os
 logger = logging.getLogger("api")
 _reextract_logger = logging.getLogger("api.reextract")
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import httpx
@@ -142,6 +142,124 @@ async def process_video(
     task = await create_pending_task(db, body.url, video_id)
     background_tasks.add_task(_run_processing, task.id, body.url, body.language)
     return {"task_id": task.id, "video_id": video_id}
+
+
+_SUPPORTED_AUDIO_EXTENSIONS = {
+    ".mp4", ".mkv", ".avi", ".mov", ".webm",
+    ".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac", ".opus", ".wma",
+}
+
+
+async def _run_transcribe_file(
+    task_id: str,
+    local_video_id: str,
+    audio_path: str,
+    original_filename: str,
+    language: str = "auto",
+) -> None:
+    """Background task: transcribe a locally uploaded audio/video file."""
+    from models.database import AsyncSessionLocal
+    from services.transcriber import transcribe as _transcribe, DEFAULT_CACHE_PATH
+    from services.text_formatter import format_subtitles
+    from services.subtitle_extractor import ExtractionResult, SubtitleEntry, VideoMetadata
+
+    try:
+        async with AsyncSessionLocal() as db:
+            stt_model = await get_app_setting(db, "stt_model") or "base"
+            stt_device = await get_app_setting(db, "stt_device") or "auto"
+            stt_cache_path = await get_app_setting(db, "stt_cache_path") or DEFAULT_CACHE_PATH
+
+        transcription = await asyncio.to_thread(
+            _transcribe, audio_path,
+            language=language,
+            model=stt_model,
+            device=stt_device,
+            cache_path=stt_cache_path,
+        )
+
+        if not transcription.success:
+            async with AsyncSessionLocal() as db:
+                await update_task_failed(db, task_id, transcription.error_message or "Transcription failed")
+            return
+
+        detected_language = transcription.detected_language or (language if language != "auto" else "und")
+        entries = [
+            SubtitleEntry(
+                timestamp="{:02d}:{:02d}:{:02d}".format(
+                    int(s["start"] // 3600),
+                    int(s["start"] % 3600 // 60),
+                    int(s["start"] % 60),
+                ),
+                text=s["text"].strip(),
+            )
+            for s in (transcription.segments or [])
+            if s.get("text", "").strip()
+        ]
+
+        title = os.path.splitext(original_filename)[0]
+        metadata = VideoMetadata(
+            video_id=local_video_id,
+            title=title,
+            author=None,
+            duration=None,
+            channel_id=None,
+            channel_name=None,
+            upload_date=None,
+            view_count=None,
+            description=None,
+            thumbnail_url=None,
+        )
+        extraction = ExtractionResult(
+            success=True,
+            metadata=metadata,
+            subtitles=entries,
+            language=detected_language,
+            source_type=None,
+        )
+        formatted = format_subtitles(entries)
+
+        async with AsyncSessionLocal() as db:
+            await complete_task(
+                db, task_id, f"local://{original_filename}", extraction, formatted,
+                subtitle_source="transcript",
+            )
+
+    except Exception as e:
+        async with AsyncSessionLocal() as db:
+            await update_task_failed(db, task_id, str(e))
+
+
+@router.post("/process/file")
+async def process_file(
+    background_tasks: BackgroundTasks,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: UploadFile = File(...),
+    language: str = Form("auto"),
+):
+    """Upload a local audio/video file for transcription."""
+    from uuid import uuid4
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _SUPPORTED_AUDIO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type '{ext}'. Supported: {', '.join(sorted(_SUPPORTED_AUDIO_EXTENSIONS))}")
+
+    uploads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/uploads"))
+    os.makedirs(uploads_dir, exist_ok=True)
+
+    file_uuid = uuid4().hex[:12]
+    save_filename = f"{file_uuid}{ext}"
+    save_path = os.path.join(uploads_dir, save_filename)
+
+    content = await file.read()
+    with open(save_path, "wb") as f:
+        f.write(content)
+
+    original_filename = file.filename or save_filename
+    local_video_id = f"file-{file_uuid[:8]}"
+
+    task = await create_pending_task(db, f"local://{original_filename}", local_video_id)
+    background_tasks.add_task(_run_transcribe_file, task.id, local_video_id, save_path, original_filename, language)
+    return {"task_id": task.id, "video_id": local_video_id}
 
 
 @router.get("/status/{task_id}")

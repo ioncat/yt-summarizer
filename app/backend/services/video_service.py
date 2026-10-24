@@ -93,6 +93,7 @@ async def complete_task(
     url: str,
     extraction_result: ExtractionResult,
     formatted: dict,
+    subtitle_source: str | None = None,
 ) -> None:
     # Find pending task and its placeholder video
     task_stmt = select(ProcessingTask).where(ProcessingTask.id == task_id)
@@ -150,6 +151,7 @@ async def complete_task(
         formatted_text=formatted["formatted_text"],
         text_length=formatted["char_count"],
         processing_status="success",
+        subtitle_source=subtitle_source,
     ))
 
     task.status = "completed"
@@ -234,6 +236,7 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
         "mindmap_text": fmt.mindmap_text if fmt else None,
         "mindmap_status": fmt.mindmap_status if fmt else None,
         "is_favorite": bool(video.is_favorite),
+        "subtitle_source": fmt.subtitle_source if fmt else None,
     }
 
 

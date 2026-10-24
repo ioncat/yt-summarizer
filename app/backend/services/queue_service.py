@@ -440,6 +440,93 @@ async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
         )
 
 
+async def _run_transcribe(url: str, language: str = "auto", item_id: int = 0) -> dict[str, Any]:
+    """Download audio from a YouTube URL and transcribe via STT. Returns {video_id, db_video_id}."""
+    import asyncio as _asyncio
+    import tempfile
+    from services.subtitle_extractor import (
+        extract_audio, extract_video_id,
+        ExtractionResult, SubtitleEntry, AudioExtractionResult,
+    )
+    from services.transcriber import transcribe as _transcribe, DEFAULT_CACHE_PATH
+    from services.text_formatter import format_subtitles
+    from services.video_service import (
+        complete_task, create_pending_task, update_task_failed, get_app_setting,
+    )
+
+    yt_video_id = extract_video_id(url)
+    if not yt_video_id:
+        raise ValueError(f"Cannot extract video_id from URL: {url}")
+
+    async with AsyncSessionLocal() as db:
+        cookies_path = await get_app_setting(db, "cookies_path")
+        ytdlp_path = await get_app_setting(db, "ytdlp_path") or "yt-dlp"
+        stt_model = await get_app_setting(db, "stt_model") or "base"
+        stt_device = await get_app_setting(db, "stt_device") or "auto"
+        stt_cache_path = await get_app_setting(db, "stt_cache_path") or DEFAULT_CACHE_PATH
+        task = await create_pending_task(db, url, yt_video_id)
+        task_id = task.id
+
+    _QUEUE_PROGRESS[item_id] = "transcribe: downloading audio…"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        audio_result: AudioExtractionResult = await _asyncio.to_thread(
+            extract_audio, url, tmpdir, ytdlp_path, cookies_path
+        )
+        if not audio_result.success:
+            async with AsyncSessionLocal() as db:
+                await update_task_failed(db, task_id, audio_result.error_message or "Audio download failed")
+            raise RuntimeError(audio_result.error_message or "Audio download failed")
+
+        _QUEUE_PROGRESS[item_id] = "transcribe: transcribing…"
+
+        def _on_progress(n: int) -> None:
+            _QUEUE_PROGRESS[item_id] = f"transcribe: segment {n}…"
+
+        transcription = await _asyncio.to_thread(
+            _transcribe, audio_result.audio_path,
+            language=language,
+            model=stt_model,
+            device=stt_device,
+            cache_path=stt_cache_path,
+            on_progress=_on_progress,
+        )
+
+    if not transcription.success:
+        async with AsyncSessionLocal() as db:
+            await update_task_failed(db, task_id, transcription.error_message or "Transcription failed")
+        raise RuntimeError(transcription.error_message or "Transcription failed")
+
+    detected_language = transcription.detected_language or (language if language != "auto" else "und")
+
+    entries = [
+        SubtitleEntry(
+            timestamp="{:02d}:{:02d}:{:02d}".format(
+                int(s["start"] // 3600),
+                int(s["start"] % 3600 // 60),
+                int(s["start"] % 60),
+            ),
+            text=s["text"].strip(),
+        )
+        for s in (transcription.segments or [])
+        if s.get("text", "").strip()
+    ]
+
+    metadata = audio_result.metadata
+    extraction = ExtractionResult(
+        success=True,
+        metadata=metadata,
+        subtitles=entries,
+        language=detected_language,
+        source_type=None,
+    )
+    formatted = format_subtitles(entries, chapters=metadata.chapters if metadata else None)
+
+    async with AsyncSessionLocal() as db:
+        await complete_task(db, task_id, url, extraction, formatted, subtitle_source="transcript")
+
+    return {"video_id": yt_video_id, "db_video_id": None}
+
+
 async def _run_mindmap_stage(yt_video_id: str, item_id: int) -> None:
     """Run mindmap generation for a video."""
     from services.text_mindmapper import generate_mindmap
@@ -507,8 +594,13 @@ async def queue_worker() -> None:
         await _set_processing(item_id)
 
         try:
-            # Stage 1: extract (only if requested — skip for already-processed videos)
-            if "extract" in pipeline_stages:
+            # Stage 1: transcribe OR extract (mutually exclusive) — skip for already-processed videos
+            if "transcribe" in pipeline_stages:
+                _QUEUE_PROGRESS[item_id] = "downloading audio…"
+                transcribe_result = await _run_transcribe(url, language=item_language, item_id=item_id)
+                yt_video_id = transcribe_result["video_id"]
+                db_video_id = transcribe_result["db_video_id"]
+            elif "extract" in pipeline_stages:
                 _QUEUE_PROGRESS[item_id] = "extracting subtitles…"
                 extract_result = await _run_extract(url, language=item_language)
                 yt_video_id = extract_result["video_id"]
