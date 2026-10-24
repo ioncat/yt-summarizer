@@ -68,6 +68,7 @@ async def _seed_app_settings() -> None:
         "stt_engine": "faster-whisper",
         "stt_model": "base",
         "stt_device": "auto",
+        "stt_cache_path": "",
     }
     async with AsyncSessionLocal() as session:
         for key, value in defaults.items():

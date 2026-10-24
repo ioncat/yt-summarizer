@@ -789,7 +789,7 @@ async def reset_stage_settings(db: AsyncSession, stage: str) -> dict:
 APP_SETTING_KEYS = (
     "ollama_url", "ytdlp_path", "cookies_path",
     "force_map_reduce", "parallel_workers", "queue_default_pipeline",
-    "stt_engine", "stt_model", "stt_device",
+    "stt_engine", "stt_model", "stt_device", "stt_cache_path",
 )
 
 

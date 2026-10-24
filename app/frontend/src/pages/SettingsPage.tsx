@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   getSettings, saveAppSettings, saveSettings, resetSettings, getModels, getSttModels,
-  AppSettings, StageSettings,
+  downloadSttModel, getSttModelDownloadStatus, deleteSttModel,
+  AppSettings, StageSettings, SttModelInfo,
 } from '../api'
 import { BOXED_LAYOUT_EVENT, BOXED_LAYOUT_KEY } from '../App'
 
@@ -478,87 +479,248 @@ function StagePanel({ stage, initial, models, modelsOnline, hideModel }: StagePa
 // ---------------------------------------------------------------------------
 
 const STT_DEVICES = [
-  { value: 'auto',  label: 'Auto (CUDA if available, else CPU)' },
-  { value: 'cpu',   label: 'CPU' },
-  { value: 'cuda',  label: 'GPU (CUDA)' },
+  { value: 'auto', label: 'Auto (CUDA if available, else CPU)' },
+  { value: 'cpu',  label: 'CPU' },
+  { value: 'cuda', label: 'GPU (CUDA)' },
 ]
+
+function fmtSize(mb: number) {
+  return mb >= 1000 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`
+}
 
 interface SttPanelProps {
   initial: AppSettings
-  sttModels: string[]
+  sttModels: SttModelInfo[]
   onSaved: (s: AppSettings) => void
+  onReloadModels: () => void
 }
 
-function SttPanel({ initial, sttModels, onSaved }: SttPanelProps) {
-  const [model,  setModel]  = useState(initial.stt_model  ?? 'base')
-  const [device, setDevice] = useState(initial.stt_device ?? 'auto')
-  const [saving, setSaving] = useState(false)
-  const [toast,  setToast]  = useState('')
+function SttPanel({ initial, sttModels, onSaved, onReloadModels }: SttPanelProps) {
+  const [activeModel, setActiveModel] = useState(initial.stt_model ?? 'base')
+  const [device, setDevice]           = useState(initial.stt_device ?? 'auto')
+  const [cacheInput, setCacheInput]   = useState(initial.stt_cache_path ?? '')
+  const [downloading, setDownloading] = useState<string | null>(null)
+  const [progress, setProgress]       = useState<{ downloaded_mb: number; total_mb: number } | null>(null)
+  const [toast, setToast]             = useState('')
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
-    setModel(initial.stt_model  ?? 'base')
+    setActiveModel(initial.stt_model ?? 'base')
     setDevice(initial.stt_device ?? 'auto')
+    setCacheInput(initial.stt_cache_path ?? '')
   }, [initial])
 
-  async function save(patch: Partial<AppSettings>) {
-    setSaving(true)
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [])
+
+  async function saveField(patch: Partial<AppSettings>) {
     try {
       const updated = await saveAppSettings(patch)
       onSaved(updated)
       setToast('Saved')
       setTimeout(() => setToast(''), 2000)
-    } catch { /* ignore */ } finally {
-      setSaving(false)
+    } catch { /* ignore */ }
+  }
+
+  async function handleSetActive(name: string) {
+    setActiveModel(name)
+    await saveField({ stt_model: name })
+  }
+
+  async function handleDownload(name: string) {
+    setDownloading(name)
+    setProgress(null)
+    try {
+      await downloadSttModel(name)
+    } catch {
+      setDownloading(null)
+      return
+    }
+    pollRef.current = setInterval(async () => {
+      try {
+        const s = await getSttModelDownloadStatus(name)
+        if (s.status === 'downloading') {
+          setProgress({ downloaded_mb: s.downloaded_mb, total_mb: s.total_mb })
+        } else if (s.status === 'done' || s.status === 'already_downloaded') {
+          clearInterval(pollRef.current!)
+          setDownloading(null)
+          setProgress(null)
+          onReloadModels()
+          await saveField({ stt_model: name })
+          setActiveModel(name)
+        } else if (s.status === 'failed') {
+          clearInterval(pollRef.current!)
+          setDownloading(null)
+          setProgress(null)
+          alert(`Download failed: ${s.error ?? 'unknown error'}`)
+        }
+      } catch { /* ignore transient errors */ }
+    }, 1500)
+  }
+
+  async function handleDelete(name: string) {
+    if (!confirm(`Delete model "${name}" from disk?`)) return
+    try {
+      await deleteSttModel(name)
+      onReloadModels()
+      if (activeModel === name) {
+        setActiveModel('base')
+        await saveField({ stt_model: 'base' })
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete')
     }
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <p className="text-body-sm text-on-surface-variant">
-        Configure the speech-to-text engine used as a fallback when YouTube captions are unavailable.
-        The model is downloaded from Hugging Face on first use.
+        Speech-to-text engine for transcribing audio when YouTube captions are unavailable.
+        Models are downloaded from HuggingFace and cached locally.
       </p>
-
-      {/* Model */}
-      <div className="space-y-1.5">
-        <label className="text-label-md text-on-surface">Model</label>
-        <select
-          value={model}
-          onChange={e => {
-            setModel(e.target.value)
-            save({ stt_model: e.target.value })
-          }}
-          disabled={saving}
-          className={SELECT()}
-        >
-          {sttModels.map(m => (
-            <option key={m} value={m}>{m}</option>
-          ))}
-          {sttModels.length === 0 && <option value={model}>{model}</option>}
-        </select>
-        <Hint>Larger models are more accurate but slower. "base" is a good starting point.</Hint>
-      </div>
 
       {/* Device */}
       <div className="space-y-1.5">
-        <label className="text-label-md text-on-surface">Device</label>
+        <label className="text-label-md text-on-surface">Compute device</label>
         <select
           value={device}
-          onChange={e => {
-            setDevice(e.target.value)
-            save({ stt_device: e.target.value })
-          }}
-          disabled={saving}
+          onChange={e => { setDevice(e.target.value); saveField({ stt_device: e.target.value }) }}
           className={SELECT()}
         >
-          {STT_DEVICES.map(d => (
-            <option key={d.value} value={d.value}>{d.label}</option>
-          ))}
+          {STT_DEVICES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
         </select>
-        <Hint>CUDA requires an NVIDIA GPU and CUDA toolkit installed.</Hint>
+        <Hint>CUDA requires an NVIDIA GPU with CUDA toolkit installed on the host.</Hint>
+      </div>
+
+      {/* Cache path */}
+      <div className="space-y-1.5">
+        <label className="text-label-md text-on-surface">Models cache directory</label>
+        <div className="flex gap-2">
+          <input
+            value={cacheInput}
+            onChange={e => setCacheInput(e.target.value)}
+            placeholder="Default: ~/.cache/huggingface/hub"
+            className={INPUT()}
+          />
+          <button
+            onClick={() => saveField({ stt_cache_path: cacheInput })}
+            className="px-4 py-2 bg-primary text-on-primary rounded-lg text-label-md font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap"
+          >
+            Save
+          </button>
+        </div>
+        <Hint>Leave empty to use the default HuggingFace cache location.</Hint>
       </div>
 
       {toast && <SavedToast msg={toast} />}
+
+      {/* Model catalog */}
+      <div className="space-y-2">
+        <p className="text-label-sm text-on-surface-variant uppercase tracking-wider font-bold">Models</p>
+
+        {sttModels.length === 0 && (
+          <p className="text-body-sm text-secondary py-4 text-center">Loading models…</p>
+        )}
+
+        {sttModels.map(m => {
+          const isActive      = m.name === activeModel
+          const isDownloading = m.name === downloading
+          const langLabel     = m.languages === 1 ? 'EN only' : `${m.languages} languages`
+
+          return (
+            <div
+              key={m.name}
+              className={`border rounded-xl p-4 transition-colors ${
+                isActive
+                  ? 'border-primary bg-primary/5'
+                  : 'border-outline-variant bg-surface-container-lowest'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-4">
+                {/* Left: info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-label-lg font-bold text-on-surface">{m.name}</span>
+                    {isActive && (
+                      <span className="px-2 py-0.5 bg-primary text-on-primary text-[10px] font-bold rounded-full uppercase tracking-wide">
+                        Active
+                      </span>
+                    )}
+                    {m.downloaded && !isActive && (
+                      <span className="px-2 py-0.5 bg-tertiary/20 text-tertiary text-[10px] font-bold rounded-full uppercase tracking-wide">
+                        Downloaded
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-body-sm text-on-surface-variant mt-0.5">{m.description}</p>
+                  <div className="flex items-center gap-3 mt-1.5 text-label-sm text-on-surface-variant">
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[14px]">hard_drive</span>
+                      {fmtSize(m.size_mb)}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[14px]">language</span>
+                      {langLabel}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Right: actions */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {isDownloading ? (
+                    <span className="text-body-sm text-secondary italic">
+                      {progress
+                        ? `${progress.downloaded_mb.toFixed(0)} / ${fmtSize(progress.total_mb)}`
+                        : 'Starting…'}
+                    </span>
+                  ) : m.downloaded ? (
+                    <>
+                      {!isActive && (
+                        <button
+                          onClick={() => handleSetActive(m.name)}
+                          className="px-3 py-1.5 border border-primary text-primary rounded-lg text-label-sm font-semibold hover:bg-primary/10 transition-colors"
+                        >
+                          Set active
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDelete(m.name)}
+                        disabled={isActive}
+                        title={isActive ? 'Cannot delete the active model' : 'Delete from disk'}
+                        className="material-symbols-outlined text-[18px] text-outline hover:text-error transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        delete
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => handleDownload(m.name)}
+                      disabled={!!downloading}
+                      className="px-3 py-1.5 bg-surface-container-high text-on-surface rounded-lg text-label-sm font-semibold hover:bg-surface-container-highest transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">download</span>
+                      Download
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              {isDownloading && progress && progress.total_mb > 0 && (
+                <div className="mt-3">
+                  <div className="h-1.5 bg-surface-container-high rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, (progress.downloaded_mb / progress.total_mb) * 100).toFixed(1)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -592,7 +754,7 @@ export default function SettingsPage() {
   const [chat, setChat]                 = useState<StageSettings | null>(null)
   const [models, setModels]             = useState<string[]>([])
   const [modelsOnline, setModelsOnline] = useState(true)
-  const [sttModels, setSttModels]       = useState<string[]>([])
+  const [sttModels, setSttModels]       = useState<SttModelInfo[]>([])
   const [error, setError]               = useState('')
 
   useEffect(() => {
@@ -613,6 +775,10 @@ export default function SettingsPage() {
 
     getSttModels().then(setSttModels).catch(() => {})
   }, [])
+
+  function reloadSttModels() {
+    getSttModels().then(setSttModels).catch(() => {})
+  }
 
   if (error) return (
     <div className="p-6 md:p-8 max-w-[1200px] mx-auto">
@@ -823,6 +989,7 @@ export default function SettingsPage() {
               initial={appSettings}
               sttModels={sttModels}
               onSaved={setAppSettings}
+              onReloadModels={reloadSttModels}
             />
           )}
 

@@ -217,6 +217,7 @@ export interface AppSettings {
   stt_engine: string | null
   stt_model: string | null
   stt_device: string | null
+  stt_cache_path: string | null
 }
 
 export interface StageSettings {
@@ -278,11 +279,46 @@ export async function getModels(): Promise<string[]> {
   return data.models ?? []
 }
 
-export async function getSttModels(): Promise<string[]> {
+export interface SttModelInfo {
+  name: string
+  size_mb: number
+  languages: number
+  description: string
+  downloaded: boolean
+}
+
+export interface SttDownloadStatus {
+  status: 'not_started' | 'downloading' | 'done' | 'failed' | 'already_downloaded'
+  downloaded_mb: number
+  total_mb: number
+  error?: string
+}
+
+export async function getSttModels(): Promise<SttModelInfo[]> {
   const res = await fetch(`${BASE}/stt/models`)
   if (!res.ok) return []
   const data = await res.json()
   return data.models ?? []
+}
+
+export async function downloadSttModel(name: string): Promise<{ status: string }> {
+  const res = await fetch(`${BASE}/stt/models/${encodeURIComponent(name)}/download`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to start download')
+  return res.json()
+}
+
+export async function getSttModelDownloadStatus(name: string): Promise<SttDownloadStatus> {
+  const res = await fetch(`${BASE}/stt/models/${encodeURIComponent(name)}/download/status`)
+  if (!res.ok) throw new Error('Failed to get status')
+  return res.json()
+}
+
+export async function deleteSttModel(name: string): Promise<void> {
+  const res = await fetch(`${BASE}/stt/models/${encodeURIComponent(name)}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || 'Failed to delete model')
+  }
 }
 
 // ---------------------------------------------------------------------------

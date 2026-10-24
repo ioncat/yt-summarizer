@@ -91,6 +91,7 @@ class AppSettingsRequest(BaseModel):
     stt_engine: str | None = None
     stt_model: str | None = None
     stt_device: str | None = None
+    stt_cache_path: str | None = None
 
 
 async def _run_processing(task_id: str, url: str, language: str) -> None:
@@ -619,10 +620,56 @@ async def delete_benchmark_run_endpoint(
 
 @router.get("/stt/models")
 async def get_stt_models(db: Annotated[AsyncSession, Depends(get_db)]):
-    """Return available STT models for the configured engine."""
-    from services.transcriber import get_available_models
+    """Return full model catalog with downloaded status."""
+    from services.transcriber import get_available_models, DEFAULT_CACHE_PATH
+    cache_path = (await get_app_setting(db, "stt_cache_path")) or DEFAULT_CACHE_PATH
     engine = (await get_app_setting(db, "stt_engine")) or "faster-whisper"
-    return {"engine": engine, "models": get_available_models(engine)}
+    return {"engine": engine, "models": get_available_models(cache_path)}
+
+
+@router.post("/stt/models/{model_name}/download")
+async def download_stt_model(
+    model_name: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Start downloading a model in the background."""
+    from services.transcriber import MODEL_CATALOG, DEFAULT_CACHE_PATH, start_model_download, is_model_downloaded
+    if model_name not in MODEL_CATALOG:
+        raise HTTPException(status_code=404, detail=f"Unknown model: {model_name}")
+    cache_path = (await get_app_setting(db, "stt_cache_path")) or DEFAULT_CACHE_PATH
+    if is_model_downloaded(model_name, cache_path):
+        return {"status": "already_downloaded"}
+    started = start_model_download(model_name, cache_path)
+    return {"status": "started" if started else "already_downloading"}
+
+
+@router.get("/stt/models/{model_name}/download/status")
+async def get_stt_model_download_status(
+    model_name: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Poll download progress for a model."""
+    from services.transcriber import MODEL_CATALOG, DEFAULT_CACHE_PATH, get_download_status
+    if model_name not in MODEL_CATALOG:
+        raise HTTPException(status_code=404, detail=f"Unknown model: {model_name}")
+    cache_path = (await get_app_setting(db, "stt_cache_path")) or DEFAULT_CACHE_PATH
+    return get_download_status(model_name, cache_path)
+
+
+@router.delete("/stt/models/{model_name}")
+async def delete_stt_model(
+    model_name: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Remove a downloaded model from the cache."""
+    from services.transcriber import MODEL_CATALOG, DEFAULT_CACHE_PATH, delete_model
+    if model_name not in MODEL_CATALOG:
+        raise HTTPException(status_code=404, detail=f"Unknown model: {model_name}")
+    cache_path = (await get_app_setting(db, "stt_cache_path")) or DEFAULT_CACHE_PATH
+    deleted = delete_model(model_name, cache_path)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Model not found on disk")
+    return {"deleted": model_name}
 
 
 @router.get("/health")
