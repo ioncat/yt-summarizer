@@ -6,6 +6,9 @@ python-multipart==0.0.26
 # YouTube subtitle extraction
 yt-dlp>=2026.3.17
 
+# Speech-to-text
+faster-whisper>=1.1.1
+
 # Database
 sqlalchemy[asyncio]==2.0.36
 aiosqlite==0.20.0

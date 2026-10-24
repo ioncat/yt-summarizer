@@ -88,6 +88,9 @@ class AppSettingsRequest(BaseModel):
     cookies_path: str | None = None
     force_map_reduce: bool | None = None
     parallel_workers: str | None = None
+    stt_engine: str | None = None
+    stt_model: str | None = None
+    stt_device: str | None = None
 
 
 async def _run_processing(task_id: str, url: str, language: str) -> None:
@@ -612,6 +615,14 @@ async def delete_benchmark_run_endpoint(
     if not ok:
         raise HTTPException(status_code=404, detail="Run not found")
     return {"deleted": run_id}
+
+
+@router.get("/stt/models")
+async def get_stt_models(db: Annotated[AsyncSession, Depends(get_db)]):
+    """Return available STT models for the configured engine."""
+    from services.transcriber import get_available_models
+    engine = (await get_app_setting(db, "stt_engine")) or "faster-whisper"
+    return {"engine": engine, "models": get_available_models(engine)}
 
 
 @router.get("/health")

@@ -27,7 +27,7 @@ _console_handler.setFormatter(_log_fmt)
 for _name in ("services.text_summarizer", "services.text_cleaner", "services.subtitle_extractor",
                "services.video_service", "services.benchmark_service", "routers.api",
                "services.text_mindmapper", "mindmapper", "api.mindmap", "api.reextract", "api",
-               "queue_service"):
+               "queue_service", "services.transcriber"):
     _lg = logging.getLogger(_name)
     _lg.setLevel(logging.INFO)
     _lg.propagate = False  # не пробрасывать в root (uvicorn не перехватит)

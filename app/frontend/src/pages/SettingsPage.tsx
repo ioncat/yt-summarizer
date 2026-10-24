@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  getSettings, saveAppSettings, saveSettings, resetSettings, getModels,
+  getSettings, saveAppSettings, saveSettings, resetSettings, getModels, getSttModels,
   AppSettings, StageSettings,
 } from '../api'
 import { BOXED_LAYOUT_EVENT, BOXED_LAYOUT_KEY } from '../App'
@@ -474,10 +474,100 @@ function StagePanel({ stage, initial, models, modelsOnline, hideModel }: StagePa
 }
 
 // ---------------------------------------------------------------------------
+// Speech-to-Text tab
+// ---------------------------------------------------------------------------
+
+const STT_DEVICES = [
+  { value: 'auto',  label: 'Auto (CUDA if available, else CPU)' },
+  { value: 'cpu',   label: 'CPU' },
+  { value: 'cuda',  label: 'GPU (CUDA)' },
+]
+
+interface SttPanelProps {
+  initial: AppSettings
+  sttModels: string[]
+  onSaved: (s: AppSettings) => void
+}
+
+function SttPanel({ initial, sttModels, onSaved }: SttPanelProps) {
+  const [model,  setModel]  = useState(initial.stt_model  ?? 'base')
+  const [device, setDevice] = useState(initial.stt_device ?? 'auto')
+  const [saving, setSaving] = useState(false)
+  const [toast,  setToast]  = useState('')
+
+  useEffect(() => {
+    setModel(initial.stt_model  ?? 'base')
+    setDevice(initial.stt_device ?? 'auto')
+  }, [initial])
+
+  async function save(patch: Partial<AppSettings>) {
+    setSaving(true)
+    try {
+      const updated = await saveAppSettings(patch)
+      onSaved(updated)
+      setToast('Saved')
+      setTimeout(() => setToast(''), 2000)
+    } catch { /* ignore */ } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <p className="text-body-sm text-on-surface-variant">
+        Configure the speech-to-text engine used as a fallback when YouTube captions are unavailable.
+        The model is downloaded from Hugging Face on first use.
+      </p>
+
+      {/* Model */}
+      <div className="space-y-1.5">
+        <label className="text-label-md text-on-surface">Model</label>
+        <select
+          value={model}
+          onChange={e => {
+            setModel(e.target.value)
+            save({ stt_model: e.target.value })
+          }}
+          disabled={saving}
+          className={SELECT()}
+        >
+          {sttModels.map(m => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+          {sttModels.length === 0 && <option value={model}>{model}</option>}
+        </select>
+        <Hint>Larger models are more accurate but slower. "base" is a good starting point.</Hint>
+      </div>
+
+      {/* Device */}
+      <div className="space-y-1.5">
+        <label className="text-label-md text-on-surface">Device</label>
+        <select
+          value={device}
+          onChange={e => {
+            setDevice(e.target.value)
+            save({ stt_device: e.target.value })
+          }}
+          disabled={saving}
+          className={SELECT()}
+        >
+          {STT_DEVICES.map(d => (
+            <option key={d.value} value={d.value}>{d.label}</option>
+          ))}
+        </select>
+        <Hint>CUDA requires an NVIDIA GPU and CUDA toolkit installed.</Hint>
+      </div>
+
+      {toast && <SavedToast msg={toast} />}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
-type TabId = 'general' | 'cleanup' | 'summarization' | 'chat'
+type TabId = 'general' | 'cleanup' | 'summarization' | 'chat' | 'stt'
 type SummSubTab = 'single_pass' | 'map_reduce'
 type MapReduceStep = 'extract' | 'combine'
 
@@ -486,6 +576,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'cleanup',       label: 'AI Cleanup' },
   { id: 'summarization', label: 'Summarization' },
   { id: 'chat',          label: 'Chat' },
+  { id: 'stt',           label: 'Speech-to-Text' },
 ]
 
 export default function SettingsPage() {
@@ -501,6 +592,7 @@ export default function SettingsPage() {
   const [chat, setChat]                 = useState<StageSettings | null>(null)
   const [models, setModels]             = useState<string[]>([])
   const [modelsOnline, setModelsOnline] = useState(true)
+  const [sttModels, setSttModels]       = useState<string[]>([])
   const [error, setError]               = useState('')
 
   useEffect(() => {
@@ -518,6 +610,8 @@ export default function SettingsPage() {
     getModels()
       .then(list => { setModels(list); setModelsOnline(true) })
       .catch(() => setModelsOnline(false))
+
+    getSttModels().then(setSttModels).catch(() => {})
   }, [])
 
   if (error) return (
@@ -721,6 +815,15 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
+          )}
+
+          {/* Speech-to-Text */}
+          {activeTab === 'stt' && (
+            <SttPanel
+              initial={appSettings}
+              sttModels={sttModels}
+              onSaved={setAppSettings}
+            />
           )}
 
         </div>

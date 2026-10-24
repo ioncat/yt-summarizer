@@ -44,6 +44,7 @@ async def _migrate_db() -> None:
         ("subtitles_formatted", "mindmap_status", "ALTER TABLE subtitles_formatted ADD COLUMN mindmap_status TEXT"),
         ("videos", "is_favorite", "ALTER TABLE videos ADD COLUMN is_favorite BOOLEAN DEFAULT 0"),
         ("processing_queue", "language", "ALTER TABLE processing_queue ADD COLUMN language TEXT"),
+        ("subtitles_formatted", "subtitle_source", "ALTER TABLE subtitles_formatted ADD COLUMN subtitle_source TEXT DEFAULT 'captions'"),
     ]
     async with engine.begin() as conn:
         for table, column, sql in migrations:
@@ -64,6 +65,9 @@ async def _seed_app_settings() -> None:
         "force_map_reduce": "false",
         "parallel_workers": "1",
         "queue_default_pipeline": '["extract"]',
+        "stt_engine": "faster-whisper",
+        "stt_model": "base",
+        "stt_device": "auto",
     }
     async with AsyncSessionLocal() as session:
         for key, value in defaults.items():

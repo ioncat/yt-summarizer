@@ -214,6 +214,9 @@ export interface AppSettings {
   cookies_path: string | null
   force_map_reduce: string | null
   parallel_workers: string | null
+  stt_engine: string | null
+  stt_model: string | null
+  stt_device: string | null
 }
 
 export interface StageSettings {
@@ -270,6 +273,13 @@ export async function resetSettings(stage: string): Promise<StageSettings> {
 
 export async function getModels(): Promise<string[]> {
   const res = await fetch(`${BASE}/models`)
+  if (!res.ok) return []
+  const data = await res.json()
+  return data.models ?? []
+}
+
+export async function getSttModels(): Promise<string[]> {
+  const res = await fetch(`${BASE}/stt/models`)
   if (!res.ok) return []
   const data = await res.json()
   return data.models ?? []
