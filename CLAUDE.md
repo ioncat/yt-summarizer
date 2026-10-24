@@ -236,8 +236,34 @@ Video content type → auto-selected mode. Type is determined by `len(text)` and
 - `summary_mode = "full_extract"` stored in DB; frontend shows "Full Extract · N chapters" in meta
 - Progress: "chapter N / M" label (vs "chunk N / M" for map-reduce)
 
-### 🔮 Phase 3: Speech-to-Text Fallback
-Whisper fallback. Language parameter from Phase 1 carries over directly — no extra user input.
+### ✅ Phase 3: Speech-to-Text
+
+#### Epic 30 ✅ — STT Service Layer
+- `services/transcriber.py`: engine-agnostic API — `transcribe(audio_path, *, language, model, device, cache_path, on_progress)` → `TranscriptionResult(segments, detected_language, success, error_message)`
+- faster-whisper first engine; graceful `ImportError` if not installed
+- `subtitle_source` column in `subtitles_formatted` (`'captions'` | `'transcript'`) + `_migrate_db` entry
+- `app_settings` seeded with `stt_engine`, `stt_model`, `stt_device`, `stt_cache_path`
+- `GET /api/stt/models` — model catalog with `downloaded` flag (disk scan)
+- `POST /api/stt/models/{name}/download` + `GET .../download/status` — background download with progress
+- `DELETE /api/stt/models/{name}` — removes model files
+- Settings → STT tab: model cards with Download/Delete and progress bar
+
+#### Epic 31 ✅ — YouTube/URL Audio Transcription
+- `subtitle_extractor.py`: `AudioExtractionResult` dataclass + `extract_audio(url, output_dir, ytdlp_path, cookies_path)` — yt-dlp `-x --audio-format mp3 --print-json`
+- `queue_service.py`: `_run_transcribe()` — downloads audio to tempfile → faster-whisper → `SubtitleEntry` list → `complete_task(subtitle_source='transcript')`
+- Queue worker: `"transcribe"` handled before `"extract"` (mutually exclusive alternatives)
+- `video_service.py`: `complete_task()` accepts `subtitle_source: str | None`; `get_result()` returns it
+- `api.ts`: `subtitle_source` field in `ResultResponse`
+- `HomePage.tsx`: "Use speech-to-text (Whisper)" checkbox; `resolveStages(preset, useStt)` swaps `extract→transcribe`
+
+#### Epic 32 ✅ — Local File Upload
+- `POST /api/process/file` — multipart endpoint (`file: UploadFile`, `language: Form`)
+- Supported: `.mp4 .mkv .avi .mov .webm .mp3 .wav .m4a .ogg .flac .aac .opus .wma`
+- Files saved to `data/uploads/{uuid12}{ext}`; `local_video_id = "file-{uuid[:8]}"` (no collision with YouTube 11-char IDs)
+- `_run_transcribe_file()` background task: transcribes via faster-whisper, builds `VideoMetadata(video_id=local_video_id, title=filename)`, calls `complete_task`
+- Direct task flow (not queue) — queue uses `extract_video_id()` which rejects `local://` URLs
+- `api.ts`: `processFile(file, language)` fetch wrapper
+- `HomePage.tsx`: Local File tab with drag-and-drop zone, language selector, "Upload & Transcribe" button
 
 ---
 
