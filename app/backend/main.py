@@ -45,6 +45,7 @@ async def lifespan(app: FastAPI):
     import asyncio
     from services.queue_service import queue_worker
     await init_db()
+    await _cleanup_uploads_on_start()
     worker_task = asyncio.create_task(queue_worker())
     yield
     worker_task.cancel()
@@ -52,6 +53,25 @@ async def lifespan(app: FastAPI):
         await worker_task
     except asyncio.CancelledError:
         pass
+
+
+async def _cleanup_uploads_on_start() -> None:
+    """On startup, delete upload files older than upload_auto_delete_days if policy is 'after_days'."""
+    try:
+        from models.database import AsyncSessionLocal
+        from services.video_service import get_app_setting
+        from routers.api import _cleanup_old_uploads
+        async with AsyncSessionLocal() as db:
+            auto_delete = await get_app_setting(db, "upload_auto_delete") or "false"
+            mode = await get_app_setting(db, "upload_auto_delete_mode") or "immediate"
+            days_str = await get_app_setting(db, "upload_auto_delete_days") or "7"
+        if auto_delete == "true" and mode == "after_days":
+            days = max(1, int(days_str))
+            deleted = await asyncio.to_thread(_cleanup_old_uploads, days)
+            if deleted:
+                logging.getLogger("api").info("startup: cleaned %d upload(s) older than %d days", deleted, days)
+    except Exception as exc:
+        logging.getLogger("api").warning("startup: upload cleanup failed: %s", exc)
 
 
 app = FastAPI(

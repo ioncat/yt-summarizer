@@ -69,6 +69,9 @@ async def _seed_app_settings() -> None:
         "stt_model": "base",
         "stt_device": "auto",
         "stt_cache_path": "",
+        "upload_auto_delete": "false",
+        "upload_auto_delete_mode": "immediate",
+        "upload_auto_delete_days": "7",
     }
     async with AsyncSessionLocal() as session:
         for key, value in defaults.items():

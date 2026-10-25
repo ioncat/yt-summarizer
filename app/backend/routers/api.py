@@ -92,6 +92,9 @@ class AppSettingsRequest(BaseModel):
     stt_model: str | None = None
     stt_device: str | None = None
     stt_cache_path: str | None = None
+    upload_auto_delete: str | None = None
+    upload_auto_delete_mode: str | None = None
+    upload_auto_delete_days: str | None = None
 
 
 async def _run_processing(task_id: str, url: str, language: str) -> None:
@@ -223,6 +226,14 @@ async def _run_transcribe_file(
                 db, task_id, f"local://{original_filename}", extraction, formatted,
                 subtitle_source="transcript",
             )
+            auto_delete = await get_app_setting(db, "upload_auto_delete")
+            auto_delete_mode = await get_app_setting(db, "upload_auto_delete_mode") or "immediate"
+
+        if auto_delete == "true" and auto_delete_mode == "immediate":
+            try:
+                os.remove(audio_path)
+            except OSError:
+                pass
 
     except Exception as e:
         async with AsyncSessionLocal() as db:
@@ -1155,3 +1166,71 @@ async def delete_queue_item(item_id: int, db: Annotated[AsyncSession, Depends(ge
     if result == "conflict":
         raise HTTPException(status_code=409, detail="Cannot delete a processing item")
     return {"deleted": item_id}
+
+
+# ---------------------------------------------------------------------------
+# Storage management
+# ---------------------------------------------------------------------------
+
+def _uploads_dir() -> str:
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/uploads"))
+
+
+def _uploads_stats() -> dict:
+    """Return file count and total size of the uploads directory."""
+    d = _uploads_dir()
+    if not os.path.isdir(d):
+        return {"file_count": 0, "total_mb": 0.0}
+    files = [f for f in os.scandir(d) if f.is_file()]
+    total_bytes = sum(f.stat().st_size for f in files)
+    return {"file_count": len(files), "total_mb": round(total_bytes / (1024 * 1024), 1)}
+
+
+def _cleanup_old_uploads(keep_days: int) -> int:
+    """Delete upload files older than keep_days days. Returns count deleted."""
+    import time
+    d = _uploads_dir()
+    if not os.path.isdir(d):
+        return 0
+    cutoff = time.time() - keep_days * 86400
+    deleted = 0
+    for entry in os.scandir(d):
+        if entry.is_file() and entry.stat().st_mtime < cutoff:
+            try:
+                os.remove(entry.path)
+                deleted += 1
+            except OSError:
+                pass
+    return deleted
+
+
+@router.get("/settings/storage")
+async def get_storage_info(db: Annotated[AsyncSession, Depends(get_db)]):
+    """Return upload storage stats and current policy settings."""
+    stats = _uploads_stats()
+    auto_delete = await get_app_setting(db, "upload_auto_delete") or "false"
+    mode = await get_app_setting(db, "upload_auto_delete_mode") or "immediate"
+    days = await get_app_setting(db, "upload_auto_delete_days") or "7"
+    return {
+        **stats,
+        "auto_delete": auto_delete == "true",
+        "auto_delete_mode": mode,
+        "auto_delete_days": days,
+    }
+
+
+@router.delete("/settings/storage/uploads")
+async def clear_uploads():
+    """Delete all files in the uploads directory."""
+    d = _uploads_dir()
+    if not os.path.isdir(d):
+        return {"deleted": 0}
+    deleted = 0
+    for entry in os.scandir(d):
+        if entry.is_file():
+            try:
+                os.remove(entry.path)
+                deleted += 1
+            except OSError:
+                pass
+    return {"deleted": deleted, **_uploads_stats()}

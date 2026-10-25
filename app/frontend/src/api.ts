@@ -237,6 +237,9 @@ export interface AppSettings {
   stt_model: string | null
   stt_device: string | null
   stt_cache_path: string | null
+  upload_auto_delete: string | null
+  upload_auto_delete_mode: string | null
+  upload_auto_delete_days: string | null
 }
 
 export interface StageSettings {
@@ -482,6 +485,26 @@ export async function retryQueueItem(id: number): Promise<void> {
 export async function retryAllFailed(): Promise<{ retried: number }> {
   const res = await fetch(`${BASE}/queue/failed/retry`, { method: 'POST' })
   if (!res.ok) throw new Error('Failed to retry failed items')
+  return res.json()
+}
+
+export interface StorageInfo {
+  file_count: number
+  total_mb: number
+  auto_delete: boolean
+  auto_delete_mode: 'immediate' | 'after_days'
+  auto_delete_days: string
+}
+
+export async function getStorageInfo(): Promise<StorageInfo> {
+  const res = await fetch(`${BASE}/settings/storage`)
+  if (!res.ok) return { file_count: 0, total_mb: 0, auto_delete: false, auto_delete_mode: 'immediate', auto_delete_days: '7' }
+  return res.json()
+}
+
+export async function clearUploads(): Promise<{ deleted: number; file_count: number; total_mb: number }> {
+  const res = await fetch(`${BASE}/settings/storage/uploads`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to clear uploads')
   return res.json()
 }
 
