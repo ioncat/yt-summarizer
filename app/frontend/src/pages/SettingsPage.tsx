@@ -501,8 +501,11 @@ function SttPanel({ initial, sttModels, onSaved, onReloadModels }: SttPanelProps
   const [cacheInput, setCacheInput]   = useState(initial.stt_cache_path ?? '')
   const [downloading, setDownloading] = useState<string | null>(null)
   const [progress, setProgress]       = useState<{ downloaded_mb: number; total_mb: number } | null>(null)
+  const [speedMbps, setSpeedMbps]     = useState<number | null>(null)
   const [toast, setToast]             = useState('')
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null)
+  const prevMbRef  = useRef<number>(0)
+  const prevTsRef  = useRef<number>(0)
 
   useEffect(() => {
     setActiveModel(initial.stt_model ?? 'base')
@@ -531,6 +534,9 @@ function SttPanel({ initial, sttModels, onSaved, onReloadModels }: SttPanelProps
   async function handleDownload(name: string) {
     setDownloading(name)
     setProgress(null)
+    setSpeedMbps(null)
+    prevMbRef.current = 0
+    prevTsRef.current = Date.now()
     try {
       await downloadSttModel(name)
     } catch {
@@ -541,11 +547,18 @@ function SttPanel({ initial, sttModels, onSaved, onReloadModels }: SttPanelProps
       try {
         const s = await getSttModelDownloadStatus(name)
         if (s.status === 'downloading') {
+          const now = Date.now()
+          const dtSec = (now - prevTsRef.current) / 1000
+          const dMb = s.downloaded_mb - prevMbRef.current
+          if (dtSec > 0 && dMb > 0) setSpeedMbps(dMb / dtSec)
+          prevMbRef.current = s.downloaded_mb
+          prevTsRef.current = now
           setProgress({ downloaded_mb: s.downloaded_mb, total_mb: s.total_mb })
         } else if (s.status === 'done' || s.status === 'already_downloaded') {
           clearInterval(pollRef.current!)
           setDownloading(null)
           setProgress(null)
+          setSpeedMbps(null)
           onReloadModels()
           await saveField({ stt_model: name })
           setActiveModel(name)
@@ -553,6 +566,7 @@ function SttPanel({ initial, sttModels, onSaved, onReloadModels }: SttPanelProps
           clearInterval(pollRef.current!)
           setDownloading(null)
           setProgress(null)
+          setSpeedMbps(null)
           alert(`Download failed: ${s.error ?? 'unknown error'}`)
         }
       } catch { /* ignore transient errors */ }
@@ -623,7 +637,7 @@ function SttPanel({ initial, sttModels, onSaved, onReloadModels }: SttPanelProps
           <p className="text-body-sm text-secondary py-4 text-center">Loading models…</p>
         )}
 
-        {sttModels.map(m => {
+        {[...sttModels].sort((a, b) => (b.name === activeModel ? 1 : 0) - (a.name === activeModel ? 1 : 0)).map(m => {
           const isActive      = m.name === activeModel
           const isDownloading = m.name === downloading
           const langLabel     = m.languages === 1 ? 'EN only' : `${m.languages} languages`
@@ -663,6 +677,17 @@ function SttPanel({ initial, sttModels, onSaved, onReloadModels }: SttPanelProps
                       <span className="material-symbols-outlined text-[14px]">language</span>
                       {langLabel}
                     </span>
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[14px]">speed</span>
+                      <span className={{
+                        'very fast': 'text-green-600 dark:text-green-400',
+                        'fast':      'text-green-600 dark:text-green-400',
+                        'medium':    'text-yellow-600 dark:text-yellow-400',
+                        'slow':      'text-orange-600 dark:text-orange-400',
+                      }[m.speed] ?? ''}>
+                        {m.speed}
+                      </span>
+                    </span>
                   </div>
                 </div>
 
@@ -670,8 +695,8 @@ function SttPanel({ initial, sttModels, onSaved, onReloadModels }: SttPanelProps
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {isDownloading ? (
                     <span className="text-body-sm text-secondary italic">
-                      {progress
-                        ? `${progress.downloaded_mb.toFixed(0)} / ${fmtSize(progress.total_mb)}`
+                      {progress && progress.total_mb > 0
+                        ? `${progress.downloaded_mb.toFixed(0)} / ${fmtSize(progress.total_mb)} · ${Math.round(progress.downloaded_mb / progress.total_mb * 100)}%`
                         : 'Starting…'}
                     </span>
                   ) : m.downloaded ? (
@@ -708,13 +733,17 @@ function SttPanel({ initial, sttModels, onSaved, onReloadModels }: SttPanelProps
 
               {/* Progress bar */}
               {isDownloading && progress && progress.total_mb > 0 && (
-                <div className="mt-3">
-                  <div className="h-1.5 bg-surface-container-high rounded-full overflow-hidden">
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="w-40 h-2 bg-surface-container-high rounded-full overflow-hidden flex-shrink-0">
                     <div
                       className="h-full bg-primary rounded-full transition-all duration-500"
                       style={{ width: `${Math.min(100, (progress.downloaded_mb / progress.total_mb) * 100).toFixed(1)}%` }}
                     />
                   </div>
+                  <span className="text-label-sm text-secondary tabular-nums">
+                    {Math.round(progress.downloaded_mb / progress.total_mb * 100)}%
+                    {speedMbps !== null && <> · {speedMbps.toFixed(1)} MB/s</>}
+                  </span>
                 </div>
               )}
             </div>

@@ -19,17 +19,17 @@ logger = logging.getLogger("services.transcriber")
 # ---------------------------------------------------------------------------
 
 MODEL_CATALOG: dict[str, dict] = {
-    "tiny":      {"size_mb": 77,   "languages": 99, "description": "Fastest, lowest accuracy"},
-    "tiny.en":   {"size_mb": 77,   "languages": 1,  "description": "English-only, fastest"},
-    "base":      {"size_mb": 145,  "languages": 99, "description": "Good balance — recommended starting point"},
-    "base.en":   {"size_mb": 145,  "languages": 1,  "description": "English-only base"},
-    "small":     {"size_mb": 466,  "languages": 99, "description": "Better quality, still fast"},
-    "small.en":  {"size_mb": 466,  "languages": 1,  "description": "English-only small"},
-    "medium":    {"size_mb": 1530, "languages": 99, "description": "High quality, slower"},
-    "medium.en": {"size_mb": 1530, "languages": 1,  "description": "English-only medium"},
-    "large-v1":  {"size_mb": 3100, "languages": 99, "description": "Very high quality"},
-    "large-v2":  {"size_mb": 3100, "languages": 99, "description": "Improved large, better accuracy"},
-    "large-v3":  {"size_mb": 3100, "languages": 99, "description": "Best quality, most accurate"},
+    "tiny":      {"size_mb": 77,   "languages": 99, "description": "Fastest, lowest accuracy",              "speed": "very fast"},
+    "tiny.en":   {"size_mb": 77,   "languages": 1,  "description": "English-only, fastest",                 "speed": "very fast"},
+    "base":      {"size_mb": 145,  "languages": 99, "description": "Good balance — recommended",            "speed": "fast"},
+    "base.en":   {"size_mb": 145,  "languages": 1,  "description": "English-only base",                     "speed": "fast"},
+    "small":     {"size_mb": 466,  "languages": 99, "description": "Better quality, still fast",            "speed": "fast"},
+    "small.en":  {"size_mb": 466,  "languages": 1,  "description": "English-only small",                    "speed": "fast"},
+    "medium":    {"size_mb": 1530, "languages": 99, "description": "High quality, moderate speed",          "speed": "medium"},
+    "medium.en": {"size_mb": 1530, "languages": 1,  "description": "English-only medium",                   "speed": "medium"},
+    "large-v1":  {"size_mb": 3100, "languages": 99, "description": "Very high quality",                     "speed": "slow"},
+    "large-v2":  {"size_mb": 3100, "languages": 99, "description": "Improved large, better accuracy",       "speed": "slow"},
+    "large-v3":  {"size_mb": 3100, "languages": 99, "description": "Best quality, most accurate",           "speed": "slow"},
 }
 
 DEFAULT_CACHE_PATH = str(Path.home() / ".cache" / "huggingface" / "hub")
@@ -177,6 +177,7 @@ def get_available_models(cache_path: str | None = None) -> list[dict]:
             "size_mb": meta["size_mb"],
             "languages": meta["languages"],
             "description": meta["description"],
+            "speed": meta.get("speed", "medium"),
             "downloaded": is_model_downloaded(name, resolved_cache),
         }
         for name, meta in MODEL_CATALOG.items()

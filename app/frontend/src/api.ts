@@ -303,6 +303,7 @@ export interface SttModelInfo {
   size_mb: number
   languages: number
   description: string
+  speed: 'very fast' | 'fast' | 'medium' | 'slow'
   downloaded: boolean
 }
 
