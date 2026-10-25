@@ -629,11 +629,36 @@ export default function ResultPage() {
             </div>
           </div>
 
-          {/* ── Meta ribbon: transcription timing ── */}
-          {activeTab === 'subtitles' && result.subtitle_source === 'transcript' && result.transcription_duration_seconds != null && (
-            <div className="px-6 py-3 bg-surface-container-low border-b border-outline-variant flex flex-wrap items-center gap-3 text-label-sm text-secondary">
-              <span className="material-symbols-outlined text-[16px]">timer</span>
-              Transcribed in {formatDuration(result.transcription_duration_seconds)}
+          {/* ── Meta ribbon: Subtitles tab stage info ── */}
+          {activeTab === 'subtitles' && (result.subtitle_source === 'transcript' || result.subtitles_type) && (
+            <div className="px-6 py-3 bg-surface-container-low border-b border-outline-variant flex flex-wrap items-center gap-x-3 gap-y-1 text-label-sm text-secondary">
+              {result.subtitle_source === 'transcript' ? (
+                <>
+                  <span className="material-symbols-outlined text-[16px]">mic</span>
+                  {result.transcription_duration_seconds != null
+                    ? <span>Transcribed in {formatDuration(result.transcription_duration_seconds)}</span>
+                    : <span>Whisper transcript</span>
+                  }
+                  {result.transcription_model && (
+                    <><span className="meta-sep">·</span><span className="font-medium text-on-surface-variant">{result.transcription_model}</span></>
+                  )}
+                  {result.transcription_device && (
+                    <><span className="meta-sep">·</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${result.transcription_device === 'cuda' ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' : 'bg-surface-container text-secondary'}`}>
+                      {result.transcription_device.toUpperCase()}
+                    </span></>
+                  )}
+                  {result.transcription_finished_at && (
+                    <><span className="meta-sep">·</span><span title="Transcription completed">{formatDate(result.transcription_finished_at)}</span></>
+                  )}
+                </>
+              ) : (
+                <>
+                  <span className="material-symbols-outlined text-[16px]">closed_caption</span>
+                  <span>{result.subtitles_type === 'automatic_captions' ? 'Auto-captions' : result.subtitles_type === 'subtitles' ? 'Manual subtitles' : result.subtitles_type}</span>
+                  <span className="meta-sep">·</span><span title="Extracted">{formatDate(result.created_at)}</span>
+                </>
+              )}
             </div>
           )}
 

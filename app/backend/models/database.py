@@ -47,6 +47,8 @@ async def _migrate_db() -> None:
         ("subtitles_formatted", "subtitle_source", "ALTER TABLE subtitles_formatted ADD COLUMN subtitle_source TEXT DEFAULT 'captions'"),
         ("subtitles_formatted", "transcription_started_at", "ALTER TABLE subtitles_formatted ADD COLUMN transcription_started_at DATETIME"),
         ("subtitles_formatted", "transcription_finished_at", "ALTER TABLE subtitles_formatted ADD COLUMN transcription_finished_at DATETIME"),
+        ("subtitles_formatted", "transcription_model", "ALTER TABLE subtitles_formatted ADD COLUMN transcription_model TEXT"),
+        ("subtitles_formatted", "transcription_device", "ALTER TABLE subtitles_formatted ADD COLUMN transcription_device TEXT"),
     ]
     async with engine.begin() as conn:
         for table, column, sql in migrations:

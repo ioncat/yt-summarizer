@@ -200,6 +200,7 @@ async def _run_transcribe_file(
             return
 
         detected_language = transcription.detected_language or (language if language != "auto" else "und")
+        segments = transcription.segments or []
         entries = [
             SubtitleEntry(
                 timestamp="{:02d}:{:02d}:{:02d}".format(
@@ -209,16 +210,18 @@ async def _run_transcribe_file(
                 ),
                 text=s["text"].strip(),
             )
-            for s in (transcription.segments or [])
+            for s in segments
             if s.get("text", "").strip()
         ]
+        # Compute audio duration from last segment end time
+        audio_duration = int(segments[-1]["end"]) if segments and segments[-1].get("end") else None
 
         title = os.path.splitext(original_filename)[0]
         metadata = VideoMetadata(
             video_id=local_video_id,
             title=title,
             author=None,
-            duration=None,
+            duration=audio_duration,
             channel_id=None,
             channel_name=None,
             upload_date=None,
@@ -235,11 +238,16 @@ async def _run_transcribe_file(
         )
         formatted = format_subtitles(entries)
 
+        # Resolve actual device used (may differ from setting if CUDA fell back to CPU)
+        actual_device = transcription.device_used if hasattr(transcription, "device_used") else stt_device
+
         async with AsyncSessionLocal() as db:
             await complete_task(
                 db, task_id, f"local://{original_filename}", extraction, formatted,
                 subtitle_source="transcript",
                 transcription_started_at=transcription_started_at,
+                transcription_model=stt_model,
+                transcription_device=actual_device,
             )
             auto_delete = await get_app_setting(db, "upload_auto_delete")
             auto_delete_mode = await get_app_setting(db, "upload_auto_delete_mode") or "immediate"
@@ -497,6 +505,7 @@ async def _run_reextract(video_id: str, language: str = "auto", model: str | Non
                 return
 
             detected_language = transcription.detected_language or (language if language != "auto" else "und")
+            re_segments = transcription.segments or []
             entries = [
                 SubtitleEntry(
                     timestamp="{:02d}:{:02d}:{:02d}".format(
@@ -506,14 +515,15 @@ async def _run_reextract(video_id: str, language: str = "auto", model: str | Non
                     ),
                     text=s["text"].strip(),
                 )
-                for s in (transcription.segments or [])
+                for s in re_segments
                 if s.get("text", "").strip()
             ]
+            audio_duration = int(re_segments[-1]["end"]) if re_segments and re_segments[-1].get("end") else None
             title = os.path.splitext(original_filename)[0]
             metadata = VideoMetadata(
                 video_id=video_id,
                 title=title,
-                author=None, duration=None, channel_id=None,
+                author=None, duration=audio_duration, channel_id=None,
                 channel_name=None, upload_date=None, view_count=None,
                 description=None, thumbnail_url=None,
             )
@@ -522,10 +532,14 @@ async def _run_reextract(video_id: str, language: str = "auto", model: str | Non
                 language=detected_language, source_type=None,
             )
             formatted = _format_subtitles(entries)
+            actual_device = transcription.device_used if hasattr(transcription, "device_used") else stt_device
             async with AsyncSessionLocal() as db:
                 await replace_subtitles_after_reextract(
                     db, video_id, extraction, formatted,
                     transcription_started_at=transcription_started_at,
+                    subtitle_source="transcript",
+                    transcription_model=stt_model,
+                    transcription_device=actual_device,
                 )
             _reextract_logger.info(
                 "retranscribe: success video_id=%s entries=%d lang=%s",

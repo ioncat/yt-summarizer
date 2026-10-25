@@ -82,6 +82,8 @@ class SubtitleFormatted(Base):
     subtitle_source: Mapped[str | None] = mapped_column(String(20))  # captions | transcript
     transcription_started_at: Mapped[datetime | None] = mapped_column(DateTime)
     transcription_finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    transcription_model: Mapped[str | None] = mapped_column(String)
+    transcription_device: Mapped[str | None] = mapped_column(String(20))
     processing_status: Mapped[str | None] = mapped_column(String)  # success | error | pending
     processing_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

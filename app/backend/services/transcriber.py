@@ -194,6 +194,7 @@ class TranscriptionResult:
     detected_language: str
     success: bool
     error_message: str | None = None
+    device_used: str | None = None
 
 
 def transcribe(
@@ -327,7 +328,7 @@ def _transcribe_faster_whisper(
             "transcribe: done path=%s lang=%s segments=%d",
             audio_path, detected, len(segments),
         )
-        return TranscriptionResult(segments=segments, detected_language=detected, success=True)
+        return TranscriptionResult(segments=segments, detected_language=detected, success=True, device_used=actual_device)
 
     except Exception as exc:
         logger.error("transcribe: failed path=%s error=%s", audio_path, exc, exc_info=True)

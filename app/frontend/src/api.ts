@@ -48,7 +48,11 @@ export interface ResultResponse {
   mindmap_status: 'processing' | 'done' | 'failed' | null
   is_favorite: boolean
   subtitle_source?: 'captions' | 'transcript' | null
+  subtitles_type?: string | null
   transcription_duration_seconds?: number | null
+  transcription_model?: string | null
+  transcription_device?: string | null
+  transcription_finished_at?: string | null
 }
 
 export interface HistoryItem {

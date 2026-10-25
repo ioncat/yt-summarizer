@@ -95,6 +95,8 @@ async def complete_task(
     formatted: dict,
     subtitle_source: str | None = None,
     transcription_started_at: "datetime | None" = None,
+    transcription_model: str | None = None,
+    transcription_device: str | None = None,
 ) -> None:
     # Find pending task and its placeholder video
     task_stmt = select(ProcessingTask).where(ProcessingTask.id == task_id)
@@ -155,6 +157,8 @@ async def complete_task(
         subtitle_source=subtitle_source,
         transcription_started_at=transcription_started_at,
         transcription_finished_at=datetime.utcnow() if transcription_started_at else None,
+        transcription_model=transcription_model,
+        transcription_device=transcription_device,
     ))
 
     task.status = "completed"
@@ -244,6 +248,10 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
         "mindmap_status": fmt.mindmap_status if fmt else None,
         "is_favorite": bool(video.is_favorite),
         "subtitle_source": fmt.subtitle_source if fmt else None,
+        "subtitles_type": video.subtitles_type,
+        "transcription_model": fmt.transcription_model if fmt else None,
+        "transcription_device": fmt.transcription_device if fmt else None,
+        "transcription_finished_at": fmt.transcription_finished_at.isoformat() if fmt and fmt.transcription_finished_at else None,
     }
 
 
@@ -575,6 +583,8 @@ async def replace_subtitles_after_reextract(
     formatted: dict,
     transcription_started_at=None,
     subtitle_source: str | None = None,
+    transcription_model: str | None = None,
+    transcription_device: str | None = None,
 ) -> None:
     """Apply a fresh extraction to an existing video: overwrite
     formatted_text, chapters, language fields, and invalidate all derived
@@ -630,6 +640,8 @@ async def replace_subtitles_after_reextract(
             "ts_started": ts_started,
             "ts_finished": ts_finished,
             "sub_src": subtitle_source,
+            "tr_model": transcription_model,
+            "tr_device": transcription_device,
         }
         await db.execute(
             text("""
@@ -653,7 +665,9 @@ async def replace_subtitles_after_reextract(
                     mindmap_status = NULL,
                     transcription_started_at = CASE WHEN :ts_started IS NOT NULL THEN :ts_started ELSE transcription_started_at END,
                     transcription_finished_at = CASE WHEN :ts_finished IS NOT NULL THEN :ts_finished ELSE transcription_finished_at END,
-                    subtitle_source = CASE WHEN :sub_src IS NOT NULL THEN :sub_src ELSE subtitle_source END
+                    subtitle_source = CASE WHEN :sub_src IS NOT NULL THEN :sub_src ELSE subtitle_source END,
+                    transcription_model = CASE WHEN :tr_model IS NOT NULL THEN :tr_model ELSE transcription_model END,
+                    transcription_device = CASE WHEN :tr_device IS NOT NULL THEN :tr_device ELSE transcription_device END
                 WHERE id = :id
             """),
             params,
