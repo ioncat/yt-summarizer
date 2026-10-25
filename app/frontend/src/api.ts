@@ -9,6 +9,7 @@ export interface StatusResponse {
   task_id: string
   status: 'pending' | 'processing' | 'completed' | 'failed'
   progress: number
+  progress_text?: string | null
   error_message: string | null
   available_languages: string[] | null
 }
@@ -46,10 +47,12 @@ export interface ResultResponse {
   mindmap_status: 'processing' | 'done' | 'failed' | null
   is_favorite: boolean
   subtitle_source?: 'captions' | 'transcript' | null
+  transcription_duration_seconds?: number | null
 }
 
 export interface HistoryItem {
   video_id: string
+  url?: string
   title: string | null
   author: string | null
   language: string | null
@@ -58,6 +61,7 @@ export interface HistoryItem {
   has_cleaned?: boolean
   has_summary?: boolean
   is_favorite?: boolean
+  subtitle_source?: 'captions' | 'transcript' | null
   created_at: string
 }
 

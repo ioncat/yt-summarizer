@@ -613,6 +613,14 @@ export default function ResultPage() {
             </div>
           </div>
 
+          {/* ── Meta ribbon: transcription timing ── */}
+          {activeTab === 'subtitles' && result.subtitle_source === 'transcript' && result.transcription_duration_seconds != null && (
+            <div className="px-6 py-3 bg-surface-container-low border-b border-outline-variant flex flex-wrap items-center gap-3 text-label-sm text-secondary">
+              <span className="material-symbols-outlined text-[16px]">timer</span>
+              Transcribed in {formatDuration(result.transcription_duration_seconds)}
+            </div>
+          )}
+
           {/* ── Meta ribbon: cleanup processing ── */}
           {activeTab === 'cleaned' && result.cleanup_status === 'processing' && cleanupElapsedSeconds != null && (
             <div className="px-6 py-3 bg-surface-container-low border-b border-outline-variant flex flex-wrap items-center gap-3 text-label-sm text-secondary">

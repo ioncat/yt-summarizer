@@ -46,6 +46,7 @@ export default function ProcessingPage() {
   const navigate = useNavigate()
   const [stage, setStage] = useState<Stage>('extracting')
   const [error, setError] = useState('')
+  const [progressText, setProgressText] = useState<string | null>(null)
   const [availableLangs, setAvailableLangs] = useState<string[]>([])
   const [retrying, setRetrying] = useState(false)
   const cleanupIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -59,7 +60,9 @@ export default function ProcessingPage() {
     const interval = setInterval(async () => {
       try {
         const res = await getStatus(taskId)
+        if (res.progress_text) setProgressText(res.progress_text)
         if (res.status === 'completed') {
+          setProgressText(null)
           clearInterval(interval)
           if (autoPipeline && videoId) {
             setStage('cleaning')
@@ -165,11 +168,14 @@ export default function ProcessingPage() {
     return 'pending'
   }
 
+  const isTranscribing = progressText != null && (
+    progressText.startsWith('segment') || progressText.startsWith('transcribing')
+  )
   const statusText = stage === 'cleaning'
     ? 'AI cleanup running…'
     : stage === 'summarizing'
     ? 'Summarizing…'
-    : 'This usually takes 15–30 seconds'
+    : progressText ?? 'This usually takes 15–30 seconds'
 
   return (
     <div className="p-6 md:p-8 max-w-[1200px] mx-auto flex items-start justify-center">
@@ -234,7 +240,9 @@ export default function ProcessingPage() {
                   <span className="material-symbols-outlined text-[48px] text-primary pulse-dot">
                     pending
                   </span>
-                  <p className="text-body-md font-semibold text-on-surface">Extracting subtitles…</p>
+                  <p className="text-body-md font-semibold text-on-surface">
+                    {isTranscribing ? 'Transcribing…' : 'Extracting subtitles…'}
+                  </p>
                   <p className="text-body-sm text-secondary">{statusText}</p>
                 </div>
               )}

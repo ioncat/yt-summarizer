@@ -11,6 +11,9 @@ from typing import Annotated
 logger = logging.getLogger("api")
 _reextract_logger = logging.getLogger("api.reextract")
 
+# Live STT progress for direct file-upload transcription tasks: {task_id: progress_text}
+_FILE_TASK_PROGRESS: dict[str, str] = {}
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -167,10 +170,17 @@ async def _run_transcribe_file(
     from services.subtitle_extractor import ExtractionResult, SubtitleEntry, VideoMetadata
 
     try:
+        from datetime import datetime as _datetime
         async with AsyncSessionLocal() as db:
             stt_model = await get_app_setting(db, "stt_model") or "base"
             stt_device = await get_app_setting(db, "stt_device") or "auto"
             stt_cache_path = await get_app_setting(db, "stt_cache_path") or DEFAULT_CACHE_PATH
+
+        transcription_started_at = _datetime.utcnow()
+        _FILE_TASK_PROGRESS[task_id] = "transcribing…"
+
+        def _on_stt_progress(n: int) -> None:
+            _FILE_TASK_PROGRESS[task_id] = f"segment {n}…"
 
         transcription = await asyncio.to_thread(
             _transcribe, audio_path,
@@ -178,7 +188,9 @@ async def _run_transcribe_file(
             model=stt_model,
             device=stt_device,
             cache_path=stt_cache_path,
+            on_progress=_on_stt_progress,
         )
+        _FILE_TASK_PROGRESS.pop(task_id, None)
 
         if not transcription.success:
             async with AsyncSessionLocal() as db:
@@ -225,6 +237,7 @@ async def _run_transcribe_file(
             await complete_task(
                 db, task_id, f"local://{original_filename}", extraction, formatted,
                 subtitle_source="transcript",
+                transcription_started_at=transcription_started_at,
             )
             auto_delete = await get_app_setting(db, "upload_auto_delete")
             auto_delete_mode = await get_app_setting(db, "upload_auto_delete_mode") or "immediate"
@@ -293,6 +306,7 @@ async def get_status(task_id: str, db: Annotated[AsyncSession, Depends(get_db)])
         "task_id": task.id,
         "status": task.status,
         "progress": task.progress,
+        "progress_text": _FILE_TASK_PROGRESS.get(task.id),
         "error_message": error_message,
         "available_languages": available_languages,
     }

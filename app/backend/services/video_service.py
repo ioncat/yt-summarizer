@@ -94,6 +94,7 @@ async def complete_task(
     extraction_result: ExtractionResult,
     formatted: dict,
     subtitle_source: str | None = None,
+    transcription_started_at: "datetime | None" = None,
 ) -> None:
     # Find pending task and its placeholder video
     task_stmt = select(ProcessingTask).where(ProcessingTask.id == task_id)
@@ -152,6 +153,8 @@ async def complete_task(
         text_length=formatted["char_count"],
         processing_status="success",
         subtitle_source=subtitle_source,
+        transcription_started_at=transcription_started_at,
+        transcription_finished_at=datetime.utcnow() if transcription_started_at else None,
     ))
 
     task.status = "completed"
@@ -226,6 +229,10 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
         ),
         "char_count": fmt.text_length if fmt else None,
         "chapters": video.chapters,
+        "transcription_duration_seconds": _duration(
+            fmt.transcription_finished_at if fmt else None,
+            fmt.transcription_started_at if fmt else None,
+        ),
         "created_at": video.created_at.isoformat(),
         "cleanup_finished_at": fmt.cleanup_finished_at.isoformat() if fmt and fmt.cleanup_finished_at else None,
         "summary_finished_at": fmt.summary_finished_at.isoformat() if fmt and fmt.summary_finished_at else None,
@@ -267,6 +274,7 @@ async def get_history(
         fmt = (await db.execute(fmt_stmt)).scalars().first()
         items.append({
             "video_id": v.video_id,
+            "url": v.url,
             "title": v.title,
             "author": v.author,
             "language": v.language_detected,
@@ -275,6 +283,7 @@ async def get_history(
             "has_cleaned": bool(fmt and fmt.cleaned_text),
             "has_summary": bool(fmt and fmt.summary_text),
             "is_favorite": bool(v.is_favorite),
+            "subtitle_source": fmt.subtitle_source if fmt else None,
             "created_at": v.created_at.isoformat(),
         })
 

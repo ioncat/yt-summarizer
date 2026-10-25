@@ -478,6 +478,8 @@ async def _run_transcribe(url: str, language: str = "auto", item_id: int = 0) ->
             raise RuntimeError(audio_result.error_message or "Audio download failed")
 
         _QUEUE_PROGRESS[item_id] = "transcribe: transcribing…"
+        import datetime as _dt_mod
+        transcription_started_at = _dt_mod.datetime.utcnow()
 
         def _on_progress(n: int) -> None:
             _QUEUE_PROGRESS[item_id] = f"transcribe: segment {n}…"
@@ -522,7 +524,11 @@ async def _run_transcribe(url: str, language: str = "auto", item_id: int = 0) ->
     formatted = format_subtitles(entries, chapters=metadata.chapters if metadata else None)
 
     async with AsyncSessionLocal() as db:
-        await complete_task(db, task_id, url, extraction, formatted, subtitle_source="transcript")
+        await complete_task(
+            db, task_id, url, extraction, formatted,
+            subtitle_source="transcript",
+            transcription_started_at=transcription_started_at,
+        )
 
     return {"video_id": yt_video_id, "db_video_id": None}
 

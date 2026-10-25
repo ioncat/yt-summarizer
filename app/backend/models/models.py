@@ -80,6 +80,8 @@ class SubtitleFormatted(Base):
     mindmap_status: Mapped[str | None] = mapped_column(String(20))  # null | processing | done | failed
     chat_history: Mapped[list | None] = mapped_column(JSON)  # [{role, content}, ...]
     subtitle_source: Mapped[str | None] = mapped_column(String(20))  # captions | transcript
+    transcription_started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    transcription_finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     processing_status: Mapped[str | None] = mapped_column(String)  # success | error | pending
     processing_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
