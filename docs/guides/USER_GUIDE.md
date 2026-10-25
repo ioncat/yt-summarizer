@@ -19,12 +19,13 @@ Complete guide to using YT Summarizer. For a one-page intro, see [README](../../
 
 ## Overview
 
-YT Summarizer extracts a YouTube video's subtitles, cleans them up with a local LLM, and produces a summary you can scan in seconds. All LLM work runs on your machine via **Ollama** — no data leaves the device.
+YT Summarizer extracts a YouTube video's subtitles, cleans them up with a local LLM, and produces a summary you can scan in seconds. It also transcribes **local audio/video files** (MP3, MP4, MKV, WAV, and more) via a local Whisper model — no YouTube needed. All LLM and STT work runs on your machine via **Ollama** and **faster-whisper** — no data leaves the device.
 
 **Typical use cases:**
 - Decide whether a video is worth watching before committing time
 - Turn a 5-hour course into a structured reference document
 - Search through video content as text (Ctrl+F on a transcript)
+- Transcribe a local recording, podcast, or lecture and summarize it
 - Ask follow-up questions about the content via local chat
 
 ---
@@ -37,24 +38,34 @@ YT Summarizer extracts a YouTube video's subtitles, cleans them up with a local 
    ```
    ollama pull qwen2.5:7b
    ```
-2. **yt-dlp** — installed and accessible. Path is set in Settings.
+2. **yt-dlp** — required for YouTube subtitle extraction. Two options:
+   - **Bundled** (recommended): download `yt-dlp.exe` to `app/data/yt-dlp.exe` — the app uses it automatically; no separate install needed.
+   - **System-installed**: install to PATH and set the full path in Settings → General.
 3. **Node.js v18+** — only needed if running the frontend dev server directly.
 4. **YouTube cookies** — required to bypass age-restriction and 429 rate limits. Export via "Get cookies.txt LOCALLY" Chrome extension into `app/data/www.youtube.com_cookies.txt`.
+5. **faster-whisper** *(optional, for STT)* — install via pip if you want local audio transcription:
+   ```
+   pip install faster-whisper
+   ```
+   GPU support requires CUDA Toolkit 12.x and matching cuDNN libraries. Without it, Whisper falls back to CPU automatically.
 
 ### First-time setup in the web UI
 
 After launching the app, open **Settings → General** and fill in:
 
 - **Ollama URL** — usually `http://localhost:11434`
-- **yt-dlp path** — full path to your `yt-dlp` executable
+- **yt-dlp path** — full path to your `yt-dlp` executable (leave blank if using bundled)
 - **Cookies path** — path to your exported cookies file (or upload via the **Upload** button)
 
 Then go to **Settings → AI Cleanup** and **Settings → Summarization** and pick a model for each stage. Without a model selected, those stages will be skipped.
+
+For Speech-to-Text, open **Settings → STT** and download a Whisper model (e.g. `base` or `small` for speed, `large-v3` for accuracy). The download runs in the background and shows progress on the model card.
 
 ---
 
 ## Processing pipeline
 
+**YouTube URL path:**
 ```
 YouTube URL
     ↓
@@ -67,6 +78,17 @@ YouTube URL
 ④ Summarize      — Ollama produces a summary or structured digest
     ↓
 ⑤ Chat Q&A       — ask questions about the content (preserves context)
+```
+
+**Local file path (STT):**
+```
+Local file (MP3/MP4/MKV/WAV/…)
+    ↓
+① Transcribe     — faster-whisper converts audio to text (with live segment progress)
+    ↓
+② Format         — same paragraph splitting as YouTube path
+    ↓
+③ AI Cleanup → Summarize → Chat Q&A   (identical to YouTube path)
 ```
 
 Each stage's output is stored separately in SQLite and shown as its own tab in the Result page: **Subtitles · Cleaned · Summary · Mind Map · Chat**. You can re-run any stage independently.
@@ -238,6 +260,42 @@ When cleanup or summarization finishes while you're on another tab:
 
 Permission is requested lazily on first action.
 
+### Speech-to-Text (local file transcription)
+
+The **Local File** tab on the Home page lets you upload any audio or video file (`.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`, `.mp3`, `.wav`, `.m4a`, `.ogg`, `.flac`, `.aac`, `.opus`, `.wma`) and transcribe it with a local Whisper model.
+
+**Uploading:**
+1. Go to Home → **Local File** tab
+2. Drag and drop a file (or click to browse)
+3. Select language (or leave on Auto to detect)
+4. Click **Upload & Transcribe**
+
+**Live progress:** ProcessingPage shows `segment N / M` and a time counter while Whisper processes the audio.
+
+**Transcription timing:** after completion, the Subtitles tab meta line shows `Transcribed in X:XX · <model>`.
+
+**Source badge on History page:** entries with a Whisper transcript show an audio icon and "STT" badge; YouTube subtitle entries show a video icon — no badge.
+
+**Re-transcribing a local file (from Result page):**
+
+The local file Result page is identical to the YouTube Result page, with three differences:
+
+1. **Whisper model selector** — in the Subtitles tab actions bar. Only shows models you have downloaded. Changes auto-save (no Save button needed).
+2. **Re-transcribe button** — re-runs faster-whisper on the original uploaded file. Shows live `segment N…` progress next to the button.
+3. **Open video** and **Benchmark** buttons are hidden — not applicable to local files.
+
+> **Note:** The original file must still exist in `app/data/uploads/` for Re-transcribe to work. Files are kept until you delete them via Settings → File Storage.
+
+### File Storage settings
+
+Settings → General → **File Storage** controls the lifecycle of uploaded local files:
+
+| Setting | Description |
+|---|---|
+| **Auto-delete after processing** | Remove the uploaded file once transcription completes |
+| **Keep files for N days** | Delete files older than N days on next startup |
+| **Delete all uploads now** | Immediately removes all files in `app/data/uploads/` |
+
 ---
 
 ## Settings reference
@@ -270,6 +328,18 @@ Two sub-tabs:
 Plus:
 - **Model** — applies to both sub-tabs
 - **Force Map-Reduce** — toggle that bypasses Full Extract auto-selection
+
+### STT tab
+
+| Field | Description |
+|---|---|
+| **Engine** | Currently: `faster-whisper`. Others may be added later |
+| **Model** | Whisper model size (tiny/base/small/medium/large-v3). Larger = slower but more accurate |
+| **Device** | `cuda` (GPU) or `cpu`. CUDA requires CUDA Toolkit 12.x + cuDNN. Falls back to CPU on missing DLLs |
+| **Cache path** | Where downloaded Whisper model files are stored |
+| **Model cards** | Each available model shows download status + disk size. Download/Delete buttons. Progress bar during download |
+
+Default model: `small`. Default device: `cuda` if available, else `cpu`.
 
 ---
 

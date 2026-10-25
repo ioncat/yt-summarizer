@@ -39,7 +39,7 @@ Example: "Reset prompts to defaults" is a blocker for any quality test, because 
 
 **Vision**: Reduce cognitive load by allowing users to scan video content before deciding whether to watch in detail.
 
-**Current Phase**: Phase 1.5 — Complete ✅ (Epics 6–16 done; 8 dropped)
+**Current Phase**: Phase 3 — Speech-to-Text (Epics 30–32 done; 41–43 done)
 
 ---
 
@@ -265,6 +265,32 @@ Video content type → auto-selected mode. Type is determined by `len(text)` and
 - `api.ts`: `processFile(file, language)` fetch wrapper
 - `HomePage.tsx`: Local File tab with drag-and-drop zone, language selector, "Upload & Transcribe" button
 
+#### Epic 41 ✅ — STT Configuration & File Management (25.10.2026)
+- **yt-dlp bundled mode**: `_ytdlp_cmd(ytdlp_path)` in `subtitle_extractor.py` — returns `[sys.executable, "-m", "yt_dlp"]` when `ytdlp_path=None`, else `[ytdlp_path]`. No config required in Docker.
+- **Settings → General yt-dlp toggle**: OFF = bundled (recommended), ON = custom path. Version chip shows installed version. "Update" button polls `POST /api/settings/update-ytdlp` (pip install -U yt-dlp) with progress.
+- **`GET /api/settings/ytdlp-version`** + **`POST /api/settings/update-ytdlp`** endpoints
+- **`PUT /api/settings/app` fix**: now uses `model_fields_set` to allow explicit `null` values (e.g. clearing `ytdlp_path` to switch to bundled mode)
+- **Settings → File Storage tab**: `GET /api/settings/storage` (file count + MB/GB), `DELETE /api/settings/storage/uploads` (clear all), auto-delete policy toggle (immediate | after_days), days selector
+- `app_settings` new keys: `upload_auto_delete`, `upload_auto_delete_mode`, `upload_auto_delete_days`
+- `_run_transcribe_file()` checks `upload_auto_delete=immediate` → deletes file after transcription
+- `_cleanup_uploads_on_start()` called from `lifespan` — removes stale files if `mode=after_days`
+- **CUDA detection fix**: `_resolve_device()` in `transcriber.py` now uses `ctranslate2.get_cuda_device_count()` (was `torch`, which is not a dependency)
+- **Graceful CUDA fallback**: if `WhisperModel(device="cuda")` raises (e.g. missing `cublas64_12.dll`), retries with `device="cpu", compute_type="int8"` automatically
+- `requirements.txt`: pinned `av>=11,<19` (av-19 removed `metadata_errors` param used by faster-whisper)
+
+#### Epic 42 ✅ — STT Progress, Transcription Timing & Source Badges (25.10.2026)
+- **STT progress on ProcessingPage**: `on_progress` callback wired in `queue_service._run_transcribe()` → `_QUEUE_PROGRESS[item_id]` updated with "segment N…". `_FILE_TASK_PROGRESS[task_id]` for direct file uploads. `GET /api/status/{task_id}` returns `progress_text` field. ProcessingPage polls and shows live segment counter.
+- **Transcription timing**: `transcription_started_at` + `transcription_finished_at` columns on `subtitles_formatted` (migration in `_migrate_db`). `complete_task()` accepts `transcription_started_at`. `get_result()` computes `transcription_duration_seconds`. ResultPage Subtitles tab meta ribbon: "Transcribed in X:XX" when `subtitle_source === 'transcript'`.
+- **Source badge in History**: `get_history()` returns `subtitle_source` + `url` per item. `HistoryPage`: `SourceBadge` component — shows blue **STT** badge with `movie` (video) or `audio_file` (audio) icon for `transcript` source records. YouTube-extracted videos show no badge.
+
+#### Epic 43 ✅ — Local File Result Page (25.10.2026)
+- **Whisper model selector** inline in Subtitles tab actions bar (only shows for `subtitle_source=transcript`). Lists only downloaded models. Auto-saves to `stt_model` app setting on change — same pattern as cleanup/summary model selectors.
+- **Irrelevant buttons hidden** for local files: "Open video" and "Benchmark" not shown when `subtitle_source=transcript`.
+- **Re-transcribe**: "Re-extract" renamed to "Re-transcribe" for local file results. Confirm dialog explains original file requirement.
+- **Backend `_run_reextract` local path**: if URL starts with `local://`, finds the audio file via `glob(uploads_dir/{uuid_prefix}*)` (uuid_prefix = `video_id[5:]`), re-runs Whisper with selected model (or `stt_model` setting as fallback). `replace_subtitles_after_reextract` extended with `transcription_started_at` + `subtitle_source` params.
+- **Live re-transcription progress**: `_RETRANSCRIBE_PROGRESS: dict[str, str]` in `api.py` — updated from `on_progress` callback in the local re-extract path, returned in `GET /api/result/{video_id}` as `retranscribe_progress`. ResultPage shows animated "segment N…" text next to Re-transcribe button during operation.
+- `reextractSubtitles` in `api.ts` accepts optional `model` parameter passed to backend.
+
 ---
 
 ## Running Locally
@@ -351,7 +377,8 @@ yt-summarizer/
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/process` | Submit URL + language → returns task_id, video_id |
-| GET | `/api/status/{task_id}` | Poll status; returns `available_languages` on language error |
+| POST | `/api/process/file` | Upload local file (multipart: file + language) → returns task_id, video_id |
+| GET | `/api/status/{task_id}` | Poll status; returns `available_languages` on language error + `progress_text` for STT |
 | GET | `/api/result/{video_id}` | Formatted subtitle text + metadata + cleanup_status |
 | GET | `/api/history?page=N` | Paginated history (20 per page) |
 | DELETE | `/api/result/{video_id}` | Delete video + all related data |
@@ -373,6 +400,15 @@ yt-summarizer/
 | DELETE | `/api/queue/all` | Clear all pending items |
 | DELETE | `/api/queue/failed` | Clear all failed items |
 | DELETE | `/api/queue/{id}` | Delete single pending item (409 if processing) |
+| GET | `/api/stt/models` | STT model catalog with `downloaded` flag |
+| POST | `/api/stt/models/{name}/download` | Start background model download |
+| GET | `/api/stt/models/{name}/download/status` | Poll download progress |
+| DELETE | `/api/stt/models/{name}` | Delete downloaded model files |
+| GET | `/api/settings/ytdlp-version` | Installed yt-dlp version string |
+| POST | `/api/settings/update-ytdlp` | Upgrade yt-dlp via pip in background |
+| GET | `/api/settings/storage` | Upload folder stats: file count + MB |
+| DELETE | `/api/settings/storage/uploads` | Clear all uploaded files |
+| POST | `/api/result/{video_id}/reextract` | Re-extract (YouTube) or re-transcribe (local file) subtitles |
 
 ---
 

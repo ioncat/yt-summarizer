@@ -178,15 +178,18 @@ Small improvements and fixes that don't warrant a standalone epic.
 
 ---
 
-## Phase 3: Speech-to-Text Fallback 🔵
+## Phase 3: Speech-to-Text ✅
 
-Whisper fallback when no subtitles are available. Language param from Phase 1 reused directly.
+Whisper-based transcription for YouTube audio and local files. Language param from Phase 1 reused directly.
 
 | Epic | Description | Status |
 |------|-------------|--------|
-| Epic 30: Audio Extraction | Extract audio via yt-dlp | 🔵 Planned |
-| Epic 31: Whisper Transcription | Local Whisper model | 🔵 Planned |
-| Epic 32: Fallback UX | One-click fallback offer when subtitles missing | 🔵 Planned |
+| Epic 30: STT Service Layer | `services/transcriber.py` engine-agnostic API, faster-whisper, device auto-detect, model catalog + download/delete UI in Settings → STT | ✅ Done — 24.10.2026 |
+| Epic 31: YouTube/URL Audio Transcription | `extract_audio()` via yt-dlp, queue worker `_run_transcribe()`, `subtitle_source='transcript'` in DB, STT checkbox on HomePage | ✅ Done — 24.10.2026 |
+| Epic 32: Local File Upload | `POST /api/process/file` multipart endpoint, `data/uploads/` storage, `local_video_id="file-{uuid8}"`, drag-and-drop on HomePage Local File tab | ✅ Done — 24.10.2026 |
+| Epic 41: STT Configuration & File Management | yt-dlp bundled mode toggle + version/update UI; File Storage tab (stats, clear, auto-delete policy); CUDA detection fix (`ctranslate2`); graceful CUDA→CPU fallback; `av<19` pin | ✅ Done — 25.10.2026 |
+| Epic 42: STT Progress, Timing & Source Badges | Live segment progress on ProcessingPage; transcription timing columns + "Transcribed in X:XX" in ResultPage meta; STT source badge (movie/audio icon) in History | ✅ Done — 25.10.2026 |
+| Epic 43: Local File Result Page | Inline Whisper model selector; Re-transcribe button with live segment progress; hide irrelevant Open video / Benchmark buttons for local files; backend re-transcribe path via `_run_reextract` | ✅ Done — 25.10.2026 |
 
 ---
 
@@ -216,13 +219,13 @@ Small ideas and technical improvements that don't warrant an epic. Can be implem
 |-------|-------|--------|
 | Phase 1 — MVP | 1–5 | ✅ Done |
 | Phase 1.5 — LLM Cleanup & UX | 6–16, 22–25 | ✅ Done (8 dropped) |
-| Phase 2 — Summarization Quality | 17–21, 26–29 | 🔄 In Progress (17, 20, 22–27, 29 done; 21 deferred; 18, 19, 28 planned) |
-| Phase 3 — STT Fallback | 30–32 | 🔵 Planned |
+| Phase 2 — Summarization Quality | 17–21, 26–29, 33–34, 36–40 | 🔄 In Progress (17, 20, 22–27, 29, 34, 36, 39, 40 done; 21 deferred; 18, 19, 28, 33, 35, 37, 38 planned) |
+| Phase 3 — Speech-to-Text | 30–32, 41–43 | ✅ Done |
 
 ---
 
 ## Document Control
 
-- **Version**: 1.6
-- **Last Updated**: 23.05.2026
+- **Version**: 1.7
+- **Last Updated**: 25.10.2026
 - **Status**: 🔄 Active Development

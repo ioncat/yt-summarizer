@@ -10,11 +10,12 @@ Video is expensive to evaluate:
 - Titles and thumbnails rarely show the real substance.
 - Intros, delivery, pacing, filler, and repetition add cognitive load.
 
-YT Summarizer gives you a short AI summary of any YouTube video, so you can:
+YT Summarizer gives you a short AI summary of any YouTube video or local audio/video file, so you can:
 
 - understand the core idea quickly;
 - decide whether the full video deserves your attention;
-- skip low-value content without spending time on it.
+- skip low-value content without spending time on it;
+- transcribe and summarize your own recordings, podcasts, or lectures.
 
 The goal: turn a watch-or-skip guess into a fast, informed decision.
 
@@ -38,16 +39,21 @@ If you care about reducing cognitive load and saving time in the age of informat
 ## Pipeline
 
 ```
-YouTube URL → Extract → Format → AI Cleanup → Summarize → Chat Q&A
-                  ↓         ↓          ↓            ↓
-              metadata    paragraphs  cleaned    summary
-              + VTT       + chapters  text       (Single / Map-Reduce / Full Extract)
+YouTube URL  → Extract     → Format → AI Cleanup → Summarize → Chat Q&A
+                  ↓             ↓          ↓            ↓
+              metadata      paragraphs  cleaned    summary
+              + VTT         + chapters  text       (Single / Map-Reduce / Full Extract)
+
+Local file   → Transcribe  → Format → AI Cleanup → Summarize → Chat Q&A
+(MP3/MP4/…)    (Whisper)
 ```
 
 Each stage's output is stored separately in SQLite and shown as its own tab: **Subtitles · Cleaned · Summary · Mind Map · Chat**.
 
 **Key features:**
 - **AI via Ollama** — connect any local or remote LLM
+- **Speech-to-Text** — transcribe local audio/video files with faster-whisper (GPU/CPU)
+- **Local file upload** — drag-and-drop MP3/MP4/WAV/MKV and more; re-transcribe with a different Whisper model
 - **Auto language detection** — picks original video language from yt-dlp metadata
 - **Chapter-aware formatting** — preserves YouTube creator's chapter structure
 - **Multiple processing modes** — Single-pass / Map-Reduce / Full Extract, auto-selected by text length and structure
@@ -75,10 +81,11 @@ This is active research. The current Map-Reduce and Full Extract modes are the f
 
 | Component | Technology |
 |---|---|
-| Frontend | React + TypeScript + Vite |
+| Frontend | React + TypeScript + Vite + Tailwind CSS v4 |
 | Backend | Python + FastAPI |
 | LLM | Ollama |
 | Subtitle extraction | yt-dlp |
+| Speech-to-Text | faster-whisper (CUDA/CPU) |
 | Database | SQLite (async via aiosqlite) |
 
 ---
@@ -87,22 +94,27 @@ This is active research. The current Map-Reduce and Full Extract modes are the f
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/process` | Submit URL + language |
-| GET | `/api/status/{task_id}` | Poll processing status |
+| POST | `/api/process` | Submit YouTube URL + language |
+| POST | `/api/process/file` | Upload local audio/video file for transcription |
+| GET | `/api/status/{task_id}` | Poll processing status (includes STT segment progress) |
 | GET | `/api/result/{video_id}` | Get all data for a video |
 | POST | `/api/result/{video_id}/cleanup` | Trigger AI cleanup |
 | DELETE | `/api/result/{video_id}/cleanup` | Cancel cleanup |
 | POST | `/api/result/{video_id}/summary` | Trigger AI summarization |
 | DELETE | `/api/result/{video_id}/summary` | Cancel summarization |
 | POST | `/api/result/{video_id}/mindmap` | Generate mind map |
+| POST | `/api/result/{video_id}/reextract` | Re-extract subtitles or re-transcribe local file |
 | POST | `/api/queue/bulk` | Add URLs to processing queue |
 | GET | `/api/queue` | Queue items with live progress |
 | DELETE | `/api/queue/{id}` | Remove pending item |
 | POST | `/api/benchmark/run` | Run N-model benchmark |
-| GET | `/api/history` | Paginated history |
-| GET | `/api/settings` | All settings |
+| GET | `/api/history` | Paginated history (includes source badge info) |
+| GET | `/api/settings` | All settings (app + cleanup + summarization + STT) |
 | PUT | `/api/settings/app` | Save app settings |
 | GET | `/api/models` | Available Ollama models |
+| GET | `/api/stt/models` | Available Whisper models with download status |
+| POST | `/api/stt/models/{name}/download` | Download a Whisper model |
+| DELETE | `/api/stt/models/{name}` | Remove a downloaded Whisper model |
 | GET | `/api/health` | Backend + Ollama status |
 
 Full API reference in [CLAUDE.md](CLAUDE.md).
@@ -115,7 +127,7 @@ Full API reference in [CLAUDE.md](CLAUDE.md).
 |-------|--------|-------------|
 | Phase 1 — Subtitle Extraction | ✅ Done | Extract, format, store, display |
 | Phase 1.5 — LLM Cleanup & UX | ✅ Done | Cleanup, summarization, Settings, auto-pipeline, cancel, chapter-aware, queue, notifications |
-| Phase 2 — Summarization Quality | 🔄 In Progress | Map-Reduce ✅, Full Extract ✅, Benchmark ✅, Mind Map ✅ — XL hierarchical mode 🔵 |
-| Phase 3 — Speech-to-Text | 🔵 Planned | Whisper fallback when no subtitles |
+| Phase 2 — Summarization Quality | ✅ Done | Map-Reduce, Full Extract, Benchmark, Mind Map — XL hierarchical mode 🔵 |
+| Phase 3 — Speech-to-Text | ✅ Done | Local file upload, faster-whisper transcription, STT settings, progress, timing, re-transcribe |
 
 See [docs/delivery/backlog/BACKLOG.md](docs/delivery/backlog/BACKLOG.md) for detailed epic breakdown.
