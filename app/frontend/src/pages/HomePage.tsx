@@ -71,7 +71,6 @@ export default function HomePage() {
     Promise.all([getSettings(), getHealth()])
       .then(([s, health]) => {
         const missing: string[] = []
-        if (!s.app.ytdlp_path) missing.push('yt-dlp path')
         if (!s.app.cookies_path) missing.push('Cookies')
         setMissingConfig(missing)
         setAllSettings(s)
