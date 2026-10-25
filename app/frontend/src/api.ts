@@ -208,11 +208,11 @@ export async function processFile(
   return res.json()
 }
 
-export async function reextractSubtitles(videoId: string, language: string = 'auto'): Promise<void> {
+export async function reextractSubtitles(videoId: string, language: string = 'auto', model?: string): Promise<void> {
   const res = await fetch(`${BASE}/result/${videoId}/reextract`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ language }),
+    body: JSON.stringify({ language, ...(model ? { model } : {}) }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))

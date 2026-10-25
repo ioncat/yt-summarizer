@@ -573,6 +573,8 @@ async def replace_subtitles_after_reextract(
     video_id: str,
     extraction: "ExtractionResult",
     formatted: dict,
+    transcription_started_at=None,
+    subtitle_source: str | None = None,
 ) -> None:
     """Apply a fresh extraction to an existing video: overwrite
     formatted_text, chapters, language fields, and invalidate all derived
@@ -617,6 +619,18 @@ async def replace_subtitles_after_reextract(
     # Overwrite formatted_text and clear all derived cleanup/summary fields
     fmt_id = await _get_fmt_id(db, video_id)
     if fmt_id:
+        from datetime import datetime as _dt
+        ts_finished = _dt.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f") if transcription_started_at else None
+        ts_started = transcription_started_at.strftime("%Y-%m-%d %H:%M:%S.%f") if transcription_started_at else None
+        params: dict = {
+            "lang": extraction.language,
+            "ft": formatted["formatted_text"],
+            "tl": formatted["char_count"],
+            "id": fmt_id,
+            "ts_started": ts_started,
+            "ts_finished": ts_finished,
+            "sub_src": subtitle_source,
+        }
         await db.execute(
             text("""
                 UPDATE subtitles_formatted
@@ -636,15 +650,13 @@ async def replace_subtitles_after_reextract(
                     summary_mode = NULL,
                     summary_chunks_count = NULL,
                     mindmap_text = NULL,
-                    mindmap_status = NULL
+                    mindmap_status = NULL,
+                    transcription_started_at = CASE WHEN :ts_started IS NOT NULL THEN :ts_started ELSE transcription_started_at END,
+                    transcription_finished_at = CASE WHEN :ts_finished IS NOT NULL THEN :ts_finished ELSE transcription_finished_at END,
+                    subtitle_source = CASE WHEN :sub_src IS NOT NULL THEN :sub_src ELSE subtitle_source END
                 WHERE id = :id
             """),
-            {
-                "lang": extraction.language,
-                "ft": formatted["formatted_text"],
-                "tl": formatted["char_count"],
-                "id": fmt_id,
-            },
+            params,
         )
     else:
         # No existing row — create one (rare edge case)

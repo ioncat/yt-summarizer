@@ -424,9 +424,11 @@ async def cancel_cleanup(video_id: str):
     return {"status": "cancelling"}
 
 
-async def _run_reextract(video_id: str, language: str = "auto") -> None:
+async def _run_reextract(video_id: str, language: str = "auto", model: str | None = None) -> None:
     """Background task: re-extract subtitles for an existing video.
+    For local:// URLs, re-runs Whisper transcription.
     Overwrites formatted_text + chapters, invalidates cleanup/summary."""
+    import glob as _glob
     from models.database import AsyncSessionLocal
 
     _REEXTRACT_SET.add(video_id)
@@ -437,6 +439,91 @@ async def _run_reextract(video_id: str, language: str = "auto") -> None:
                 _reextract_logger.warning("reextract: video not found video_id=%s", video_id)
                 return
             url = fmt["url"]
+
+        if url and url.startswith("local://"):
+            # Re-transcribe local file
+            from services.transcriber import transcribe as _transcribe, DEFAULT_CACHE_PATH
+            from services.text_formatter import format_subtitles as _format_subtitles
+            from services.subtitle_extractor import ExtractionResult, SubtitleEntry, VideoMetadata
+            from datetime import datetime as _datetime
+
+            original_filename = url[len("local://"):]
+            uuid_prefix = video_id[len("file-"):]  # strip "file-"
+            uploads_dir = _uploads_dir()
+            matches = _glob.glob(os.path.join(uploads_dir, f"{uuid_prefix}*"))
+            if not matches:
+                _reextract_logger.warning(
+                    "retranscribe: file not found video_id=%s uuid_prefix=%s uploads_dir=%s",
+                    video_id, uuid_prefix, uploads_dir,
+                )
+                return
+            audio_path = matches[0]
+
+            async with AsyncSessionLocal() as db:
+                stt_model = model or await get_app_setting(db, "stt_model") or "base"
+                stt_device = await get_app_setting(db, "stt_device") or "auto"
+                stt_cache_path = await get_app_setting(db, "stt_cache_path") or DEFAULT_CACHE_PATH
+
+            _reextract_logger.info(
+                "retranscribe: starting video_id=%s file=%s model=%s language=%s",
+                video_id, audio_path, stt_model, language,
+            )
+            from datetime import datetime as _dt
+            transcription_started_at = _dt.utcnow()
+            transcription = await asyncio.to_thread(
+                _transcribe, audio_path,
+                language=language,
+                model=stt_model,
+                device=stt_device,
+                cache_path=stt_cache_path,
+                on_progress=None,
+            )
+            if not transcription.success:
+                _reextract_logger.warning(
+                    "retranscribe: failed video_id=%s error=%s",
+                    video_id, transcription.error_message,
+                )
+                return
+
+            detected_language = transcription.detected_language or (language if language != "auto" else "und")
+            entries = [
+                SubtitleEntry(
+                    timestamp="{:02d}:{:02d}:{:02d}".format(
+                        int(s["start"] // 3600),
+                        int(s["start"] % 3600 // 60),
+                        int(s["start"] % 60),
+                    ),
+                    text=s["text"].strip(),
+                )
+                for s in (transcription.segments or [])
+                if s.get("text", "").strip()
+            ]
+            title = os.path.splitext(original_filename)[0]
+            metadata = VideoMetadata(
+                video_id=video_id,
+                title=title,
+                author=None, duration=None, channel_id=None,
+                channel_name=None, upload_date=None, view_count=None,
+                description=None, thumbnail_url=None,
+            )
+            extraction = ExtractionResult(
+                success=True, metadata=metadata, subtitles=entries,
+                language=detected_language, source_type=None,
+            )
+            formatted = _format_subtitles(entries)
+            async with AsyncSessionLocal() as db:
+                await replace_subtitles_after_reextract(
+                    db, video_id, extraction, formatted,
+                    transcription_started_at=transcription_started_at,
+                )
+            _reextract_logger.info(
+                "retranscribe: success video_id=%s entries=%d lang=%s",
+                video_id, len(entries), detected_language,
+            )
+            return
+
+        # YouTube / standard yt-dlp path
+        async with AsyncSessionLocal() as db:
             cookies_path = await get_app_setting(db, "cookies_path")
             ytdlp_path = await get_app_setting(db, "ytdlp_path") or "yt-dlp"
 
@@ -467,6 +554,7 @@ async def _run_reextract(video_id: str, language: str = "auto") -> None:
 
 class ReextractRequest(BaseModel):
     language: str = "auto"
+    model: str | None = None
 
 
 @router.post("/result/{video_id}/reextract")
@@ -486,7 +574,7 @@ async def trigger_reextract(
         raise HTTPException(status_code=409, detail="Summarization is in progress — cancel first")
     if video_id in _REEXTRACT_SET:
         raise HTTPException(status_code=409, detail="Re-extract already in progress")
-    background_tasks.add_task(_run_reextract, video_id, body.language)
+    background_tasks.add_task(_run_reextract, video_id, body.language, body.model)
     return {"status": "reextracting"}
 
 

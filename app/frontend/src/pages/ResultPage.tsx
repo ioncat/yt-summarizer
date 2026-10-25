@@ -9,8 +9,9 @@ import {
   reextractSubtitles,
   saveChatHistory, clearChatHistory,
   getSettings, getModels, saveSettings,
+  getSttModels,
   queueBulkAdd, toggleFavorite,
-  ResultResponse,
+  ResultResponse, SttModelInfo,
 } from '../api'
 import { renderText } from '../utils/renderText'
 
@@ -64,6 +65,8 @@ export default function ResultPage() {
   const mindmapPollRef          = useRef<ReturnType<typeof setInterval> | null>(null)
   const prevMindmapStatusRef    = useRef<string | null | undefined>(undefined)
   const [reextractLang, setReextractLang] = useState('auto')
+  const [sttModel, setSttModel]           = useState('')
+  const [sttModels, setSttModels]         = useState<SttModelInfo[]>([])
   const [cleanupModel, setCleanupModel]   = useState('')
   const [summaryModel, setSummaryModel]   = useState('')
   const [chatModel, setChatModel]         = useState('')
@@ -241,13 +244,15 @@ export default function ResultPage() {
   }, [result?.reextract_in_progress]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function loadSettings() {
-    Promise.all([getSettings(), getModels()])
-      .then(([s, list]) => {
+    Promise.all([getSettings(), getModels(), getSttModels()])
+      .then(([s, list, sttList]) => {
         setCleanupModel(s.cleanup.model ?? '')
         setSummaryModel(s.summarization.model ?? '')
         setChatModel(s.chat?.model ?? '')
         setOllamaUrl(s.app.ollama_url ?? '')
         setModels(list)
+        setSttModel(s.app.stt_model ?? '')
+        setSttModels(sttList)
         cleanupPromptsRef.current = { system_prompt: s.cleanup.system_prompt ?? null, user_prompt_template: s.cleanup.user_prompt_template ?? null }
         summaryPromptsRef.current = { system_prompt: s.summarization.system_prompt ?? null, user_prompt_template: s.summarization.user_prompt_template ?? null }
       })
@@ -428,24 +433,33 @@ export default function ResultPage() {
     catch (err) { console.error('[Result] deleteResult failed:', err) }
   }
 
+  const isLocalFile = result?.subtitle_source === 'transcript' && result?.video_id?.startsWith('file-')
+
   async function handleReextract() {
     if (!videoId) return
     const ok = window.confirm(
-      'Re-extract subtitles from YouTube?\n\n' +
-      'This will:\n' +
-      '• Replace the current Subtitles tab content with a fresh download\n' +
-      '• Clear the Cleaned tab (you will need to re-run AI Cleanup)\n' +
-      '• Clear the Summary tab (you will need to re-run summarization)\n\n' +
-      'Continue?'
+      isLocalFile
+        ? 'Re-transcribe this file with Whisper?\n\n' +
+          'This will:\n' +
+          '• Replace the current Subtitles tab content with a fresh transcription\n' +
+          '• Clear the Cleaned tab (you will need to re-run AI Cleanup)\n' +
+          '• Clear the Summary tab (you will need to re-run summarization)\n\n' +
+          'Note: the original file must still be present in the uploads folder.\n\nContinue?'
+        : 'Re-extract subtitles from YouTube?\n\n' +
+          'This will:\n' +
+          '• Replace the current Subtitles tab content with a fresh download\n' +
+          '• Clear the Cleaned tab (you will need to re-run AI Cleanup)\n' +
+          '• Clear the Summary tab (you will need to re-run summarization)\n\n' +
+          'Continue?'
     )
     if (!ok) return
     try {
-      await reextractSubtitles(videoId, reextractLang)
+      await reextractSubtitles(videoId, reextractLang, isLocalFile ? sttModel : undefined)
       setResult(prev => prev ? { ...prev, reextract_in_progress: true } : prev)
       loadResult()
     } catch (err: any) {
       console.error('[Result] reextract failed:', err)
-      setError(err.message ?? 'Failed to re-extract subtitles')
+      setError(err.message ?? (isLocalFile ? 'Failed to re-transcribe. The original file may have been deleted.' : 'Failed to re-extract subtitles'))
     }
   }
 
@@ -722,6 +736,26 @@ export default function ResultPage() {
               {/* Subtitles tab controls */}
               {activeTab === 'subtitles' && (
                 <>
+                  {/* STT model selector — only for local file transcriptions */}
+                  {isLocalFile && (
+                    <div className="relative min-w-[160px]">
+                      <select
+                        value={sttModel}
+                        onChange={e => {
+                          setSttModel(e.target.value)
+                          saveSettings('app', { stt_model: e.target.value }).catch(() => {})
+                        }}
+                        className={`${selectCls} w-full pr-8`}
+                        title="Whisper model for re-transcription"
+                      >
+                        <option value="">— whisper model —</option>
+                        {sttModels.filter(m => m.downloaded).map(m => (
+                          <option key={m.name} value={m.name}>{m.name}</option>
+                        ))}
+                      </select>
+                      <span className="material-symbols-outlined absolute right-2 top-2.5 text-secondary pointer-events-none text-[16px]">expand_more</span>
+                    </div>
+                  )}
                   <select
                     value={reextractLang}
                     onChange={e => setReextractLang(e.target.value)}
@@ -737,10 +771,10 @@ export default function ResultPage() {
                     onClick={handleReextract}
                     disabled={!!result.reextract_in_progress || result.cleanup_status === 'processing' || result.summary_status === 'processing'}
                     className={`${btnSecondary} disabled:opacity-50`}
-                    title="Re-fetch subtitles from YouTube. Cleanup and Summary will be cleared."
+                    title={isLocalFile ? 'Re-run Whisper transcription. Cleanup and Summary will be cleared.' : 'Re-fetch subtitles from YouTube. Cleanup and Summary will be cleared.'}
                   >
                     <span className="material-symbols-outlined text-[18px]">refresh</span>
-                    {result.reextract_in_progress ? 'Re-extracting…' : 'Re-extract'}
+                    {result.reextract_in_progress ? 'Re-transcribing…' : (isLocalFile ? 'Re-transcribe' : 'Re-extract')}
                   </button>
                 </>
               )}
@@ -834,8 +868,8 @@ export default function ResultPage() {
                 </div>
               )}
 
-              {/* Benchmark (all tabs except chat) */}
-              {activeTab !== 'chat' && (
+              {/* Benchmark — not applicable for local file transcriptions */}
+              {activeTab !== 'chat' && !isLocalFile && (
                 <a href={`/benchmark/${result.video_id}`} className={btnSecondary}>
                   <span className="material-symbols-outlined text-[18px]">balance</span>Benchmark
                 </a>
@@ -866,10 +900,12 @@ export default function ResultPage() {
                 )
               )}
 
-              {/* Open video */}
-              <a href={result.url} target="_blank" rel="noreferrer" className={btnSecondary}>
-                <span className="material-symbols-outlined text-[18px]">open_in_new</span>Open video
-              </a>
+              {/* Open video — not applicable for local file transcriptions */}
+              {!isLocalFile && (
+                <a href={result.url} target="_blank" rel="noreferrer" className={btnSecondary}>
+                  <span className="material-symbols-outlined text-[18px]">open_in_new</span>Open video
+                </a>
+              )}
 
               {/* Delete */}
               <button onClick={handleDelete} className={btnDanger}>
