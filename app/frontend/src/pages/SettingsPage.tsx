@@ -637,7 +637,10 @@ function SttPanel({ initial, sttModels, onSaved, onReloadModels }: SttPanelProps
           <p className="text-body-sm text-secondary py-4 text-center">Loading models…</p>
         )}
 
-        {[...sttModels].sort((a, b) => (b.name === activeModel ? 1 : 0) - (a.name === activeModel ? 1 : 0)).map(m => {
+        {[...sttModels].sort((a, b) => {
+          const rank = (m: typeof a) => m.name === activeModel ? 0 : m.downloaded ? 1 : 2
+          return rank(a) - rank(b)
+        }).map(m => {
           const isActive      = m.name === activeModel
           const isDownloading = m.name === downloading
           const langLabel     = m.languages === 1 ? 'EN only' : `${m.languages} languages`
