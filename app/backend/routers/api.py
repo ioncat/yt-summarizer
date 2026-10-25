@@ -586,6 +586,17 @@ async def trigger_reextract(
         raise HTTPException(status_code=409, detail="Summarization is in progress — cancel first")
     if video_id in _REEXTRACT_SET:
         raise HTTPException(status_code=409, detail="Re-extract already in progress")
+    # For local files: verify the original upload still exists before queuing
+    url = fmt.get("url", "") or ""
+    if url.startswith("local://") and video_id.startswith("file-"):
+        import glob as _glob
+        uuid_prefix = video_id[len("file-"):]
+        matches = _glob.glob(os.path.join(_uploads_dir(), f"{uuid_prefix}*"))
+        if not matches:
+            raise HTTPException(
+                status_code=422,
+                detail="Original file not found — it was deleted after transcription. Upload the file again to re-transcribe.",
+            )
     background_tasks.add_task(_run_reextract, video_id, body.language, body.model)
     return {"status": "reextracting"}
 

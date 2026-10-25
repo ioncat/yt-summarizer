@@ -54,8 +54,9 @@ export default function ResultPage() {
   const navigate = useNavigate()
   const [result, setResult]             = useState<ResultResponse | null>(null)
   const [error, setError]               = useState('')
-  const [cleanupError, setCleanupError] = useState('')
-  const [summaryError, setSummaryError] = useState('')
+  const [cleanupError, setCleanupError]   = useState('')
+  const [summaryError, setSummaryError]   = useState('')
+  const [reextractError, setReextractError] = useState('')
   const [copied, setCopied]             = useState(false)
   const [activeTab, setActiveTab]       = useState<Tab>('subtitles')
   const [markdownEnabled, setMarkdownEnabled] = useState(() =>
@@ -453,13 +454,14 @@ export default function ResultPage() {
           'Continue?'
     )
     if (!ok) return
+    setReextractError('')
     try {
       await reextractSubtitles(videoId, reextractLang, isLocalFile ? sttModel : undefined)
       setResult(prev => prev ? { ...prev, reextract_in_progress: true } : prev)
       loadResult()
     } catch (err: any) {
       console.error('[Result] reextract failed:', err)
-      setError(err.message ?? (isLocalFile ? 'Failed to re-transcribe. The original file may have been deleted.' : 'Failed to re-extract subtitles'))
+      setReextractError(err.message ?? (isLocalFile ? 'Failed to re-transcribe. The original file may have been deleted.' : 'Failed to re-extract subtitles'))
     }
   }
 
@@ -917,6 +919,18 @@ export default function ResultPage() {
             </div>
 
             {/* Error banners */}
+            {reextractError && (
+              <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3 flex items-start gap-3">
+                <span className="material-symbols-outlined text-error text-[18px] mt-0.5 shrink-0">error</span>
+                <div>
+                  <p className="text-body-sm text-on-error-container">{reextractError}</p>
+                  <button
+                    onClick={() => setReextractError('')}
+                    className="mt-1 text-label-sm text-on-error-container/70 hover:text-on-error-container underline"
+                  >Dismiss</button>
+                </div>
+              </div>
+            )}
             {activeTab === 'cleaned' && (result.cleanup_status === 'failed' || cleanupError) && (
               <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3">
                 <p className="text-body-sm text-on-error-container">
