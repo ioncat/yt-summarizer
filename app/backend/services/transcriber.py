@@ -204,7 +204,7 @@ def transcribe(
     model: str = "base",
     device: str = "auto",
     cache_path: str | None = None,
-    on_progress: Callable[[int], None] | None = None,
+    on_progress: Callable[[int, float, float], None] | None = None,
 ) -> TranscriptionResult:
     """Transcribe audio/video file using faster-whisper.
 
@@ -212,7 +212,7 @@ def transcribe(
     model:      model name from MODEL_CATALOG
     device:     "auto" (CUDA if available), "cpu", or "cuda"
     cache_path: HuggingFace cache directory; uses DEFAULT_CACHE_PATH if None
-    on_progress(segments_done): called after each segment
+    on_progress(segments_done, seconds_done, total_seconds): called after each segment
     """
     return _transcribe_faster_whisper(
         audio_path, language, model, device,
@@ -264,7 +264,7 @@ def _transcribe_faster_whisper(
     model_name: str,
     device: str,
     cache_path: str,
-    on_progress: Callable[[int], None] | None,
+    on_progress: Callable[[int, float, float], None] | None,
 ) -> TranscriptionResult:
     try:
         from faster_whisper import WhisperModel  # type: ignore
@@ -310,6 +310,7 @@ def _transcribe_faster_whisper(
             vad_filter=True,
             vad_parameters={"min_silence_duration_ms": 500},
         )
+        total_duration = info.duration or 0.0
 
         segments: list[dict] = []
         for seg in segments_iter:
@@ -321,7 +322,7 @@ def _transcribe_faster_whisper(
                     "text":  text,
                 })
             if on_progress:
-                on_progress(len(segments))
+                on_progress(len(segments), seg.end, total_duration)
 
         detected = info.language or (language if language != "auto" else "unknown")
         logger.info(

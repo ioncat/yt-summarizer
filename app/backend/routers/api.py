@@ -181,8 +181,9 @@ async def _run_transcribe_file(
         transcription_started_at = _datetime.utcnow()
         _FILE_TASK_PROGRESS[task_id] = "transcribing…"
 
-        def _on_stt_progress(n: int) -> None:
-            _FILE_TASK_PROGRESS[task_id] = f"segment {n}…"
+        def _on_stt_progress(n: int, cur_s: float = 0.0, tot_s: float = 0.0) -> None:
+            pct = f" · {int(cur_s / tot_s * 100)}%" if tot_s > 0 else ""
+            _FILE_TASK_PROGRESS[task_id] = f"segment {n}{pct}"
 
         transcription = await asyncio.to_thread(
             _transcribe, audio_path,
@@ -485,8 +486,9 @@ async def _run_reextract(video_id: str, language: str = "auto", model: str | Non
             transcription_started_at = _dt.utcnow()
             _RETRANSCRIBE_PROGRESS[video_id] = "starting…"
 
-            def _on_retranscribe_progress(n: int) -> None:
-                _RETRANSCRIBE_PROGRESS[video_id] = f"segment {n}…"
+            def _on_retranscribe_progress(n: int, cur_s: float = 0.0, tot_s: float = 0.0) -> None:
+                pct = f" · {int(cur_s / tot_s * 100)}%" if tot_s > 0 else ""
+                _RETRANSCRIBE_PROGRESS[video_id] = f"segment {n}{pct}"
 
             transcription = await asyncio.to_thread(
                 _transcribe, audio_path,

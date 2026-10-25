@@ -481,8 +481,9 @@ async def _run_transcribe(url: str, language: str = "auto", item_id: int = 0) ->
         import datetime as _dt_mod
         transcription_started_at = _dt_mod.datetime.utcnow()
 
-        def _on_progress(n: int) -> None:
-            _QUEUE_PROGRESS[item_id] = f"transcribe: segment {n}…"
+        def _on_progress(n: int, cur_s: float = 0.0, tot_s: float = 0.0) -> None:
+            pct = f" · {int(cur_s / tot_s * 100)}%" if tot_s > 0 else ""
+            _QUEUE_PROGRESS[item_id] = f"transcribe: segment {n}{pct}"
 
         transcription = await _asyncio.to_thread(
             _transcribe, audio_result.audio_path,
