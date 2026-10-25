@@ -239,10 +239,18 @@ def _resolve_device(device: str) -> tuple[str, str]:
         return "cuda", "float16"
     if device == "cpu":
         return "cpu", "int8"
+    # Auto-detect: try ctranslate2 (faster-whisper's backend) first, then torch
+    try:
+        import ctranslate2  # type: ignore
+        if ctranslate2.get_cuda_device_count() > 0:
+            logger.info("transcriber: CUDA available via ctranslate2 — using float16")
+            return "cuda", "float16"
+    except Exception:
+        pass
     try:
         import torch  # type: ignore
         if torch.cuda.is_available():
-            logger.info("transcriber: CUDA available — using float16")
+            logger.info("transcriber: CUDA available via torch — using float16")
             return "cuda", "float16"
     except ImportError:
         pass
