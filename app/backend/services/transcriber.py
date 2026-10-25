@@ -279,12 +279,27 @@ def _transcribe_faster_whisper(
             "transcribe: model=%s device=%s compute_type=%s",
             model_name, actual_device, compute_type,
         )
-        whisper_model = WhisperModel(
-            model_name,
-            device=actual_device,
-            compute_type=compute_type,
-            download_root=cache_path,
-        )
+        try:
+            whisper_model = WhisperModel(
+                model_name,
+                device=actual_device,
+                compute_type=compute_type,
+                download_root=cache_path,
+            )
+        except Exception as cuda_exc:
+            if actual_device == "cuda":
+                logger.warning(
+                    "transcribe: CUDA init failed (%s) — falling back to CPU", cuda_exc
+                )
+                actual_device, compute_type = "cpu", "int8"
+                whisper_model = WhisperModel(
+                    model_name,
+                    device=actual_device,
+                    compute_type=compute_type,
+                    download_root=cache_path,
+                )
+            else:
+                raise
 
         lang_arg = None if language == "auto" else language
         segments_iter, info = whisper_model.transcribe(
