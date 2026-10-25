@@ -3,9 +3,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import {
   getResult, deleteResult,
-  cancelCleanup, startSummary,
+  startCleanup, cancelCleanup, startSummary,
   cancelSummary,
-  cancelMindmap,
+  startMindmap, cancelMindmap,
   reextractSubtitles,
   saveChatHistory, clearChatHistory,
   getSettings, getModels, saveSettings,
@@ -499,7 +499,11 @@ export default function ResultPage() {
     requestNotifyPermission()
     try {
       setCleanupError('')
-      await queueBulkAdd([result.url], ['cleanup'], true)
+      if (result.url?.startsWith('local://')) {
+        await startCleanup(videoId)
+      } else {
+        await queueBulkAdd([result.url], ['cleanup'], true)
+      }
       setQueuedMsg('cleanup')
       stopPolling()
       pollRef.current = setInterval(() => loadResult(false), 3000)
@@ -519,7 +523,12 @@ export default function ResultPage() {
       if (!confirmed) return
       try {
         setSummaryError('')
-        await queueBulkAdd([result.url], ['cleanup', 'summary'], true)
+        if (result.url?.startsWith('local://')) {
+          await startCleanup(videoId)
+          autoSummarizeAfterCleanupRef.current = true
+        } else {
+          await queueBulkAdd([result.url], ['cleanup', 'summary'], true)
+        }
         setQueuedMsg('cleanup+summary')
         stopPolling()
         pollRef.current = setInterval(() => loadResult(false), 3000)
@@ -532,7 +541,11 @@ export default function ResultPage() {
     requestNotifyPermission()
     try {
       setSummaryError('')
-      await queueBulkAdd([result.url], ['summary'], true)
+      if (result.url?.startsWith('local://')) {
+        await startSummary(videoId)
+      } else {
+        await queueBulkAdd([result.url], ['summary'], true)
+      }
       setQueuedMsg('summary')
       stopSummaryPolling()
       summaryPollRef.current = setInterval(() => loadResult(false), 3000)
@@ -548,7 +561,11 @@ export default function ResultPage() {
     try {
       setMindmapError('')
       if (force) setResult(r => r ? { ...r, mindmap_text: null, mindmap_status: null } : r)
-      await queueBulkAdd([result.url], ['mindmap'], true)
+      if (result.url?.startsWith('local://')) {
+        await startMindmap(videoId, force)
+      } else {
+        await queueBulkAdd([result.url], ['mindmap'], true)
+      }
       setQueuedMsg('mindmap')
       stopMindmapPolling()
       mindmapPollRef.current = setInterval(() => loadResult(false), 3000)
