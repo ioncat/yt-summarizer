@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from enum import Enum
@@ -75,9 +76,15 @@ def extract_video_id(url: str) -> str | None:
     return None
 
 
-def _run_ytdlp(args: list[str], cookies_path: str | None, ytdlp_path: str, timeout: int = 30) -> tuple[str, str, int]:
-    cmd = [
-        ytdlp_path,
+def _ytdlp_cmd(ytdlp_path: str | None) -> list[str]:
+    """Return the yt-dlp command prefix. Uses bundled package when path is empty."""
+    if not ytdlp_path:
+        return [sys.executable, "-m", "yt_dlp"]
+    return [ytdlp_path]
+
+
+def _run_ytdlp(args: list[str], cookies_path: str | None, ytdlp_path: str | None = None, timeout: int = 30) -> tuple[str, str, int]:
+    cmd = _ytdlp_cmd(ytdlp_path) + [
         "--no-warnings",
         "--js-runtimes", "node",
     ]

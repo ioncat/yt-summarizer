@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
-from typing import Annotated
-
 import os
+import re
+import sys
+from typing import Annotated
 
 logger = logging.getLogger("api")
 _reextract_logger = logging.getLogger("api.reextract")
@@ -856,9 +856,9 @@ async def update_app_settings(
     raw = body.model_dump()
     updates: dict = {}
     for k, v in raw.items():
-        if v is None:
+        if k not in body.model_fields_set:
             continue
-        updates[k] = "true" if v is True else ("false" if v is False else v)
+        updates[k] = None if v is None else ("true" if v is True else ("false" if v is False else v))
     return await save_app_settings(db, updates)
 
 
@@ -880,6 +880,44 @@ async def reset_settings(stage: str, db: Annotated[AsyncSession, Depends(get_db)
     if stage not in ("cleanup", "summarization", "summarization_extract", "summarization_combine", "chat"):
         raise HTTPException(status_code=400, detail="Unknown stage")
     return await reset_stage_settings(db, stage)
+
+
+_YTDLP_UPDATE_STATUS: dict = {"status": "idle"}  # idle | running | done | failed
+
+
+@router.get("/settings/ytdlp-version")
+async def get_ytdlp_version():
+    """Return the currently installed yt-dlp version."""
+    try:
+        import yt_dlp
+        version = yt_dlp.version.__version__
+    except Exception:
+        version = None
+    return {"version": version, "update_status": _YTDLP_UPDATE_STATUS.get("status", "idle")}
+
+
+@router.post("/settings/update-ytdlp")
+async def update_ytdlp(background_tasks: BackgroundTasks):
+    """Upgrade yt-dlp to the latest version in the background."""
+    if _YTDLP_UPDATE_STATUS.get("status") == "running":
+        return {"status": "already_running"}
+    _YTDLP_UPDATE_STATUS["status"] = "running"
+
+    async def _do_update():
+        import asyncio as _asyncio
+        try:
+            proc = await _asyncio.create_subprocess_exec(
+                sys.executable, "-m", "pip", "install", "-U", "yt-dlp",
+                stdout=_asyncio.subprocess.PIPE, stderr=_asyncio.subprocess.PIPE,
+            )
+            await proc.communicate()
+            _YTDLP_UPDATE_STATUS["status"] = "done" if proc.returncode == 0 else "failed"
+        except Exception as exc:
+            _YTDLP_UPDATE_STATUS["status"] = "failed"
+            logger.error("yt-dlp update failed: %s", exc)
+
+    background_tasks.add_task(_do_update)
+    return {"status": "started"}
 
 
 @router.post("/settings/upload-cookies")

@@ -484,3 +484,15 @@ export async function retryAllFailed(): Promise<{ retried: number }> {
   if (!res.ok) throw new Error('Failed to retry failed items')
   return res.json()
 }
+
+export async function getYtdlpVersion(): Promise<{ version: string | null; update_status: string }> {
+  const res = await fetch(`${BASE}/settings/ytdlp-version`)
+  if (!res.ok) return { version: null, update_status: 'idle' }
+  return res.json()
+}
+
+export async function updateYtdlp(): Promise<{ status: string }> {
+  const res = await fetch(`${BASE}/settings/update-ytdlp`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to start update')
+  return res.json()
+}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   getSettings, saveAppSettings, saveSettings, resetSettings, getModels, getSttModels,
-  downloadSttModel, getSttModelDownloadStatus, deleteSttModel,
+  downloadSttModel, getSttModelDownloadStatus, deleteSttModel, getYtdlpVersion, updateYtdlp,
   AppSettings, StageSettings, SttModelInfo,
 } from '../api'
 import { BOXED_LAYOUT_EVENT, BOXED_LAYOUT_KEY } from '../App'
@@ -47,20 +47,33 @@ interface GeneralPanelProps {
 
 function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
   const [ollamaUrl, setOllamaUrl]           = useState(initial.ollama_url ?? '')
+  const [useCustomYtdlp, setUseCustomYtdlp] = useState(!!initial.ytdlp_path)
   const [ytdlpPath, setYtdlpPath]           = useState(initial.ytdlp_path ?? '')
   const [cookiesPath, setCookiesPath]       = useState(initial.cookies_path ?? '')
   const [parallelWorkers, setParallelWorkers] = useState(initial.parallel_workers ?? '1')
   const [parallelError, setParallelError]   = useState('')
   const [saving, setSaving]                 = useState(false)
   const [toast, setToast]                   = useState('')
+  const [ytdlpVersion, setYtdlpVersion]     = useState<string | null>(null)
+  const [ytdlpUpdateStatus, setYtdlpUpdateStatus] = useState<string>('idle')
   const fileRef = useRef<HTMLInputElement>(null)
+  const updatePollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     setOllamaUrl(initial.ollama_url ?? '')
+    setUseCustomYtdlp(!!initial.ytdlp_path)
     setYtdlpPath(initial.ytdlp_path ?? '')
     setCookiesPath(initial.cookies_path ?? '')
     setParallelWorkers(initial.parallel_workers ?? '1')
   }, [initial])
+
+  useEffect(() => {
+    getYtdlpVersion().then(r => {
+      setYtdlpVersion(r.version)
+      setYtdlpUpdateStatus(r.update_status)
+    })
+    return () => { if (updatePollRef.current) clearInterval(updatePollRef.current) }
+  }, [])
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 2500) }
 
@@ -76,7 +89,7 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
     try {
       const saved = await saveAppSettings({
         ollama_url: ollamaUrl || null,
-        ytdlp_path: ytdlpPath || null,
+        ytdlp_path: useCustomYtdlp ? (ytdlpPath || null) : null,
         cookies_path: cookiesPath || null,
         parallel_workers: String(pw),
       })
@@ -110,9 +123,27 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
     if (fileRef.current) fileRef.current.value = ''
   }
 
+  async function handleUpdateYtdlp() {
+    setYtdlpUpdateStatus('updating')
+    try {
+      await updateYtdlp()
+      updatePollRef.current = setInterval(async () => {
+        const r = await getYtdlpVersion()
+        setYtdlpVersion(r.version)
+        setYtdlpUpdateStatus(r.update_status)
+        if (r.update_status !== 'updating') {
+          if (updatePollRef.current) clearInterval(updatePollRef.current)
+          showToast(r.update_status === 'done' ? 'yt-dlp updated' : 'Update failed')
+        }
+      }, 1500)
+    } catch {
+      setYtdlpUpdateStatus('failed')
+      showToast('Update failed')
+    }
+  }
+
   const missing = [
     !ollamaUrl  && 'Ollama URL',
-    !ytdlpPath  && 'yt-dlp path',
     !cookiesPath && 'Cookies path',
   ].filter(Boolean)
 
@@ -122,33 +153,73 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
         <WarnBanner>Required fields missing: {missing.join(', ')}</WarnBanner>
       )}
 
-      {/* Two-column row: Ollama URL + yt-dlp path */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div className="space-y-1.5">
-          <label className="text-label-md text-on-surface flex items-center gap-1">
-            Ollama URL <span className="text-error">*</span>
-          </label>
-          <input
-            type="text"
-            className={INPUT(!ollamaUrl)}
-            value={ollamaUrl}
-            onChange={e => setOllamaUrl(e.target.value)}
-            placeholder="http://localhost:11434"
-          />
+      {/* Ollama URL */}
+      <div className="space-y-1.5">
+        <label className="text-label-md text-on-surface flex items-center gap-1">
+          Ollama URL <span className="text-error">*</span>
+        </label>
+        <input
+          type="text"
+          className={INPUT(!ollamaUrl)}
+          value={ollamaUrl}
+          onChange={e => setOllamaUrl(e.target.value)}
+          placeholder="http://localhost:11434"
+        />
+      </div>
+
+      {/* yt-dlp section */}
+      <div className="space-y-3 p-4 bg-surface-container-low rounded-xl border border-outline-variant">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-label-md text-on-surface font-medium">yt-dlp</p>
+            <p className="text-[11px] text-on-surface-variant mt-0.5">
+              {useCustomYtdlp ? 'Custom binary path' : 'Bundled (recommended)'}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {!useCustomYtdlp && (
+              <div className="flex items-center gap-2">
+                <span className="text-body-sm text-on-surface-variant">
+                  {ytdlpUpdateStatus === 'updating'
+                    ? 'Updating…'
+                    : ytdlpVersion
+                      ? <span>v{ytdlpVersion}</span>
+                      : <span className="text-on-surface-variant/50">—</span>
+                  }
+                </span>
+                <button
+                  onClick={handleUpdateYtdlp}
+                  disabled={ytdlpUpdateStatus === 'updating'}
+                  className="px-3 py-1 text-[11px] font-semibold rounded-lg bg-secondary-container text-on-secondary-container hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {ytdlpUpdateStatus === 'updating' ? '…' : 'Update'}
+                </button>
+              </div>
+            )}
+            {/* Toggle */}
+            <button
+              role="switch"
+              aria-checked={useCustomYtdlp}
+              onClick={() => setUseCustomYtdlp(v => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${useCustomYtdlp ? 'bg-primary' : 'bg-surface-container-highest'}`}
+            >
+              <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${useCustomYtdlp ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+            <span className="text-[11px] text-on-surface-variant w-16">Custom path</span>
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <label className="text-label-md text-on-surface flex items-center gap-1">
-            yt-dlp path <span className="text-error">*</span>
-          </label>
-          <input
-            type="text"
-            className={INPUT(!ytdlpPath)}
-            value={ytdlpPath}
-            onChange={e => setYtdlpPath(e.target.value)}
-            placeholder="C:/ytdlp/yt-dlp.exe"
-          />
-          <Hint>Path to yt-dlp executable on the server.</Hint>
-        </div>
+        {useCustomYtdlp && (
+          <div className="space-y-1.5">
+            <input
+              type="text"
+              className={INPUT(!ytdlpPath)}
+              value={ytdlpPath}
+              onChange={e => setYtdlpPath(e.target.value)}
+              placeholder="C:/ytdlp/yt-dlp.exe"
+            />
+            <Hint>Absolute path to yt-dlp executable on the server.</Hint>
+          </div>
+        )}
       </div>
 
       {/* Cookies path with upload */}

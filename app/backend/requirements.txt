@@ -8,6 +8,7 @@ yt-dlp>=2026.3.17
 
 # Speech-to-text
 faster-whisper>=1.1.1
+av>=11,<19
 
 # Database
 sqlalchemy[asyncio]==2.0.36
