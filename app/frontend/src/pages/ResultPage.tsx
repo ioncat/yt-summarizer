@@ -774,8 +774,11 @@ export default function ResultPage() {
                     title={isLocalFile ? 'Re-run Whisper transcription. Cleanup and Summary will be cleared.' : 'Re-fetch subtitles from YouTube. Cleanup and Summary will be cleared.'}
                   >
                     <span className="material-symbols-outlined text-[18px]">refresh</span>
-                    {result.reextract_in_progress ? 'Re-transcribing…' : (isLocalFile ? 'Re-transcribe' : 'Re-extract')}
+                    {result.reextract_in_progress ? (isLocalFile ? 'Re-transcribing…' : 'Re-extracting…') : (isLocalFile ? 'Re-transcribe' : 'Re-extract')}
                   </button>
+                  {result.reextract_in_progress && isLocalFile && result.retranscribe_progress && (
+                    <span className="text-label-sm text-secondary animate-pulse">{result.retranscribe_progress}</span>
+                  )}
                 </>
               )}
 

@@ -70,6 +70,8 @@ _CLEANUP_PROGRESS: dict[str, dict] = {}
 _SUMMARY_PROGRESS: dict[str, dict] = {}
 # Videos currently being re-extracted (set of video_id)
 _REEXTRACT_SET: set[str] = set()
+# Live re-transcription progress: {video_id: progress_text}
+_RETRANSCRIBE_PROGRESS: dict[str, str] = {}
 
 router = APIRouter(prefix="/api")
 
@@ -327,9 +329,12 @@ async def get_video_result(video_id: str, db: Annotated[AsyncSession, Depends(ge
     if summary_progress:
         result["summary_chunks_done"] = summary_progress["done"]
         result["summary_chunks_total"] = summary_progress["total"]
-    # Flag if a re-extract is currently running
+    # Flag if a re-extract / re-transcription is currently running
     if video_id in _REEXTRACT_SET:
         result["reextract_in_progress"] = True
+        retranscribe_progress = _RETRANSCRIBE_PROGRESS.get(video_id)
+        if retranscribe_progress:
+            result["retranscribe_progress"] = retranscribe_progress
     return result
 
 
@@ -470,14 +475,20 @@ async def _run_reextract(video_id: str, language: str = "auto", model: str | Non
             )
             from datetime import datetime as _dt
             transcription_started_at = _dt.utcnow()
+            _RETRANSCRIBE_PROGRESS[video_id] = "starting…"
+
+            def _on_retranscribe_progress(n: int) -> None:
+                _RETRANSCRIBE_PROGRESS[video_id] = f"segment {n}…"
+
             transcription = await asyncio.to_thread(
                 _transcribe, audio_path,
                 language=language,
                 model=stt_model,
                 device=stt_device,
                 cache_path=stt_cache_path,
-                on_progress=None,
+                on_progress=_on_retranscribe_progress,
             )
+            _RETRANSCRIBE_PROGRESS.pop(video_id, None)
             if not transcription.success:
                 _reextract_logger.warning(
                     "retranscribe: failed video_id=%s error=%s",
@@ -550,6 +561,7 @@ async def _run_reextract(video_id: str, language: str = "auto", model: str | Non
         _reextract_logger.exception("reextract: unexpected error video_id=%s", video_id)
     finally:
         _REEXTRACT_SET.discard(video_id)
+        _RETRANSCRIBE_PROGRESS.pop(video_id, None)
 
 
 class ReextractRequest(BaseModel):
