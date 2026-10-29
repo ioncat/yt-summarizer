@@ -47,31 +47,74 @@ def _find_python() -> str:
     return sys.executable
 
 
-def desktop_config_dirs() -> list[Path]:
-    """Return every Claude Desktop config directory that exists on this machine."""
-    dirs: list[Path] = []
-    if sys.platform == "win32":
-        appdata = os.environ.get("APPDATA", "")
-        localappdata = os.environ.get("LOCALAPPDATA", "")
-        if appdata:
-            dirs.append(Path(appdata) / "Claude")
-        if localappdata:
-            # Microsoft Store variant: LocalCache\Roaming\Claude inside the package folder
-            packages = Path(localappdata) / "Packages"
-            if packages.is_dir():
-                for pkg in packages.iterdir():
-                    if pkg.name.startswith("Claude_") or pkg.name.startswith("AnthropicClaude"):
-                        candidate = pkg / "LocalCache" / "Roaming" / "Claude"
-                        if candidate.is_dir():
-                            dirs.append(candidate)
-    elif sys.platform == "darwin":
-        dirs.append(Path.home() / "Library" / "Application Support" / "Claude")
-    else:
-        xdg = os.environ.get("XDG_CONFIG_HOME", "")
-        base = Path(xdg) if xdg else Path.home() / ".config"
-        dirs.append(base / "Claude")
+def _real_localappdata() -> str:
+    """Return the real %LOCALAPPDATA% path, bypassing Store app folder virtualization."""
+    localappdata = os.environ.get("LOCALAPPDATA", "")
+    if localappdata:
+        return localappdata
+    # Fallback: ask PowerShell for the real path (avoids Store package virtualization)
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "[Environment]::GetFolderPath('LocalApplicationData')"],
+            capture_output=True, text=True, timeout=10,
+        )
+        return result.stdout.strip()
+    except Exception:
+        return ""
 
-    return [d for d in dirs if d.exists()]
+
+def desktop_config_dirs() -> list[Path]:
+    """Return Claude Desktop config directories that exist on this machine.
+
+    Claude Desktop 4.29+ (Store build) writes to:
+      %LOCALAPPDATA%\\Claude-Data\\claude_<package_id>\\claude_desktop_config.json
+
+    Older builds used:
+      %APPDATA%\\Claude\\claude_desktop_config.json
+      %LOCALAPPDATA%\\Packages\\Claude_*\\LocalCache\\Roaming\\Claude\\
+
+    When the new location exists, we prefer it and skip the old ones (writing to
+    old paths is harmless but misleading — Desktop no longer reads them).
+    """
+    if sys.platform != "win32":
+        if sys.platform == "darwin":
+            d = Path.home() / "Library" / "Application Support" / "Claude"
+        else:
+            xdg = os.environ.get("XDG_CONFIG_HOME", "")
+            d = Path(xdg) / "Claude" if xdg else Path.home() / ".config" / "Claude"
+        return [d] if d.exists() else []
+
+    localappdata = _real_localappdata()
+    appdata = os.environ.get("APPDATA", "")
+
+    # --- New location: Claude Desktop 4.29+ ---
+    new_dirs: list[Path] = []
+    if localappdata:
+        claude_data = Path(localappdata) / "Claude-Data"
+        if claude_data.is_dir():
+            for pkg in claude_data.iterdir():
+                # Matches "claude_pzs8sxrjxfjjc" and similar
+                if pkg.is_dir() and pkg.name.startswith("claude_"):
+                    new_dirs.append(pkg)
+
+    if new_dirs:
+        # New location found — use only it; old paths are no longer read by Desktop
+        return new_dirs
+
+    # --- Legacy locations (pre-4.29) ---
+    legacy: list[Path] = []
+    if appdata:
+        legacy.append(Path(appdata) / "Claude")
+    if localappdata:
+        packages = Path(localappdata) / "Packages"
+        if packages.is_dir():
+            for pkg in packages.iterdir():
+                if pkg.name.startswith("Claude_") or pkg.name.startswith("AnthropicClaude"):
+                    candidate = pkg / "LocalCache" / "Roaming" / "Claude"
+                    if candidate.is_dir():
+                        legacy.append(candidate)
+    return [d for d in legacy if d.exists()]
 
 
 def is_docker() -> bool:
