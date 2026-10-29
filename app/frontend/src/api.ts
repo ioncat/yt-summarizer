@@ -528,3 +528,49 @@ export async function updateYtdlp(): Promise<{ status: string }> {
   if (!res.ok) throw new Error('Failed to start update')
   return res.json()
 }
+
+// ---------------------------------------------------------------------------
+// MCP Connect
+// ---------------------------------------------------------------------------
+
+export interface McpStatus {
+  status: 'connected' | 'not_connected' | 'file_not_found' | 'docker_mode'
+  config_paths: string[]
+  entry_exists: boolean
+  entry?: Record<string, unknown>
+  manual_config?: string
+}
+
+export interface McpConnectResult {
+  ok?: boolean
+  planned?: boolean
+  actions?: Array<{ path: string; action: string }>
+  results?: Array<{ path: string; action: string; backup?: string; error?: string; verified?: boolean }>
+  entry?: Record<string, unknown>
+  error?: string
+  message?: string
+  manual_config?: string
+}
+
+export async function getMcpStatus(): Promise<McpStatus> {
+  const res = await fetch(`${BASE}/mcp/status`)
+  if (!res.ok) return { status: 'file_not_found', config_paths: [], entry_exists: false }
+  return res.json()
+}
+
+export async function mcpConnect(confirm: boolean, replace_broken = false): Promise<McpConnectResult> {
+  const res = await fetch(`${BASE}/mcp/connect`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirm, replace_broken }),
+  })
+  const data = await res.json()
+  if (!res.ok) return { ok: false, error: data.detail?.error || data.detail || 'Unknown error', message: data.detail?.message }
+  return data
+}
+
+export async function mcpDisconnect(): Promise<McpConnectResult> {
+  const res = await fetch(`${BASE}/mcp/connect`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to disconnect')
+  return res.json()
+}

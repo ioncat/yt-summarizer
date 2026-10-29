@@ -1375,3 +1375,49 @@ async def clear_uploads():
             except OSError:
                 pass
     return {"deleted": deleted, **_uploads_stats()}
+
+
+# ---------------------------------------------------------------------------
+# MCP Connect endpoints
+# ---------------------------------------------------------------------------
+
+from services.mcp_connect import (
+    connect as mcp_connect_exec,
+    disconnect as mcp_disconnect_exec,
+    get_status as mcp_get_status,
+)
+from fastapi import Request as _Request
+
+
+@router.get("/mcp/status")
+async def get_mcp_status():
+    """Return Claude Desktop connection status (reads config from disk)."""
+    return mcp_get_status()
+
+
+class McpConnectBody(BaseModel):
+    confirm: bool = False
+    replace_broken: bool = False
+
+
+@router.post("/mcp/connect")
+async def post_mcp_connect(body: McpConnectBody, request: _Request):
+    """Plan (confirm=false) or execute (confirm=true) adding the MCP entry to Claude Desktop config."""
+    host = request.client.host if request.client else ""
+    if host not in ("127.0.0.1", "::1", "localhost", ""):
+        raise HTTPException(status_code=403, detail="MCP connect is only allowed from localhost")
+    result = mcp_connect_exec(confirm=body.confirm, replace_broken=body.replace_broken)
+    if not body.confirm and "planned" in result:
+        return result
+    if not result.get("ok") and not body.confirm:
+        raise HTTPException(status_code=400, detail=result)
+    return result
+
+
+@router.delete("/mcp/connect")
+async def delete_mcp_connect(request: _Request):
+    """Remove the yt-summarizer entry from Claude Desktop config."""
+    host = request.client.host if request.client else ""
+    if host not in ("127.0.0.1", "::1", "localhost", ""):
+        raise HTTPException(status_code=403, detail="MCP disconnect is only allowed from localhost")
+    return mcp_disconnect_exec()
