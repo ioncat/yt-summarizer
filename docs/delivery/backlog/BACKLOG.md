@@ -200,9 +200,30 @@ Whisper-based transcription for YouTube audio and local files. Language param fr
 ### Epic 44: MCP Server
 **Description**: Stdio MCP Server для Claude Desktop и AI-агентов. Инструменты: `process_video`, `get_result`, `search_history`, `run_cleanup`, `run_summary`. HTTP-прокси к FastAPI — без дублирования логики. Установка за 5 минут через `claude_desktop_config.json`.
 
-**Status**: 🔵 Planned | **Priority**: 🟡 P2  
-**Estimate**: ~3–4 часа  
+**Status**: ✅ Done — 28.10.2026 | **Priority**: 🟡 P2  
+**Files**: `app/mcp_server.py`, `docs/guides/MCP_SETUP.md`  
 [View Epic →](./epics/EPIC-44.md)
+
+---
+
+### Epic 45: Claude Desktop Connection UI
+
+**Description**: Кнопка "Connect Claude Desktop" в Settings → Connections. Приложение само находит `claude_desktop_config.json`, добавляет запись `yt-summarizer`, делает бэкап старого файла. Пользователь не редактирует JSON вручную. Показывает статус подключения (Connected / Not connected). Обязательно для продуктового/SaaS сценария — пользователи не должны знать про конфиги.
+
+**Status**: ✅ Done (29.10.2026) | **Priority**: 🟡 P2  
+**Estimate**: ~2–3 часа  
+**Depends on**: Epic 44 (MCP Server) ✅  
+[View Epic →](./epics/EPIC-45.md)
+
+---
+
+### Epic 46: Video Download
+
+**Description**: Скачать видео или аудио с YouTube (и других 1000+ сайтов через yt-dlp) прямо из интерфейса. Кнопка на Result page рядом с "Open video". Форматы: MP4 (видео), MP3/AAC (аудио). Файл отдаётся через браузер как скачивание. Полезно когда нужно видео офлайн или для обработки — особенно в связке с STT pipeline.
+
+**Status**: 🔵 Planned | **Priority**: 🟢 P3  
+**Estimate**: ~3–4 часа  
+**Note**: yt-dlp уже интегрирован в проект, audio extraction уже работает для STT. Video download — логичное расширение.
 
 ---
 
@@ -234,12 +255,12 @@ Small ideas and technical improvements that don't warrant an epic. Can be implem
 | Phase 1.5 — LLM Cleanup & UX | 6–16, 22–25 | ✅ Done (8 dropped) |
 | Phase 2 — Summarization Quality | 17–21, 26–29, 33–34, 36–40 | 🔄 In Progress (17, 20, 22–27, 29, 34, 36, 39, 40 done; 21 deferred; 18, 19, 28, 33, 35, 37, 38 planned) |
 | Phase 3 — Speech-to-Text | 30–32, 41–43 | ✅ Done |
-| Phase 4 — Integrations | 44 | 🔵 Planned |
+| Phase 4 — Integrations | 44–46 | 🔄 In Progress (44–45 done; 46 planned) |
 
 ---
 
 ## Document Control
 
-- **Version**: 1.8
-- **Last Updated**: 25.10.2026
+- **Version**: 1.9
+- **Last Updated**: 29.10.2026
 - **Status**: 🔄 Active Development
