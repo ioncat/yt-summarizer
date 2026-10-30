@@ -1150,6 +1150,7 @@ async def chat_proxy(body: ChatRequest, db: Annotated[AsyncSession, Depends(get_
         "model": body.model,
         "stream": True,
         "messages": [{"role": m.role, "content": m.content} for m in body.messages],
+        "options": {"num_ctx": 32768},
     }
 
     async def stream_ollama():
