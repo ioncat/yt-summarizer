@@ -66,6 +66,7 @@ export default function ResultPage() {
   const [mindmapError, setMindmapError]     = useState('')
   const mindmapPollRef          = useRef<ReturnType<typeof setInterval> | null>(null)
   const prevMindmapStatusRef    = useRef<string | null | undefined>(undefined)
+  const initialTabSetRef        = useRef(false)
   const [reextractLang, setReextractLang] = useState('auto')
   const [sttModel, setSttModel]           = useState('')
   const [sttModels, setSttModels]         = useState<SttModelInfo[]>([])
@@ -201,11 +202,13 @@ export default function ResultPage() {
           setReextractLang(data.language)
         }
 
-        if (isFirstLoad) {
+        if (isFirstLoad && !initialTabSetRef.current) {
+          initialTabSetRef.current = true
           if (data.mindmap_text) setActiveTab('mindmap')
           else if (data.summary_text) setActiveTab('summary')
           else setActiveTab('subtitles')
-        } else if (switchTab) {
+        } else if (switchTab && !initialTabSetRef.current) {
+          initialTabSetRef.current = true
           if (data.summary_status === 'done') setActiveTab('summary')
           else if (data.cleanup_status === 'done') setActiveTab('cleaned')
           else setActiveTab('subtitles')
@@ -263,8 +266,9 @@ export default function ResultPage() {
   }
 
   useEffect(() => {
+    initialTabSetRef.current = false
     loadResult(true)
-    return () => { stopPolling(); stopSummaryPolling(); stopMindmapPolling(); stopCleanupTimer(); stopSummaryTimer() }
+    return () => { initialTabSetRef.current = false; stopPolling(); stopSummaryPolling(); stopMindmapPolling(); stopCleanupTimer(); stopSummaryTimer() }
   }, [videoId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
