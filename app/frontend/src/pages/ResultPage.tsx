@@ -8,7 +8,7 @@ import {
   startMindmap, cancelMindmap,
   reextractSubtitles,
   saveChatHistory, clearChatHistory,
-  getSettings, getModels, saveSettings,
+  getSettings, getModels, saveSettings, saveAppSettings,
   getSttModels,
   queueBulkAdd, toggleFavorite,
   ResultResponse, SttModelInfo,
@@ -787,12 +787,12 @@ export default function ResultPage() {
                         value={sttModel}
                         onChange={e => {
                           setSttModel(e.target.value)
-                          saveSettings('app', { stt_model: e.target.value }).catch(() => {})
+                          saveAppSettings({ stt_model: e.target.value }).catch(() => {})
                         }}
                         className={`${selectCls} w-full pr-8`}
-                        title="Whisper model for re-transcription"
+                        title="STT model for re-transcription"
                       >
-                        <option value="">— whisper model —</option>
+                        <option value="">— STT model —</option>
                         {sttModels.filter(m => m.downloaded).map(m => (
                           <option key={m.name} value={m.name}>{m.name}</option>
                         ))}

@@ -754,6 +754,13 @@ function SttPanel({ initial, sttModels, onSaved, onReloadModels }: SttPanelProps
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-label-lg font-bold text-on-surface">{m.name}</span>
+                    <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wide ${
+                      m.engine === 'qwen3_asr'
+                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                        : 'bg-surface-variant text-on-surface-variant'
+                    }`}>
+                      {m.engine === 'qwen3_asr' ? 'Qwen3-ASR' : 'Whisper'}
+                    </span>
                     {isActive && (
                       <span className="px-2 py-0.5 bg-primary text-on-primary text-[10px] font-bold rounded-full uppercase tracking-wide">
                         Active

@@ -317,6 +317,7 @@ export interface SttModelInfo {
   languages: number
   description: string
   speed: 'very fast' | 'fast' | 'medium' | 'slow'
+  engine: 'faster_whisper' | 'qwen3_asr'
   downloaded: boolean
 }
 
