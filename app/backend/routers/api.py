@@ -100,6 +100,7 @@ class AppSettingsRequest(BaseModel):
     upload_auto_delete: str | None = None
     upload_auto_delete_mode: str | None = None
     upload_auto_delete_days: str | None = None
+    chat_num_ctx: str | None = None
 
 
 async def _run_processing(task_id: str, url: str, language: str) -> None:
@@ -1150,7 +1151,7 @@ async def chat_proxy(body: ChatRequest, db: Annotated[AsyncSession, Depends(get_
         "model": body.model,
         "stream": True,
         "messages": [{"role": m.role, "content": m.content} for m in body.messages],
-        "options": {"num_ctx": 32768},
+        "options": {"num_ctx": int(await get_app_setting(db, "chat_num_ctx") or 32768)},
     }
 
     async def stream_ollama():

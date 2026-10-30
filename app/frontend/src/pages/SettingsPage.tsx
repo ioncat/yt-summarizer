@@ -53,6 +53,7 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
   const [cookiesPath, setCookiesPath]       = useState(initial.cookies_path ?? '')
   const [parallelWorkers, setParallelWorkers] = useState(initial.parallel_workers ?? '1')
   const [parallelError, setParallelError]   = useState('')
+  const [chatNumCtx, setChatNumCtx]         = useState(initial.chat_num_ctx ?? '32768')
   const [saving, setSaving]                 = useState(false)
   const [toast, setToast]                   = useState('')
   const [ytdlpVersion, setYtdlpVersion]     = useState<string | null>(null)
@@ -66,6 +67,7 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
     setYtdlpPath(initial.ytdlp_path ?? '')
     setCookiesPath(initial.cookies_path ?? '')
     setParallelWorkers(initial.parallel_workers ?? '1')
+    setChatNumCtx(initial.chat_num_ctx ?? '32768')
   }, [initial])
 
   useEffect(() => {
@@ -93,6 +95,7 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
         ytdlp_path: useCustomYtdlp ? (ytdlpPath || null) : null,
         cookies_path: cookiesPath || null,
         parallel_workers: String(pw),
+        chat_num_ctx: chatNumCtx,
       })
       onSaved(saved)
       showToast('Saved')
@@ -166,6 +169,26 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
           onChange={e => setOllamaUrl(e.target.value)}
           placeholder="http://localhost:11434"
         />
+      </div>
+
+      {/* Chat context window */}
+      <div className="space-y-1.5">
+        <label className="text-label-md text-on-surface">Chat context window</label>
+        <p className="text-body-sm text-on-surface-variant">
+          Tokens available for the video transcript + conversation. Larger values use more VRAM.
+        </p>
+        <select
+          className={SELECT()}
+          value={chatNumCtx}
+          onChange={e => setChatNumCtx(e.target.value)}
+        >
+          <option value="4096">4K — minimal (short clips only)</option>
+          <option value="8192">8K</option>
+          <option value="16384">16K</option>
+          <option value="32768">32K — recommended</option>
+          <option value="65536">64K — long videos</option>
+          <option value="131072">128K — very long videos (high VRAM)</option>
+        </select>
       </div>
 
       {/* yt-dlp section */}

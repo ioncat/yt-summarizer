@@ -249,6 +249,7 @@ export interface AppSettings {
   upload_auto_delete: string | null
   upload_auto_delete_mode: string | null
   upload_auto_delete_days: string | null
+  chat_num_ctx: string | null
 }
 
 export interface StageSettings {
