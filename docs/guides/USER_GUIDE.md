@@ -219,6 +219,18 @@ Separate **Chat** tab appears after you send the first message. Ask follow-up qu
 
 Streaming response. Chat history is persisted — survives page reload.
 
+### Download
+
+Download the video or audio file of any YouTube video directly from the app.
+
+**From the Result page:** use the **Download** button in the top actions bar. Choose format (Video MP4 / Audio MP3) and quality (Best / 1080p / 720p / 480p). The file is delivered through the browser's native save dialog. Hidden for local file (STT) results.
+
+**Direct download from Home page (no subtitles needed):** check **Download** in the options section, pick format and quality, leave the pipeline toggles off (no AI Cleanup, no Summarize), and click **Extract & Format**. The app calls yt-dlp directly and triggers the browser save dialog — no DB entry is created, no Result page is opened.
+
+**Auto-download after pipeline:** check **Download** while any pipeline option is also enabled. The download starts automatically when the Result page opens.
+
+Default format and quality can be set in **Settings → General → Download defaults**.
+
 ### Benchmark — model comparison (Epic 26)
 
 Compare 2–4 models side by side on the same input text. From the Result page → **⚖ Benchmark** button → select models → Run.

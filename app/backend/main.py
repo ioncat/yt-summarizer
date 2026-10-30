@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -42,7 +43,6 @@ for _name in ("sqlalchemy.engine", "sqlalchemy.engine.Engine", "sqlalchemy.pool"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    import asyncio
     from services.queue_service import queue_worker
     await init_db()
     await _cleanup_uploads_on_start()

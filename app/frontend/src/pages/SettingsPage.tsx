@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   getSettings, saveAppSettings, saveSettings, resetSettings, getModels, getSttModels,
-  downloadSttModel, getSttModelDownloadStatus, deleteSttModel, getYtdlpVersion, updateYtdlp,
+  downloadSttModel, getSttModelDownloadStatus, deleteSttModel, getYtdlpVersion, getYtdlpLatestVersion, updateYtdlp,
   getStorageInfo, clearUploads, getMcpStatus, mcpConnect, mcpDisconnect,
   AppSettings, StageSettings, SttModelInfo, StorageInfo, McpStatus,
 } from '../api'
@@ -54,10 +54,14 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
   const [parallelWorkers, setParallelWorkers] = useState(initial.parallel_workers ?? '1')
   const [parallelError, setParallelError]   = useState('')
   const [chatNumCtx, setChatNumCtx]         = useState(initial.chat_num_ctx ?? '32768')
+  const [downloadFormat, setDownloadFormat] = useState(initial.download_default_format ?? 'mp4')
+  const [downloadQuality, setDownloadQuality] = useState(initial.download_default_quality ?? 'best')
   const [saving, setSaving]                 = useState(false)
   const [toast, setToast]                   = useState('')
   const [ytdlpVersion, setYtdlpVersion]     = useState<string | null>(null)
+  const [ytdlpLatest, setYtdlpLatest]       = useState<string | null>(null)
   const [ytdlpUpdateStatus, setYtdlpUpdateStatus] = useState<string>('idle')
+  const [ytdlpUpdateError, setYtdlpUpdateError]   = useState<string>('')
   const fileRef = useRef<HTMLInputElement>(null)
   const updatePollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -68,13 +72,16 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
     setCookiesPath(initial.cookies_path ?? '')
     setParallelWorkers(initial.parallel_workers ?? '1')
     setChatNumCtx(initial.chat_num_ctx ?? '32768')
+    setDownloadFormat(initial.download_default_format ?? 'mp4')
+    setDownloadQuality(initial.download_default_quality ?? 'best')
   }, [initial])
 
   useEffect(() => {
     getYtdlpVersion().then(r => {
       setYtdlpVersion(r.version)
-      setYtdlpUpdateStatus(r.update_status)
+      if (r.update_status === 'running') setYtdlpUpdateStatus('running')
     })
+    getYtdlpLatestVersion().then(r => setYtdlpLatest(r.latest))
     return () => { if (updatePollRef.current) clearInterval(updatePollRef.current) }
   }, [])
 
@@ -96,6 +103,8 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
         cookies_path: cookiesPath || null,
         parallel_workers: String(pw),
         chat_num_ctx: chatNumCtx,
+        download_default_format: downloadFormat,
+        download_default_quality: downloadQuality,
       })
       onSaved(saved)
       showToast('Saved')
@@ -128,21 +137,27 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
   }
 
   async function handleUpdateYtdlp() {
-    setYtdlpUpdateStatus('updating')
+    setYtdlpUpdateStatus('running')
+    setYtdlpUpdateError('')
     try {
       await updateYtdlp()
       updatePollRef.current = setInterval(async () => {
         const r = await getYtdlpVersion()
-        setYtdlpVersion(r.version)
-        setYtdlpUpdateStatus(r.update_status)
-        if (r.update_status !== 'updating') {
+        if (r.update_status === 'done') {
           if (updatePollRef.current) clearInterval(updatePollRef.current)
-          showToast(r.update_status === 'done' ? 'yt-dlp updated' : 'Update failed')
+          setYtdlpUpdateStatus('done')
+          if (r.new_version) setYtdlpVersion(r.new_version)
+          showToast(`Updated to v${r.new_version ?? 'latest'}`)
+        } else if (r.update_status === 'failed') {
+          if (updatePollRef.current) clearInterval(updatePollRef.current)
+          setYtdlpUpdateStatus('failed')
+          setYtdlpUpdateError(r.update_error ?? 'pip failed')
         }
-      }, 1500)
+        // status === 'running' → keep polling
+      }, 2000)
     } catch {
       setYtdlpUpdateStatus('failed')
-      showToast('Update failed')
+      setYtdlpUpdateError('Could not reach backend')
     }
   }
 
@@ -202,22 +217,50 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
           </div>
           <div className="flex items-center gap-3">
             {!useCustomYtdlp && (
-              <div className="flex items-center gap-2">
-                <span className="text-body-sm text-on-surface-variant">
-                  {ytdlpUpdateStatus === 'updating'
-                    ? 'Updating…'
-                    : ytdlpVersion
-                      ? <span>v{ytdlpVersion}</span>
-                      : <span className="text-on-surface-variant/50">—</span>
-                  }
-                </span>
-                <button
-                  onClick={handleUpdateYtdlp}
-                  disabled={ytdlpUpdateStatus === 'updating'}
-                  className="px-3 py-1 text-[11px] font-semibold rounded-lg bg-secondary-container text-on-secondary-container hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
-                >
-                  {ytdlpUpdateStatus === 'updating' ? '…' : 'Update'}
-                </button>
+              <div className="flex flex-col items-end gap-1.5">
+                {/* Version info */}
+                {ytdlpVersion ? (
+                  <div className="flex flex-col items-end gap-0.5">
+                    <span className="text-[11px] text-on-surface-variant">
+                      installed: <span className="font-medium text-on-surface">v{ytdlpVersion}</span>
+                    </span>
+                    {ytdlpLatest && (
+                      <span className={`text-[11px] ${ytdlpLatest !== ytdlpVersion ? 'text-primary font-medium' : 'text-on-surface-variant'}`}>
+                        latest: v{ytdlpLatest}{ytdlpLatest === ytdlpVersion ? ' ✓' : ' ↑'}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-on-surface-variant/50 text-[11px]">version unknown</span>
+                )}
+
+                {/* Update button + status */}
+                <div className="flex items-center gap-2">
+                  {ytdlpUpdateStatus === 'running' && (
+                    <span className="flex items-center gap-1.5 text-[11px] text-on-surface-variant">
+                      <span className="inline-block w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      Updating…
+                    </span>
+                  )}
+                  {ytdlpUpdateStatus === 'done' && (
+                    <span className="text-[11px] text-primary font-medium">✓ Updated</span>
+                  )}
+                  {ytdlpUpdateStatus === 'failed' && (
+                    <span className="text-[11px] text-error font-medium" title={ytdlpUpdateError}>✕ Failed</span>
+                  )}
+                  <button
+                    onClick={handleUpdateYtdlp}
+                    disabled={ytdlpUpdateStatus === 'running'}
+                    className="px-3 py-1 text-[11px] font-semibold rounded-lg bg-secondary-container text-on-secondary-container hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    {ytdlpUpdateStatus === 'running' ? '…' : ytdlpUpdateStatus === 'failed' ? 'Retry' : 'Update'}
+                  </button>
+                </div>
+
+                {/* Error detail */}
+                {ytdlpUpdateStatus === 'failed' && ytdlpUpdateError && (
+                  <p className="text-[10px] text-error max-w-[200px] text-right leading-tight">{ytdlpUpdateError}</p>
+                )}
               </div>
             )}
             {/* Toggle */}
@@ -285,6 +328,30 @@ function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
           ? <p className="text-[11px] text-error mt-1">{parallelError}</p>
           : <Hint>Number of paragraphs/chunks processed simultaneously. Should match OLLAMA_NUM_PARALLEL.</Hint>
         }
+      </div>
+
+      {/* Download defaults */}
+      <div className="space-y-3 p-4 bg-surface-container-low rounded-xl border border-outline-variant">
+        <p className="text-label-md text-on-surface font-medium">Download defaults</p>
+        <div className="flex gap-4 flex-wrap">
+          <div className="space-y-1.5">
+            <label className="text-[11px] text-on-surface-variant uppercase tracking-wide">Format</label>
+            <select className={SELECT()} value={downloadFormat} onChange={e => setDownloadFormat(e.target.value)}>
+              <option value="mp4">MP4 (video)</option>
+              <option value="mp3">MP3 (audio only)</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[11px] text-on-surface-variant uppercase tracking-wide">Quality</label>
+            <select className={SELECT()} value={downloadQuality} onChange={e => setDownloadQuality(e.target.value)}>
+              <option value="best">Best available</option>
+              <option value="1080p">1080p</option>
+              <option value="720p">720p</option>
+              <option value="480p">480p</option>
+            </select>
+          </div>
+        </div>
+        <Hint>Applied when you click "Download" on the Result page (overridable per download).</Hint>
       </div>
 
       {/* Actions */}

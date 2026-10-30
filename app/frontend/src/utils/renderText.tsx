@@ -46,9 +46,14 @@ function splitHeadingBody(section: string): { heading: string; body: string } {
 
 export function renderText(text: string) {
   // Normalize: ensure '\n\n' before every '## ' (skip if at very start).
-  const normalized = text.replace(/(?:^|[ \t]*\n?)##\s+/g, (_m, offset) =>
-    offset === 0 ? '## ' : '\n\n## '
-  )
+  // After replacement, collapse any run of 3+ newlines to exactly 2 so that
+  // '\n\n## ' inputs (already-correct backend output) don't produce '\n\n\n## '
+  // which would leave a stray leading '\n' after split('\n\n').
+  const normalized = text
+    .replace(/(?:^|[ \t]*\n?)##\s+/g, (_m, offset) =>
+      offset === 0 ? '## ' : '\n\n## '
+    )
+    .replace(/\n{3,}/g, '\n\n')
 
   const blocks = normalized.split('\n\n').filter(b => b.trim().length > 0)
   return blocks.map((block, i) => {

@@ -291,6 +291,16 @@ Video content type → auto-selected mode. Type is determined by `len(text)` and
 - **Live re-transcription progress**: `_RETRANSCRIBE_PROGRESS: dict[str, str]` in `api.py` — updated from `on_progress` callback in the local re-extract path, returned in `GET /api/result/{video_id}` as `retranscribe_progress`. ResultPage shows animated "segment N…" text next to Re-transcribe button during operation.
 - `reextractSubtitles` in `api.ts` accepts optional `model` parameter passed to backend.
 
+#### Epic 46 ✅ — Video Download (30.10.2026)
+- **`GET /api/result/{video_id}/download?format=mp4|mp3&quality=best|1080p|720p|480p`** — runs yt-dlp in a temp dir, returns `FileResponse` with `BackgroundTask(shutil.rmtree, tmpdir)` for cleanup. Timeout 900s.
+- **MP4 format spec**: `bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best` (best); per-height spec for specific quality. MP3 uses `--audio-quality 320K/192K/128K`.
+- **`_ytdlp_cmd`** imported from `subtitle_extractor` — reused for bundled/custom yt-dlp path. Cookies applied when `cookies_path` is set.
+- **`app_settings` new keys**: `download_default_format` (mp4), `download_default_quality` (best) — seeded in `_seed_app_settings`, exposed in `AppSettingsRequest` model.
+- **Settings → General** "Download defaults" section: FORMAT and QUALITY dropdowns, saved with the main Save button.
+- **ResultPage**: Download button + MP4/MP3 format selector + quality selector in the top actions bar. Hidden for local file (STT) results (`isLocalFile`). `downloadVideo()` in `api.ts` uses fetch+blob approach to trigger browser save dialog.
+- **Home page auto-download**: "Also download when result is ready" checkbox (localStorage `yt_autoDownload_enabled`). When checked, stores `{format, quality}` in `yt_autoDownload` key before navigating. ResultPage reads it on first load (when `formatted_text` available), triggers `downloadVideo()`, clears the key.
+- Download state: `isDownloading`, `downloadError` in ResultPage; error banner dismissible.
+
 ---
 
 ## Running Locally
@@ -409,6 +419,7 @@ yt-summarizer/
 | GET | `/api/settings/storage` | Upload folder stats: file count + MB |
 | DELETE | `/api/settings/storage/uploads` | Clear all uploaded files |
 | POST | `/api/result/{video_id}/reextract` | Re-extract (YouTube) or re-transcribe (local file) subtitles |
+| GET | `/api/result/{video_id}/download` | Download video/audio via yt-dlp (`format`, `quality` query params) |
 
 ---
 

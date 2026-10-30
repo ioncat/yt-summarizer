@@ -7,9 +7,12 @@ services:
       - "9010:9010"
     volumes:
       - ./app/data:/app/data
+      - stt_models:/root/.cache/huggingface/hub
     env_file:
       - .env
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   frontend:
     build:
@@ -22,3 +25,6 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+
+volumes:
+  stt_models:

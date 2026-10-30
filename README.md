@@ -54,6 +54,7 @@ Each stage's output is stored separately in SQLite and shown as its own tab: **S
 - **AI via Ollama** — connect any local or remote LLM
 - **Speech-to-Text** — transcribe local audio/video files with faster-whisper (GPU/CPU)
 - **Local file upload** — drag-and-drop MP3/MP4/WAV/MKV and more; re-transcribe with a different Whisper model
+- **Direct download** — download video (MP4) or audio (MP3) from any URL without subtitle extraction
 - **Auto language detection** — picks original video language from yt-dlp metadata
 - **Chapter-aware formatting** — preserves YouTube creator's chapter structure
 - **Multiple processing modes** — Single-pass / Map-Reduce / Full Extract, auto-selected by text length and structure

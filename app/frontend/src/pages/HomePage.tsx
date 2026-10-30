@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { processVideo, processFile, getSettings, getHealth, AllSettings, queueBulkAdd, VideoAlreadyExistsError } from '../api'
+import { processVideo, processFile, getSettings, getHealth, AllSettings, queueBulkAdd, VideoAlreadyExistsError, downloadDirect } from '../api'
 
 type InputMode = 'url' | 'file'
 
@@ -36,6 +36,15 @@ export default function HomePage() {
   const [allSettings, setAllSettings] = useState<AllSettings | null>(null)
   const [autoPipeline, setAutoPipeline] = useState(
     () => localStorage.getItem('yt_summarizer_auto_pipeline') === 'true'
+  )
+  const [autoDownload, setAutoDownload] = useState(
+    () => localStorage.getItem('yt_autoDownload_enabled') === 'true'
+  )
+  const [autoDownloadFormat, setAutoDownloadFormat] = useState<'mp4' | 'mp3'>(
+    () => (localStorage.getItem('yt_autoDownload_format') as 'mp4' | 'mp3') ?? 'mp4'
+  )
+  const [autoDownloadQuality, setAutoDownloadQuality] = useState(
+    () => localStorage.getItem('yt_autoDownload_quality') ?? 'best'
   )
   const [ollamaOnline, setOllamaOnline] = useState(false)
 
@@ -97,10 +106,30 @@ export default function HomePage() {
     }
   }
 
+  function storeAutoDownloadIntent() {
+    if (autoDownload) {
+      localStorage.setItem('yt_autoDownload', JSON.stringify({ format: autoDownloadFormat, quality: autoDownloadQuality }))
+    } else {
+      localStorage.removeItem('yt_autoDownload')
+    }
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError('')
     const trimmedUrl = url.trim()
+
+    if (autoDownload && !autoPipeline && pipeline === 'extract') {
+      setLoading(true)
+      try {
+        await downloadDirect(trimmedUrl, autoDownloadFormat, autoDownloadQuality)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Download failed')
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
 
     if (autoPipeline) {
       if (allSettings) {
@@ -114,6 +143,7 @@ export default function HomePage() {
         }
       }
       setLoading(true)
+      storeAutoDownloadIntent()
       const firstStage = useStt ? 'transcribe' : 'extract'
       try {
         const res = await queueBulkAdd([trimmedUrl], [firstStage, 'cleanup', 'summary', 'mindmap'], false, language || undefined)
@@ -135,6 +165,7 @@ export default function HomePage() {
       if (stages.length > 1 || useStt) {
         // Multi-stage or STT → queue
         setLoading(true)
+        storeAutoDownloadIntent()
         try {
           const res = await queueBulkAdd([trimmedUrl], stages, false, language || undefined)
           if (res.duplicates?.length) {
@@ -152,6 +183,7 @@ export default function HomePage() {
       } else {
         // Extract only → direct flow
         setLoading(true)
+        storeAutoDownloadIntent()
         try {
           const res = await processVideo(trimmedUrl, language)
           navigate(
@@ -311,6 +343,61 @@ export default function HomePage() {
                 Run full pipeline (Transcript + Cleanup + Summary)
                 {!ollamaOnline && <span className="ml-2 text-secondary font-normal">— Ollama offline</span>}
               </label>
+            </div>
+
+            {/* Auto-download checkbox */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                <input
+                  id="auto-download"
+                  type="checkbox"
+                  className="w-5 h-5 rounded border-outline-variant cursor-pointer accent-primary shrink-0"
+                  checked={autoDownload}
+                  onChange={e => {
+                    setAutoDownload(e.target.checked)
+                    localStorage.setItem('yt_autoDownload_enabled', String(e.target.checked))
+                  }}
+                />
+                <label htmlFor="auto-download" className="text-label-md text-on-surface cursor-pointer">
+                  Download
+                  <span className="text-secondary font-normal"> (auto-starts after processing)</span>
+                </label>
+              </div>
+              {autoDownload && (
+                <div className="flex items-center gap-3 ml-8">
+                  <div className="relative shrink-0 w-36">
+                    <select
+                      value={autoDownloadFormat}
+                      onChange={e => {
+                        const v = e.target.value as 'mp4' | 'mp3'
+                        setAutoDownloadFormat(v)
+                        localStorage.setItem('yt_autoDownload_format', v)
+                      }}
+                      className={selectBase}
+                    >
+                      <option value="mp4">Video (MP4)</option>
+                      <option value="mp3">Audio (MP3)</option>
+                    </select>
+                    <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-secondary text-[20px]">expand_more</span>
+                  </div>
+                  <div className="relative shrink-0 w-44">
+                    <select
+                      value={autoDownloadQuality}
+                      onChange={e => {
+                        setAutoDownloadQuality(e.target.value)
+                        localStorage.setItem('yt_autoDownload_quality', e.target.value)
+                      }}
+                      className={selectBase}
+                    >
+                      <option value="best">Best quality</option>
+                      <option value="1080p">1080p</option>
+                      <option value="720p">720p</option>
+                      <option value="480p">480p</option>
+                    </select>
+                    <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-secondary text-[20px]">expand_more</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {error && (

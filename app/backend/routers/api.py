@@ -5,7 +5,12 @@ import json
 import logging
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
+import uuid
+from pathlib import Path
 from typing import Annotated
 
 logger = logging.getLogger("api")
@@ -15,13 +20,14 @@ _reextract_logger = logging.getLogger("api.reextract")
 _FILE_TASK_PROGRESS: dict[str, str] = {}
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from starlette.background import BackgroundTask
 from pydantic import BaseModel
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import get_db
-from services.subtitle_extractor import extract_subtitles, extract_video_id
+from services.subtitle_extractor import _ytdlp_cmd, extract_subtitles, extract_video_id
 from services.text_cleaner import clean_text
 from services.text_formatter import format_subtitles
 from services.video_service import (
@@ -101,6 +107,8 @@ class AppSettingsRequest(BaseModel):
     upload_auto_delete_mode: str | None = None
     upload_auto_delete_days: str | None = None
     chat_num_ctx: str | None = None
+    download_default_format: str | None = None
+    download_default_quality: str | None = None
 
 
 async def _run_processing(task_id: str, url: str, language: str) -> None:
@@ -904,8 +912,8 @@ async def download_stt_model(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Start downloading a model in the background."""
-    from services.transcriber import MODEL_CATALOG, DEFAULT_CACHE_PATH, start_model_download, is_model_downloaded
-    if model_name not in MODEL_CATALOG:
+    from services.transcriber import MODEL_CATALOG, QWEN_CATALOG, DEFAULT_CACHE_PATH, start_model_download, is_model_downloaded
+    if model_name not in MODEL_CATALOG and model_name not in QWEN_CATALOG:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_name}")
     cache_path = (await get_app_setting(db, "stt_cache_path")) or DEFAULT_CACHE_PATH
     if is_model_downloaded(model_name, cache_path):
@@ -920,8 +928,8 @@ async def get_stt_model_download_status(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Poll download progress for a model."""
-    from services.transcriber import MODEL_CATALOG, DEFAULT_CACHE_PATH, get_download_status
-    if model_name not in MODEL_CATALOG:
+    from services.transcriber import MODEL_CATALOG, QWEN_CATALOG, DEFAULT_CACHE_PATH, get_download_status
+    if model_name not in MODEL_CATALOG and model_name not in QWEN_CATALOG:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_name}")
     cache_path = (await get_app_setting(db, "stt_cache_path")) or DEFAULT_CACHE_PATH
     return get_download_status(model_name, cache_path)
@@ -933,14 +941,186 @@ async def delete_stt_model(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Remove a downloaded model from the cache."""
-    from services.transcriber import MODEL_CATALOG, DEFAULT_CACHE_PATH, delete_model
-    if model_name not in MODEL_CATALOG:
+    from services.transcriber import MODEL_CATALOG, QWEN_CATALOG, DEFAULT_CACHE_PATH, delete_model
+    if model_name not in MODEL_CATALOG and model_name not in QWEN_CATALOG:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_name}")
     cache_path = (await get_app_setting(db, "stt_cache_path")) or DEFAULT_CACHE_PATH
     deleted = delete_model(model_name, cache_path)
     if not deleted:
         raise HTTPException(status_code=404, detail="Model not found on disk")
     return {"deleted": model_name}
+
+
+def _mp4_format_spec(quality: str) -> str:
+    if quality == "best":
+        return "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
+    h = quality.rstrip("p")
+    return (
+        f"bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]"
+        f"/bestvideo[height<={h}]+bestaudio/best[height<={h}]"
+    )
+
+
+@router.get("/download/direct")
+async def download_direct(
+    url: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    format: str = "mp4",
+    quality: str = "best",
+):
+    """Download video/audio by URL directly, without subtitle extraction."""
+    if not url or url.startswith("local://"):
+        raise HTTPException(status_code=400, detail="Invalid URL")
+
+    ytdlp_path = await get_app_setting(db, "ytdlp_path")
+    cookies_path = await get_app_setting(db, "cookies_path")
+    cmd = _ytdlp_cmd(ytdlp_path)
+
+    safe_title = re.sub(r'[\\/*?:"<>|]', "_", url.split("v=")[-1][:40])
+    tmpdir = tempfile.mkdtemp()
+    try:
+        if format == "mp3":
+            audio_quality = {"best": "320K", "high": "192K", "low": "128K"}.get(quality, "192K")
+            args = cmd + [
+                "--no-playlist",
+                "-x", "--audio-format", "mp3",
+                "--audio-quality", audio_quality,
+                "-o", str(Path(tmpdir) / "%(title)s.%(ext)s"),
+            ]
+        else:
+            fmt_spec = _mp4_format_spec(quality)
+            args = cmd + [
+                "--no-playlist",
+                "-f", fmt_spec,
+                "--merge-output-format", "mp4",
+                "-o", str(Path(tmpdir) / "%(title)s.%(ext)s"),
+            ]
+
+        if cookies_path and Path(cookies_path).exists():
+            args += ["--cookies", cookies_path]
+        args.append(url)
+
+        try:
+            proc_result = await asyncio.wait_for(
+                asyncio.to_thread(subprocess.run, args, capture_output=True, timeout=890),
+                timeout=900,
+            )
+        except asyncio.TimeoutError:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            raise HTTPException(status_code=504, detail="Download timed out")
+
+        if proc_result.returncode != 0:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            err = proc_result.stderr.decode(errors="replace")[-1000:] if proc_result.stderr else "unknown error"
+            raise HTTPException(status_code=500, detail=f"yt-dlp failed: {err}")
+
+        files = list(Path(tmpdir).iterdir())
+        if not files:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            raise HTTPException(status_code=500, detail="No output file produced")
+
+        out_file = files[0]
+        download_name = f"{safe_title}{out_file.suffix}"
+        return FileResponse(
+            path=str(out_file),
+            media_type="video/mp4" if format == "mp4" else "audio/mpeg",
+            filename=download_name,
+            background=BackgroundTask(shutil.rmtree, tmpdir, True),
+        )
+    except HTTPException:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        raise
+    except Exception as exc:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/result/{video_id}/download")
+async def download_video(
+    video_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    format: str = "mp4",
+    quality: str = "best",
+):
+    """Download video/audio via yt-dlp. Returns the file as an attachment."""
+    result = await get_result(db, video_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Not found")
+    url = result.get("url", "")
+    if not url or url.startswith("local://"):
+        raise HTTPException(status_code=400, detail="Download not available for local files")
+
+    title = result.get("title") or video_id
+    safe_title = re.sub(r'[\\/*?:"<>|]', "_", title)[:80]
+
+    ytdlp_path = await get_app_setting(db, "ytdlp_path")
+    cookies_path = await get_app_setting(db, "cookies_path")
+    cmd = _ytdlp_cmd(ytdlp_path)
+
+    tmpdir = tempfile.mkdtemp()
+    try:
+        if format == "mp3":
+            audio_quality = {"best": "320K", "high": "192K", "low": "128K"}.get(quality, "192K")
+            args = cmd + [
+                "--no-playlist",
+                "-x", "--audio-format", "mp3",
+                "--audio-quality", audio_quality,
+                "-o", str(Path(tmpdir) / "%(title)s.%(ext)s"),
+            ]
+        else:
+            fmt_spec = _mp4_format_spec(quality)
+            args = cmd + [
+                "--no-playlist",
+                "-f", fmt_spec,
+                "--merge-output-format", "mp4",
+                "-o", str(Path(tmpdir) / "%(title)s.%(ext)s"),
+            ]
+
+        if cookies_path and Path(cookies_path).exists():
+            args += ["--cookies", cookies_path]
+
+        args.append(url)
+
+        try:
+            proc_result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    subprocess.run,
+                    args,
+                    capture_output=True,
+                    timeout=890,
+                ),
+                timeout=900,
+            )
+        except asyncio.TimeoutError:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            raise HTTPException(status_code=504, detail="Download timed out")
+
+        if proc_result.returncode != 0:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            err = proc_result.stderr.decode(errors="replace")[-1000:] if proc_result.stderr else "unknown error"
+            raise HTTPException(status_code=500, detail=f"yt-dlp failed: {err}")
+
+        files = list(Path(tmpdir).iterdir())
+        if not files:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            raise HTTPException(status_code=500, detail="No output file produced")
+
+        out_file = files[0]
+        ext = out_file.suffix
+        download_name = f"{safe_title}{ext}"
+
+        return FileResponse(
+            path=str(out_file),
+            media_type="video/mp4" if format == "mp4" else "audio/mpeg",
+            filename=download_name,
+            background=BackgroundTask(shutil.rmtree, tmpdir, True),
+        )
+    except HTTPException:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        raise
+    except Exception as exc:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.get("/health")
@@ -1046,30 +1226,69 @@ async def get_ytdlp_version():
         version = yt_dlp.version.__version__
     except Exception:
         version = None
-    return {"version": version, "update_status": _YTDLP_UPDATE_STATUS.get("status", "idle")}
+    return {
+        "version": version,
+        "update_status": _YTDLP_UPDATE_STATUS.get("status", "idle"),
+        "new_version": _YTDLP_UPDATE_STATUS.get("new_version"),
+        "update_error": _YTDLP_UPDATE_STATUS.get("error"),
+    }
+
+
+@router.get("/settings/ytdlp-latest")
+async def get_ytdlp_latest_version():
+    """Fetch the latest yt-dlp version from PyPI."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get("https://pypi.org/pypi/yt-dlp/json")
+            if resp.status_code == 200:
+                data = resp.json()
+                return {"latest": data["info"]["version"]}
+    except Exception:
+        pass
+    return {"latest": None}
 
 
 @router.post("/settings/update-ytdlp")
-async def update_ytdlp(background_tasks: BackgroundTasks):
+async def update_ytdlp():
     """Upgrade yt-dlp to the latest version in the background."""
     if _YTDLP_UPDATE_STATUS.get("status") == "running":
         return {"status": "already_running"}
     _YTDLP_UPDATE_STATUS["status"] = "running"
 
+    def _run_pip():
+        import subprocess as _sp
+        result = _sp.run(
+            [sys.executable, "-m", "pip", "install", "-U", "yt-dlp"],
+            capture_output=True, text=True, timeout=120,
+        )
+        return result.returncode, result.stdout + result.stderr
+
     async def _do_update():
-        import asyncio as _asyncio
         try:
-            proc = await _asyncio.create_subprocess_exec(
-                sys.executable, "-m", "pip", "install", "-U", "yt-dlp",
-                stdout=_asyncio.subprocess.PIPE, stderr=_asyncio.subprocess.PIPE,
-            )
-            await proc.communicate()
-            _YTDLP_UPDATE_STATUS["status"] = "done" if proc.returncode == 0 else "failed"
+            returncode, output = await asyncio.to_thread(_run_pip)
+            if returncode == 0:
+                try:
+                    import importlib
+                    import yt_dlp
+                    importlib.reload(yt_dlp.version)
+                    new_version = yt_dlp.version.__version__
+                except Exception:
+                    new_version = None
+                _YTDLP_UPDATE_STATUS["status"] = "done"
+                _YTDLP_UPDATE_STATUS["new_version"] = new_version
+            else:
+                err_tail = output[-400:].strip()
+                _YTDLP_UPDATE_STATUS["status"] = "failed"
+                _YTDLP_UPDATE_STATUS["error"] = err_tail or f"pip exited with code {returncode}"
         except Exception as exc:
             _YTDLP_UPDATE_STATUS["status"] = "failed"
-            logger.error("yt-dlp update failed: %s", exc)
+            _YTDLP_UPDATE_STATUS["error"] = str(exc) or repr(exc)
+            logger.error("yt-dlp update failed: %r", exc)
+        finally:
+            await asyncio.sleep(60)
+            _YTDLP_UPDATE_STATUS.update({"status": "idle", "new_version": None, "error": None})
 
-    background_tasks.add_task(_do_update)
+    asyncio.create_task(_do_update())
     return {"status": "started"}
 
 

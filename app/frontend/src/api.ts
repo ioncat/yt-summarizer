@@ -225,6 +225,52 @@ export async function reextractSubtitles(videoId: string, language: string = 'au
   }
 }
 
+export async function downloadDirect(
+  videoUrl: string,
+  format: 'mp4' | 'mp3' = 'mp4',
+  quality: string = 'best',
+): Promise<void> {
+  const params = new URLSearchParams({ url: videoUrl, format, quality })
+  const res = await fetch(`${BASE}/download/direct?${params}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || 'Download failed')
+  }
+  const blob = await res.blob()
+  const disposition = res.headers.get('content-disposition') || ''
+  const nameMatch = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+  const filename = nameMatch ? nameMatch[1].replace(/['"]/g, '') : `video.${format}`
+  const objUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = objUrl
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(objUrl)
+}
+
+export async function downloadVideo(
+  videoId: string,
+  format: 'mp4' | 'mp3' = 'mp4',
+  quality: string = 'best',
+): Promise<void> {
+  const params = new URLSearchParams({ format, quality })
+  const res = await fetch(`${BASE}/result/${videoId}/download?${params}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || 'Download failed')
+  }
+  const blob = await res.blob()
+  const disposition = res.headers.get('content-disposition') || ''
+  const nameMatch = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+  const filename = nameMatch ? nameMatch[1].replace(/['"]/g, '') : `video.${format}`
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export interface HealthResponse {
   backend: boolean
   ollama: boolean
@@ -250,6 +296,8 @@ export interface AppSettings {
   upload_auto_delete_mode: string | null
   upload_auto_delete_days: string | null
   chat_num_ctx: string | null
+  download_default_format: string | null
+  download_default_quality: string | null
 }
 
 export interface StageSettings {
@@ -519,9 +567,20 @@ export async function clearUploads(): Promise<{ deleted: number; file_count: num
   return res.json()
 }
 
-export async function getYtdlpVersion(): Promise<{ version: string | null; update_status: string }> {
+export async function getYtdlpVersion(): Promise<{
+  version: string | null
+  update_status: string
+  new_version: string | null
+  update_error: string | null
+}> {
   const res = await fetch(`${BASE}/settings/ytdlp-version`)
-  if (!res.ok) return { version: null, update_status: 'idle' }
+  if (!res.ok) return { version: null, update_status: 'idle', new_version: null, update_error: null }
+  return res.json()
+}
+
+export async function getYtdlpLatestVersion(): Promise<{ latest: string | null }> {
+  const res = await fetch(`${BASE}/settings/ytdlp-latest`)
+  if (!res.ok) return { latest: null }
   return res.json()
 }
 

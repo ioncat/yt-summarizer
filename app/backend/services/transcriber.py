@@ -110,10 +110,11 @@ def start_model_download(model_name: str, cache_path: str) -> bool:
         prog = _DOWNLOAD_PROGRESS.get(model_name, {})
         if prog.get("status") == "downloading":
             return False
+        _catalog = QWEN_CATALOG if model_name in QWEN_CATALOG else MODEL_CATALOG
         _DOWNLOAD_PROGRESS[model_name] = {
             "status": "downloading",
             "downloaded_mb": 0.0,
-            "total_mb": MODEL_CATALOG.get(model_name, {}).get("size_mb", 0),
+            "total_mb": _catalog.get(model_name, {}).get("size_mb", 0),
         }
 
     t = threading.Thread(

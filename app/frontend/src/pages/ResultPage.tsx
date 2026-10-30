@@ -11,6 +11,7 @@ import {
   getSettings, getModels, saveSettings, saveAppSettings,
   getSttModels,
   queueBulkAdd, toggleFavorite,
+  downloadVideo,
   ResultResponse, SttModelInfo,
 } from '../api'
 import { renderText } from '../utils/renderText'
@@ -36,7 +37,7 @@ function formatDuration(seconds: number | null): string {
 }
 
 function formatDate(iso: string): string {
-  const d = new Date(iso)
+  const d = new Date(iso.endsWith('Z') ? iso : iso.replace(' ', 'T') + 'Z')
   const dd  = String(d.getDate()).padStart(2, '0')
   const mm  = String(d.getMonth() + 1).padStart(2, '0')
   const yyyy = d.getFullYear()
@@ -76,6 +77,12 @@ export default function ResultPage() {
   const [summaryElapsedSeconds, setSummaryElapsedSeconds] = useState<number | null>(null)
   const [localCleanupDuration, setLocalCleanupDuration]   = useState<number | null>(null)
   const [localSummaryDuration, setLocalSummaryDuration]   = useState<number | null>(null)
+
+  // Download
+  const [downloadFormat, setDownloadFormat] = useState<'mp4' | 'mp3'>('mp4')
+  const [downloadQuality, setDownloadQuality] = useState('best')
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState('')
 
   // Chat
   const [ollamaUrl, setOllamaUrl]   = useState('')
@@ -172,6 +179,28 @@ export default function ResultPage() {
           }
         }
 
+        if (isFirstLoad && data.formatted_text) {
+          const intent = localStorage.getItem('yt_autoDownload')
+          if (intent) {
+            try {
+              const { format, quality } = JSON.parse(intent) as { format: 'mp4' | 'mp3'; quality: string }
+              localStorage.removeItem('yt_autoDownload')
+              setDownloadFormat(format)
+              setDownloadQuality(quality)
+              // Trigger download after settings are applied
+              setTimeout(() => {
+                if (videoId) {
+                  downloadVideo(videoId, format, quality).catch(() => {})
+                }
+              }, 300)
+            } catch { localStorage.removeItem('yt_autoDownload') }
+          }
+        }
+
+        if (isFirstLoad && data.language) {
+          setReextractLang(data.language)
+        }
+
         if (isFirstLoad) {
           if (data.mindmap_text) setActiveTab('mindmap')
           else if (data.summary_text) setActiveTab('summary')
@@ -254,6 +283,8 @@ export default function ResultPage() {
         setModels(list)
         setSttModel(s.app.stt_model ?? '')
         setSttModels(sttList)
+        setDownloadFormat((s.app.download_default_format as 'mp4' | 'mp3') ?? 'mp4')
+        setDownloadQuality(s.app.download_default_quality ?? 'best')
         cleanupPromptsRef.current = { system_prompt: s.cleanup.system_prompt ?? null, user_prompt_template: s.cleanup.user_prompt_template ?? null }
         summaryPromptsRef.current = { system_prompt: s.summarization.system_prompt ?? null, user_prompt_template: s.summarization.user_prompt_template ?? null }
       })
@@ -432,6 +463,19 @@ export default function ResultPage() {
     if (!window.confirm('Delete this video and all its data? This cannot be undone.')) return
     try { await deleteResult(videoId); navigate('/history') }
     catch (err) { console.error('[Result] deleteResult failed:', err) }
+  }
+
+  async function handleDownload() {
+    if (!videoId) return
+    setDownloadError('')
+    setIsDownloading(true)
+    try {
+      await downloadVideo(videoId, downloadFormat, downloadQuality)
+    } catch (err: any) {
+      setDownloadError(err.message ?? 'Download failed')
+    } finally {
+      setIsDownloading(false)
+    }
   }
 
   const isLocalFile = result?.subtitle_source === 'transcript' && result?.video_id?.startsWith('file-')
@@ -954,6 +998,42 @@ export default function ResultPage() {
                 </a>
               )}
 
+              {/* Download — not applicable for local file transcriptions */}
+              {!isLocalFile && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={handleDownload}
+                    disabled={isDownloading}
+                    className={btnSecondary + ' disabled:opacity-50'}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      {isDownloading ? 'hourglass_top' : 'download'}
+                    </span>
+                    {isDownloading ? 'Downloading…' : 'Download'}
+                  </button>
+                  <select
+                    value={downloadFormat}
+                    onChange={e => setDownloadFormat(e.target.value as 'mp4' | 'mp3')}
+                    className="h-9 px-2 text-[11px] bg-surface-container-low border border-outline-variant rounded-lg text-on-surface focus:outline-none focus:border-primary"
+                    title="Format"
+                  >
+                    <option value="mp4">MP4</option>
+                    <option value="mp3">MP3</option>
+                  </select>
+                  <select
+                    value={downloadQuality}
+                    onChange={e => setDownloadQuality(e.target.value)}
+                    className="h-9 px-2 text-[11px] bg-surface-container-low border border-outline-variant rounded-lg text-on-surface focus:outline-none focus:border-primary"
+                    title="Quality"
+                  >
+                    <option value="best">Best</option>
+                    <option value="1080p">1080p</option>
+                    <option value="720p">720p</option>
+                    <option value="480p">480p</option>
+                  </select>
+                </div>
+              )}
+
               {/* Delete */}
               <button onClick={handleDelete} className={btnDanger}>
                 <span className="material-symbols-outlined text-[18px]">delete</span>Delete
@@ -961,6 +1041,18 @@ export default function ResultPage() {
             </div>
 
             {/* Error banners */}
+            {downloadError && (
+              <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3 flex items-start gap-3">
+                <span className="material-symbols-outlined text-error text-[18px] mt-0.5 shrink-0">error</span>
+                <div>
+                  <p className="text-body-sm text-on-error-container">{downloadError}</p>
+                  <button
+                    onClick={() => setDownloadError('')}
+                    className="mt-1 text-label-sm text-on-error-container/70 hover:text-on-error-container underline"
+                  >Dismiss</button>
+                </div>
+              </div>
+            )}
             {reextractError && (
               <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3 flex items-start gap-3">
                 <span className="material-symbols-outlined text-error text-[18px] mt-0.5 shrink-0">error</span>

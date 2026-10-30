@@ -219,11 +219,10 @@ Whisper-based transcription for YouTube audio and local files. Language param fr
 
 ### Epic 46: Video Download
 
-**Description**: Скачать видео или аудио с YouTube (и других 1000+ сайтов через yt-dlp) прямо из интерфейса. Кнопка на Result page рядом с "Open video". Форматы: MP4 (видео), MP3/AAC (аудио). Файл отдаётся через браузер как скачивание. Полезно когда нужно видео офлайн или для обработки — особенно в связке с STT pipeline.
+**Description**: Скачать видео или аудио с YouTube прямо из интерфейса. Два режима: (1) кнопка Download на Result page — скачивает файл для уже обработанного видео; (2) прямое скачивание с Home page — галочка "Download" без выбора pipeline запускает `GET /api/download/direct` напрямую, без извлечения субтитров и записи в БД. Форматы: Video (MP4) / Audio (MP3), качество: Best / 1080p / 720p / 480p.
 
-**Status**: 🔵 Planned | **Priority**: 🟢 P3  
-**Estimate**: ~3–4 часа  
-**Note**: yt-dlp уже интегрирован в проект, audio extraction уже работает для STT. Video download — логичное расширение.
+**Status**: ✅ Done — 30.10.2026 | **Priority**: 🟢 P3  
+**Files**: `app/backend/routers/api.py` (`/download/direct`, `/result/{video_id}/download`), `app/frontend/src/api.ts` (`downloadDirect`, `downloadVideo`), `app/frontend/src/pages/HomePage.tsx`, `app/frontend/src/pages/ResultPage.tsx`
 
 ---
 

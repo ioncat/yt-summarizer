@@ -1,5 +1,33 @@
 import { Routes, Route, NavLink, Link, useLocation } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Component, ReactNode, ErrorInfo } from 'react'
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { error: null }
+  }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error('[ErrorBoundary]', error, info) }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="p-8 max-w-2xl mx-auto mt-12">
+          <div className="bg-error-container border border-error/30 rounded-xl p-6">
+            <h2 className="text-headline-md font-bold text-on-error-container mb-2">Something went wrong</h2>
+            <p className="text-body-sm text-on-error-container/80 font-mono break-all mb-4">{this.state.error.message}</p>
+            <button
+              className="px-4 py-2 bg-error text-on-error rounded-lg text-label-md font-semibold"
+              onClick={() => { this.setState({ error: null }); window.history.back() }}
+            >
+              Go back
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 import HomePage from './pages/HomePage'
 import ProcessingPage from './pages/ProcessingPage'
 import ResultPage from './pages/ResultPage'
@@ -162,16 +190,18 @@ export default function App() {
   })()
 
   const routes = (
-    <Routes>
-      <Route path="/"                             element={<HomePage />} />
-      <Route path="/processing/:taskId/:videoId"  element={<ProcessingPage />} />
-      <Route path="/result/:videoId"              element={<ResultPage />} />
-      <Route path="/history"                      element={<HistoryPage />} />
-      <Route path="/settings"                     element={<SettingsPage />} />
-      <Route path="/benchmarks"                   element={<BenchmarksIndexPage />} />
-      <Route path="/benchmark/:videoId"           element={<BenchmarkPage />} />
-      <Route path="/queue"                        element={<QueuePage />} />
-    </Routes>
+    <ErrorBoundary>
+      <Routes>
+        <Route path="/"                             element={<HomePage />} />
+        <Route path="/processing/:taskId/:videoId"  element={<ProcessingPage />} />
+        <Route path="/result/:videoId"              element={<ResultPage />} />
+        <Route path="/history"                      element={<HistoryPage />} />
+        <Route path="/settings"                     element={<SettingsPage />} />
+        <Route path="/benchmarks"                   element={<BenchmarksIndexPage />} />
+        <Route path="/benchmark/:videoId"           element={<BenchmarkPage />} />
+        <Route path="/queue"                        element={<QueuePage />} />
+      </Routes>
+    </ErrorBoundary>
   )
 
   const headerProps = { pageTitle, theme, setTheme, backendStatus, ollamaStatus }

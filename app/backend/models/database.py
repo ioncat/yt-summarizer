@@ -77,6 +77,8 @@ async def _seed_app_settings() -> None:
         "upload_auto_delete_mode": "immediate",
         "upload_auto_delete_days": "7",
         "chat_num_ctx": "32768",
+        "download_default_format": "mp4",
+        "download_default_quality": "best",
     }
     async with AsyncSessionLocal() as session:
         for key, value in defaults.items():
