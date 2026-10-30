@@ -15,6 +15,9 @@ app/data/cookies.txt
 app/data/*.cookies.txt
 app/data/www.youtube.com_cookies.txt
 
+# Uploaded media files (user-uploaded audio/video, can be large)
+app/data/uploads/
+
 # ========================
 # Environment & Secrets
 # ========================
