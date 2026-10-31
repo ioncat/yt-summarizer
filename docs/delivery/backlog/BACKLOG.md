@@ -8,35 +8,30 @@ Navigation and overview of all epics and user stories for YT Summarizer, organiz
 
 ### Step 1 — Security minimum (each item is independently reviewable)
 
-**NS-01 — Bind backend to 127.0.0.1**
+**NS-01 — Bind backend to 127.0.0.1** ✅ Done · reviewed
 Origin: Owner, 2026-10-30 ("bind the backend to 127.0.0.1"); fixes F2 (partial)
 Value: Closes LAN/Wi-Fi exposure; no network neighbour can reach the API unauthenticated
-Fix: change `backend_host` default to `"127.0.0.1"` in `config.py`; update `start.vbs`, `start.sh`, `Makefile`
-Labels: `by-backend` | Status: 🔴 Open
+Labels: `by-backend`, `reviewed` | Commit: `db66a96`
 
-**NS-02 — Cookie upload: basename only**
+**NS-02 — Cookie upload: basename only** ✅ Done · reviewed
 Origin: Owner, 2026-10-30 ("keep only the base name of the uploaded cookie file"); fixes F1
 Value: Prevents path-traversal write; a crafted filename can no longer overwrite arbitrary files or code
-Fix: `api.py:upload_cookies` — replace `filename = file.filename` with `filename = Path(file.filename or "cookies.txt").name`; add a size cap
-Labels: `by-backend` | Status: 🔴 Open
+Labels: `by-backend`, `reviewed` | Commit: `db66a96`
 
-**NS-03 — yt-dlp: validate URL and prepend `--`**
+**NS-03 — yt-dlp: validate URL and prepend `--`** ✅ Done · reviewed
 Origin: Owner, 2026-10-30 ("check URLs properly and put `--` before the URL in yt-dlp calls"); fixes F3
 Value: Prevents argument injection and SSRF; a `-`-prefixed "URL" can no longer be parsed as a yt-dlp flag
-Fix: parse URL with `urllib.parse`; require `https`; host must be in `{youtube.com, www.youtube.com, m.youtube.com, youtu.be}`; rebuild canonical URL from extracted id; insert `"--"` before every user-supplied URL in every yt-dlp call
-Labels: `by-backend` | Status: 🔴 Open
+Labels: `by-backend`, `reviewed` | Commit: `db66a96`
 
-**NS-04 — Mind map: disable HTML rendering**
+**NS-04 — Mind map: disable HTML rendering** ✅ Done · reviewed
 Origin: Owner, 2026-10-30 ("turn off HTML in markmap"); fixes F4
 Value: Prevents stored XSS; LLM output with `<script>` or `<img onerror=...>` can no longer run in the app origin
-Fix: pass a custom markdown-it instance with `html: false` to the `Transformer` in `MindmapView.tsx`; or escape `<` in text before `transform`
-Labels: `by-frontend` | Status: 🔴 Open
+Labels: `by-frontend`, `reviewed` | Commit: `db66a96`
 
-**NS-05 — Gitignore uploads dir and cookie variants**
+**NS-05 — Gitignore uploads dir and cookie variants** ✅ Done · reviewed
 Origin: Owner, 2026-10-30 ("gitignore app/data/uploads/ and the cookie files"); fixes F5
 Value: Private video/audio files and live YouTube session cookies cannot be committed to the public repo by mistake
-Fix: add to `.gitignore`: `app/data/uploads/`, `app/data/*cookies*.txt`, `app/data/*.sqlite`, `app/data/db/`; keep `!app/data/.gitkeep`
-Labels: `by-cto` | Status: 🔴 Open
+Labels: `by-backend`, `reviewed` | Commit: `db66a96`
 
 ---
 
