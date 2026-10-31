@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import sys
 from pathlib import Path
@@ -21,6 +22,8 @@ from services.video_service import (
     save_app_settings,
     save_stage_settings,
 )
+
+logger = logging.getLogger("api")
 
 router = APIRouter()
 
@@ -191,6 +194,7 @@ async def update_ytdlp():
         except Exception as exc:
             _YTDLP_UPDATE_STATUS["status"] = "failed"
             _YTDLP_UPDATE_STATUS["error"] = str(exc) or repr(exc)
+            logger.error("yt-dlp update failed: %r", exc)
         finally:
             await asyncio.sleep(60)
             _YTDLP_UPDATE_STATUS.update({"status": "idle", "new_version": None, "error": None})
