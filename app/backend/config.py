@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 
@@ -21,8 +23,9 @@ class Settings(BaseSettings):
     max_retries: int = 3
 
     class Config:
-        env_file = "../.env"
+        env_file = Path(__file__).resolve().parents[2] / ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
 
 settings = Settings()
