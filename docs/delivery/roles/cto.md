@@ -5,7 +5,7 @@
 - Tracker and labels: `by-backend`, `by-frontend`, `by-mcp`, `by-cto`, `reviewed`, `needs-owner`; board is `docs/delivery/backlog/BACKLOG.md`.
 - Owner's panel: none.
 - Pushing: only under `docs/team/WORK_MODES.md`; run the personal-data search per commit before each push.
-- Token spending: ask the owner — no limit set yet; every model run needs the owner's approval until agreed.
+- Token spending: no separate limit; ask the owner before bulk model runs (multiple videos, benchmarks) and before any paid external API call.
 
 ## First day (New Start, 2026-10-31)
 
