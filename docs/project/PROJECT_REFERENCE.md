@@ -1,0 +1,522 @@
+# Project reference (the former CLAUDE.md, moved 2026-10-31)
+
+> Moved here when the team switched to TeamKit; the working instructions are in `CLAUDE.md`. Keep this file as reference for the history of epics, the API, the structure and the implementation details. The "Documentation Update Checklist" below is superseded by `docs/delivery/documentation-conventions.md`; the "Backlog & Epics" and "Task Ordering" conventions still hold.
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## ⚠️ Backlog & Epics Convention
+
+**Every epic and user story MUST follow `docs/product-delivery-conventions.md`.**  
+Read it before creating or editing any epic file.
+
+Key requirements:
+- Acceptance Criteria in **Given / When / Then** format (not bullet points)
+- **Edge Cases** as a separate section per user story
+- **Out of Scope** explicit in each user story
+- **Notes for Engineering** (not "Implementation Notes")
+- Definition of Ready must be met before starting implementation
+
+---
+
+## ⚠️ Task Ordering Convention
+
+**When presenting a pending-task list (TODO, test plan, work queue, etc.), always order by blocking dependencies, not by topic or insertion order.**
+
+Mark priority and dependency explicitly:
+
+- 🔴 **BLOCKER** — must be done first; downstream tasks are invalid or noisy until it's done
+- 🟠 **High** — depends on a blocker or another high task
+- 🟡 **Medium** — independent of other tasks, can be parallel
+- 🟢 **Low** — nice to have, no downstream effects
+
+For each task list `Depends on #X` or `Blocks #Y` so the order is auditable. If a task affects defaults, prompts, configuration, or any shared state that downstream tasks consume — it goes to the top.
+
+Example: "Reset prompts to defaults" is a blocker for any quality test, because without it the test runs on stale prompts and apparent bugs may not be real bugs.
+
+---
+
+## Project Overview
+
+**YT Summarizer** - Extract, format, and store YouTube video subtitles for quick content review.
+
+**Vision**: Reduce cognitive load by allowing users to scan video content before deciding whether to watch in detail.
+
+**Current Phase**: Phase 3 — Speech-to-Text (Epics 30–32 done; 41–43 done)
+
+---
+
+## Technology Stack
+
+| Component | Technology |
+|-----------|------------|
+| Frontend | React + TypeScript + Vite |
+| Backend | Python + FastAPI |
+| Video Processing | yt-dlp (no API keys required) + Node.js (JS runtime for yt-dlp) |
+| Database | SQLite (aiosqlite + SQLAlchemy async) |
+| Text Format | Markdown (stored in DB) |
+| LLM (local) | Ollama — `cas/aya-expanse-8b` (text cleanup + summarization) |
+
+---
+
+## Development Phases
+
+### ✅ Phase 1: MVP - Subtitle Extraction & Formatting — COMPLETE
+
+All 5 epics done. Full stack running:
+- FastAPI backend: subtitle extraction, text formatting, 5 REST endpoints, async background tasks
+- React frontend: 4 pages (Home, Processing, Result, History)
+- Language UX: shows available languages when requested one is missing, one-click retry
+
+### 🔄 Phase 1.5: LLM Text Cleanup — IN PROGRESS
+
+#### Epic 6 ✅ — Manual AI Cleanup
+- `text_cleaner.py` sends each paragraph to Ollama `/api/chat` with editing instructions
+- Model configurable via `config.py` (`ollama_model`), overridable per-stage via Settings
+- If Ollama unreachable — `cleaned_text = null`, `cleanup_status = null`
+- DB: `subtitles_formatted.cleaned_text` + `cleanup_status` (null | processing | done | failed)
+- API: `POST /api/result/{video_id}/cleanup` — triggers background cleanup
+- API: `GET /api/health` — returns `{backend, ollama}` status
+- Frontend: "✦ Clean with AI" button → polling → Cleaned tab; StatusBar in nav (two dots)
+
+#### Epic 7 ✅ — Settings Page
+- `pipeline_settings` DB table: per-stage system_prompt, user_prompt_template, model
+- Service layer: `get_all_settings`, `save_stage_settings`, `reset_stage_settings`
+- API: `GET /api/settings`, `PUT /api/settings/{stage}`, `DELETE /api/settings/{stage}`, `GET /api/models`
+- Frontend: `/settings` page — tabs (General, AI Cleanup, Summarization locked)
+- `text_cleaner.py` reads prompts/model from DB via `_run_cleanup`; falls back to `DEFAULT_*` constants
+
+#### Epic 8 ❌ — Markdown Rendering (Dropped)
+- Tested react-markdown + Markdown prompt rule — LLM output inconsistent. Reverted to plain text.
+
+#### Epic 9 ✅ — Per-Tab Character Count
+- Result page shows separate character counts per tab
+- Subtitles tab: `result.char_count` (from DB) with fallback to `result.formatted_text?.length`
+- Cleaned tab: computed from `result.cleaned_text?.length` on the frontend
+- Shows `—` on Cleaned tab when no cleaned text available
+
+#### Epic 11 ✅ — Inline Model Selector on Result Page
+- Dropdown next to cleanup button on `/result/:videoId` — auto-saves on change, no Save button
+- Preserves existing prompts via `cleanupPromptsRef` (only model changes)
+- Disabled with tooltip when Ollama is offline
+- Style: `.model-select-inline` in `index.css`
+
+#### Epic 12 ✅ — Cancel Cleanup
+- In-memory `_CANCEL_SET` in `api.py` tracks active cancel signals
+- `is_cancelled` lambda passed to `clean_text()` — checked before each paragraph
+- API: `DELETE /api/result/{video_id}/cleanup` — adds video_id to cancel set
+- On cleanup finish: if cancelled → `reset_cleanup_status`; else → `finish_cleanup`
+- `_CANCEL_SET.discard(video_id)` called in `trigger_cleanup` to clear stale flags on re-run
+
+#### Epic 13 ✅ — Settings 2.0 (All Config via Web UI)
+- `app_settings` DB table: key-value store (`ollama_url`, `ytdlp_path`, `cookies_path`)
+- Seeded from config.py defaults on first launch (`_seed_app_settings`)
+- `config.py` now infrastructure-only (host, port, DB path, CORS) — no user-facing settings
+- `subtitle_extractor.py` accepts `ytdlp_path` as parameter (no module-level constant)
+- `text_cleaner.py` accepts `ollama_url` as parameter; no model default — must be set by user
+- `api.py` reads `cookies_path`, `ytdlp_path`, `ollama_url` from DB before each operation
+- API: `PUT /api/settings/app`, `POST /api/settings/upload-cookies`
+- `GET /api/settings` now returns `{app, cleanup, summarization}`
+- Frontend: Settings page redesigned with tabs (General / AI Cleanup / Summarization)
+- Notifications: warning banners for missing required fields on Settings, Home, Result pages
+- Cookie upload via web (multipart, saved to `data/www.youtube.com_cookies.txt`)
+- History page: char_count added to each item
+
+#### Epic 14 ✅ — Cleanup Timer
+- `cleanup_started_at` and `cleanup_finished_at` columns on `subtitles_formatted` (added via `_migrate_db`)
+- Written via raw SQL (`strftime("%Y-%m-%d %H:%M:%S.%f")` — space separator required for SQLAlchemy DateTime parsing)
+- `get_result()` computes `cleanup_duration_seconds` from ORM datetime subtraction
+- Frontend: "Cleaned in X:XX" shown in meta section when `cleanup_duration_seconds != null`
+
+#### Epic 10 ✅ — Auto-Pipeline Toggle
+- Checkbox "Run AI cleanup automatically" on Home page (localStorage, persisted)
+- Pre-flight validation in `handleSubmit`: checks `ollama_url`, `cleanup.model`, `summarization.model` — shows bullet list of issues, blocks submit
+- ProcessingPage: three stages ① Extracting → ② Cleaning → ③ Summarizing; spinner on active, ✓ on done
+- After all stages → navigate to `/result/{videoId}`
+
+#### Epic 15 ✅ — LLM Summarization (Single-pass)
+- `text_summarizer.py`: single Ollama request, 180s timeout, temperature 0.2, cancel support
+- DB columns: `summary_text`, `summary_status`, `summary_model`, `summary_started_at`, `summary_finished_at` on `subtitles_formatted`
+- `_SUMMARY_CANCEL_SET` in `api.py` — same pattern as `_CANCEL_SET`
+- API: `POST /api/result/{video_id}/summary`, `DELETE /api/result/{video_id}/summary`
+- Result page: Summary tab, tab-aware actions bar (controls change with active tab), "Summarized in X:XX · model" in meta
+- Input: `cleaned_text` if available, else `formatted_text`
+
+#### Epic 16 ✅ — Cancel for Auto-Pipeline
+- "✕ Stop pipeline" button on ProcessingPage during stages ② and ③
+- Stage ②: calls `cancelCleanup(videoId)`; Stage ③: calls `cancelSummary(videoId)`
+- Clears `cleanupIntervalRef`, navigates to `/result/{videoId}` immediately
+- Button not shown during stage ① (no cancel endpoint for task extraction)
+
+#### Epic 22 ✅ — Auto Language Detection
+- `_detect_language(info)` in `subtitle_extractor.py`: checks `-orig` key in `automatic_captions` → manual subs → first auto-caption key → `language` field → fallback `"ru"`
+- `_fetch_metadata()`: lightweight `--skip-download --print-json` call (no subtitle download)
+- `extract_subtitles()`: when `language == "auto"`, calls `_fetch_metadata()` + `_detect_language()`, then proceeds with detected language
+- Two-call yt-dlp flow; first call has no download so 429 risk is low
+- Frontend: `HomePage.tsx` — `"auto"` as first option and default in language selector
+
+#### Epic 23 ✅ — Chapter-Aware Subtitle Formatting
+- `VideoMetadata.chapters: list[dict] | None` — built in `_build_metadata()` from description timecodes (primary) or `info["chapters"]` (fallback)
+- **Chapter source priority** (subtitle_extractor.py): `_parse_description_chapters()` → `info["chapters"]` → None. YouTube API always returns `info["chapters"]` translated to English — description text is never auto-translated, always in author's language.
+- `_parse_description_chapters(description, duration)`: regex `^\s*(\d{1,2}:\d{2}(?::\d{2})?)\s+(.+)`, requires ≥2 matches, infers `end_time` from next chapter start
+- `_detect_script()` + `_expected_script()`: cyrillic/cjk/arabic/hebrew/greek/latin mapped to BCP-47 codes; mismatch between chapter title script and subtitle language → `[CHAPTER_SOURCE]` warning in log
+- `[CHAPTER_SOURCE]` log tag: fallback to YouTube chapters, count mismatch >2, or script mismatch — all surface as `logger.warning` for future admin-panel integration
+- `Video.chapters` JSON column in DB (migration in `_migrate_db()`)
+- `text_formatter.py`: two branches — `_format_with_chapters()` groups subtitles by chapter time boundaries; `_format_with_gaps()` is existing 4s gap logic
+- `format_subtitles(entries, chapters=None)` selects branch; returns `has_chapters: bool`
+- Output with chapters: `## Chapter Title\n\nsubtitle text...` per chapter
+- Segments outside chapter boundaries assigned to nearest preceding chapter
+- Empty chapters (no subtitles) skipped — no empty headings
+- Fallback: if `chapters` is None or empty → existing gap-based formatting
+- `tools/debug_chapters.py`: diagnostic script to test YouTube chapter source behavior across yt-dlp configurations
+
+#### Epic 24 ✅ — Completion Notifications
+- `notify(title, body?)` in `ResultPage.tsx`: sets `document.title = "✓ {title}"`, reverts after 10s; fires `new Notification()` only when `document.hidden`
+- `requestNotifyPermission()`: calls `Notification.requestPermission()` if `permission === "default"` — called lazily from `handleCleanup()` / `handleSummarize()`
+- Triggers on `processing → done` transition in `loadResult()` (same place tab auto-switching happens)
+- `originalTitleRef` stores original title on mount; restored on unmount and on `visibilitychange`
+
+#### Epic 28 ✅ — Chat Tab & Pipeline Guard (Session 23.05)
+- **Chat tab** in ResultPage: appears only when `chatHistory.length > 0`; shows full message history with per-message copy/delete; header has "⎘ Copy chat" + "🗑 Clear chat"; chat input bar visible on Summary and Chat tabs; auto-switches to Chat tab after first exchange completes
+- **chat_history bug fix**: `video_service.get_result()` now explicitly `json.loads()` if `fmt.chat_history` is a string (SQLAlchemy JSON column bypassed by raw SQL write in `save_chat_history`)
+- **Chat auto-reset removed**: `useEffect([summary_text])` that cleared chatHistory on every summary_text change removed; user controls chat lifetime via Clear chat only
+- **Pipeline guard in handleSummarize**: if `cleanup_status` is null and `cleaned_text` is absent → `confirm()` dialog "Run cleanup → summarize pipeline?"; on confirm → `handleCleanup()` + `autoSummarizeAfterCleanupRef = true`; when cleanup reaches `done` → auto-starts summary without switching to Cleaned tab
+- **Behavior docs**: `docs/system-behavior.md` — Mermaid diagrams: Activity (full pipeline), StateDiagram × 3 (Task / Cleanup / Summary), StateDiagram (ResultPage UI), dependency graph
+
+#### Epic 36 ✅ — Frontend Redesign + UX Fixes (20.06.2026)
+- **Tailwind CSS v4.3.1** + `@tailwindcss/vite`, `@theme inline` CSS-based config, MD3 tokens, Material Symbols Outlined, `.dark` class dark mode. All 8 pages rebuilt.
+- **Boxed Layout**: toggle in Settings → General → Display (ARIA switch, left-aligned). `CustomEvent<boolean>('yt-boxed-layout-changed')` → App.tsx listener. Box: `max-w-[1600px] rounded-[32px] shadow-2xl`. Bg via inline `style` with React `theme` state (light: `#e2e8f0→#cbd5e1`, dark: `#3f3f46→#27272a`). Note: Tailwind v4 `dark:from-*/to-*` don't work at runtime — use inline style.
+- **Queue `force=true` bug fix**: ResultPage `queueBulkAdd` calls passed `force=false` (default) → existing videos silently skipped as duplicates. All 4 calls now `force=true`: `handleCleanup`, `handleSummarize` (both paths), `handleMindmap`.
+- **Chat bar**: floating centered (`fixed bottom-6 left-0 md:left-64 right-0`), inner `max-w-[1200px] mx-auto flex justify-center` + `max-w-2xl` → aligns with content card in both normal and boxed layout. `rounded-2xl shadow-2xl backdrop-blur-md`.
+- **Mind Map tab**: `'mindmap'` added to `Tab` type. Full tab (`subtitles | cleaned | summary | mind map | chat`). Actions bar: `Generate mind map` / `Regenerate mind map` button (`account_tree` icon). Empty state with large icon. `mindmapEnabled` toggle removed entirely.
+- **MD toggle**: removed from tab header toolbar. Now lives as small pill (`px-2 py-0.5 text-[10px]`) inside content area of Summary and Cleaned tabs (`flex justify-end mb-2`). Chat assistant messages always render ReactMarkdown (no toggle there).
+
+#### Epic 25 ✅ — Chapter Heading Preservation & Rendering
+- `text_cleaner.py`: paragraphs starting with `## ` → bypass LLM entirely, pass through unchanged
+- System prompts updated in `text_cleaner.py` + `text_summarizer.py` (single-pass, MAP, REDUCE, extract): instruct model to preserve `## ` headings and place blank lines before/after them
+- `services/text_utils.py`: `normalize_chapter_headings(text)` — post-processes all summarizer outputs to guarantee `\n\n` around every `## ` marker; splits heading from body via newline / sentence-break / 120-char word-boundary heuristic; applied in `_single_pass`, `_map_reduce` final, `extract_notes` join
+- `renderText()` moved to `src/utils/renderText.tsx` (shared by ResultPage + BenchmarkPage): pre-normalizes incoming text client-side (rescues legacy DB rows), renders `## ` blocks as `<h3 class="chapter-heading">` + `<p class="text-paragraph">`; handles `## Heading\nbody` (single newline) and inline `## ` (no newline) via same heuristic split
+
+### 🔄 Phase 2: Summarization Quality
+
+#### Processing mode matrix
+
+Video content type → auto-selected mode. Type is determined by `len(text)` and `has_chapters` (= `bool(video.chapters)` from yt-dlp metadata).
+
+| Type label | Condition | Mode | Status |
+|---|---|---|---|
+| 📄 Short | text < 24K | single-pass | ✅ |
+| 📑 Long | text ≥ 24K, no chapters | map-reduce | ✅ |
+| 📚 Long Structured | text ≥ 24K, has chapters | full_extract | ✅ Epic 27 |
+| 📕 XL | text > 50K, no chapters | hierarchical map-reduce | 🔵 Epic 18 |
+
+**Auto-select rules** (in order) in `api.py _run_summary()`:
+
+1. `force_map_reduce=true` in `app_settings` → map-reduce (override)
+2. `has_chapters AND len(text) ≥ MAP_REDUCE_THRESHOLD` → `extract_notes()` (full_extract, no REDUCE)
+3. `len(text) ≥ MAP_REDUCE_THRESHOLD` → `summarize_text(force_map_reduce=true)` (map-reduce)
+4. Default → `summarize_text()` single-pass
+
+`MAP_REDUCE_THRESHOLD = 24_000` in `text_summarizer.py`. Type labels surfaced on the History page as a neutral badge (unified style, no per-type colors).
+- History page also shows two stage checkmarks per row: ✓ AI Cleanup / ✓ Summary — grey = not run, green (`--ok`) = has content. Backend `get_history()` returns `has_cleaned` + `has_summary` booleans based on presence of `cleaned_text` / `summary_text` in DB.
+
+#### Epic 17 ✅ — Map-Reduce Summarization
+- `text_summarizer.py`: `_split_into_chunks()` (3K char chunks with overlap) → MAP per chunk → REDUCE all summaries
+- `MAP_REDUCE_THRESHOLD = 24_000` — texts above this use map-reduce
+- `force_map_reduce` flag in `app_settings` for testing
+- Live chunk progress via `_SUMMARY_PROGRESS[video_id]` dict, injected into `GET /api/result` response
+- Settings → Summarization: Map-Reduce sub-section has Step 1 (Extract) / Step 2 (Combine) as horizontal tabs (no scroll); shared model selector above tabs
+- Result page meta two-row layout: Row 1 = video info (Channel, Duration, Language, Characters, Saved) with `•` separators and `title` tooltips; Row 2 = stage info (timing, model, method, stats, finish timestamp) — only shown when relevant tab active. CSS: `.meta-row`, `.meta-row--stage`, `.meta-chip`, `.meta-sep`, `.meta-label`
+- Method shown in stage row: "Single Pass", "Map-Reduce · N chunks", "Full Extract · N chapters"; Cleaned tab shows "AI Cleanup"
+- `cleanup_finished_at` + `summary_finished_at` returned by `get_result()` and shown at end of stage row
+- Date format: `DD.MM.YYYY, HH:MM` (locale-independent `formatDate()` in ResultPage)
+
+#### Epic 27 ✅ — Full Extract (No-Reduce)
+- `text_summarizer.py`: `_split_by_chapter_headings()` splits text by `## ` markers; `extract_notes()` processes each section independently, no REDUCE step
+- Prompt: "preserve ALL facts, restructure for clarity only, do not compress"
+- Fallback on LLM failure per section: raw content used instead of aborting
+- `api.py`: auto-selected when `has_chapters AND len(text) ≥ 24K AND NOT force_map_reduce`
+- `summary_mode = "full_extract"` stored in DB; frontend shows "Full Extract · N chapters" in meta
+- Progress: "chapter N / M" label (vs "chunk N / M" for map-reduce)
+
+### ✅ Phase 3: Speech-to-Text
+
+#### Epic 30 ✅ — STT Service Layer
+- `services/transcriber.py`: engine-agnostic API — `transcribe(audio_path, *, language, model, device, cache_path, on_progress)` → `TranscriptionResult(segments, detected_language, success, error_message)`
+- faster-whisper first engine; graceful `ImportError` if not installed
+- `subtitle_source` column in `subtitles_formatted` (`'captions'` | `'transcript'`) + `_migrate_db` entry
+- `app_settings` seeded with `stt_engine`, `stt_model`, `stt_device`, `stt_cache_path`
+- `GET /api/stt/models` — model catalog with `downloaded` flag (disk scan)
+- `POST /api/stt/models/{name}/download` + `GET .../download/status` — background download with progress
+- `DELETE /api/stt/models/{name}` — removes model files
+- Settings → STT tab: model cards with Download/Delete and progress bar
+
+#### Epic 31 ✅ — YouTube/URL Audio Transcription
+- `subtitle_extractor.py`: `AudioExtractionResult` dataclass + `extract_audio(url, output_dir, ytdlp_path, cookies_path)` — yt-dlp `-x --audio-format mp3 --print-json`
+- `queue_service.py`: `_run_transcribe()` — downloads audio to tempfile → faster-whisper → `SubtitleEntry` list → `complete_task(subtitle_source='transcript')`
+- Queue worker: `"transcribe"` handled before `"extract"` (mutually exclusive alternatives)
+- `video_service.py`: `complete_task()` accepts `subtitle_source: str | None`; `get_result()` returns it
+- `api.ts`: `subtitle_source` field in `ResultResponse`
+- `HomePage.tsx`: "Use speech-to-text (Whisper)" checkbox; `resolveStages(preset, useStt)` swaps `extract→transcribe`
+
+#### Epic 32 ✅ — Local File Upload
+- `POST /api/process/file` — multipart endpoint (`file: UploadFile`, `language: Form`)
+- Supported: `.mp4 .mkv .avi .mov .webm .mp3 .wav .m4a .ogg .flac .aac .opus .wma`
+- Files saved to `data/uploads/{uuid12}{ext}`; `local_video_id = "file-{uuid[:8]}"` (no collision with YouTube 11-char IDs)
+- `_run_transcribe_file()` background task: transcribes via faster-whisper, builds `VideoMetadata(video_id=local_video_id, title=filename)`, calls `complete_task`
+- Direct task flow (not queue) — queue uses `extract_video_id()` which rejects `local://` URLs
+- `api.ts`: `processFile(file, language)` fetch wrapper
+- `HomePage.tsx`: Local File tab with drag-and-drop zone, language selector, "Upload & Transcribe" button
+
+#### Epic 41 ✅ — STT Configuration & File Management (25.10.2026)
+- **yt-dlp bundled mode**: `_ytdlp_cmd(ytdlp_path)` in `subtitle_extractor.py` — returns `[sys.executable, "-m", "yt_dlp"]` when `ytdlp_path=None`, else `[ytdlp_path]`. No config required in Docker.
+- **Settings → General yt-dlp toggle**: OFF = bundled (recommended), ON = custom path. Version chip shows installed version. "Update" button polls `POST /api/settings/update-ytdlp` (pip install -U yt-dlp) with progress.
+- **`GET /api/settings/ytdlp-version`** + **`POST /api/settings/update-ytdlp`** endpoints
+- **`PUT /api/settings/app` fix**: now uses `model_fields_set` to allow explicit `null` values (e.g. clearing `ytdlp_path` to switch to bundled mode)
+- **Settings → File Storage tab**: `GET /api/settings/storage` (file count + MB/GB), `DELETE /api/settings/storage/uploads` (clear all), auto-delete policy toggle (immediate | after_days), days selector
+- `app_settings` new keys: `upload_auto_delete`, `upload_auto_delete_mode`, `upload_auto_delete_days`
+- `_run_transcribe_file()` checks `upload_auto_delete=immediate` → deletes file after transcription
+- `_cleanup_uploads_on_start()` called from `lifespan` — removes stale files if `mode=after_days`
+- **CUDA detection fix**: `_resolve_device()` in `transcriber.py` now uses `ctranslate2.get_cuda_device_count()` (was `torch`, which is not a dependency)
+- **Graceful CUDA fallback**: if `WhisperModel(device="cuda")` raises (e.g. missing `cublas64_12.dll`), retries with `device="cpu", compute_type="int8"` automatically
+- `requirements.txt`: pinned `av>=11,<19` (av-19 removed `metadata_errors` param used by faster-whisper)
+
+#### Epic 42 ✅ — STT Progress, Transcription Timing & Source Badges (25.10.2026)
+- **STT progress on ProcessingPage**: `on_progress` callback wired in `queue_service._run_transcribe()` → `_QUEUE_PROGRESS[item_id]` updated with "segment N…". `_FILE_TASK_PROGRESS[task_id]` for direct file uploads. `GET /api/status/{task_id}` returns `progress_text` field. ProcessingPage polls and shows live segment counter.
+- **Transcription timing**: `transcription_started_at` + `transcription_finished_at` columns on `subtitles_formatted` (migration in `_migrate_db`). `complete_task()` accepts `transcription_started_at`. `get_result()` computes `transcription_duration_seconds`. ResultPage Subtitles tab meta ribbon: "Transcribed in X:XX" when `subtitle_source === 'transcript'`.
+- **Source badge in History**: `get_history()` returns `subtitle_source` + `url` per item. `HistoryPage`: `SourceBadge` component — shows blue **STT** badge with `movie` (video) or `audio_file` (audio) icon for `transcript` source records. YouTube-extracted videos show no badge.
+
+#### Epic 43 ✅ — Local File Result Page (25.10.2026)
+- **Whisper model selector** inline in Subtitles tab actions bar (only shows for `subtitle_source=transcript`). Lists only downloaded models. Auto-saves to `stt_model` app setting on change — same pattern as cleanup/summary model selectors.
+- **Irrelevant buttons hidden** for local files: "Open video" and "Benchmark" not shown when `subtitle_source=transcript`.
+- **Re-transcribe**: "Re-extract" renamed to "Re-transcribe" for local file results. Confirm dialog explains original file requirement.
+- **Backend `_run_reextract` local path**: if URL starts with `local://`, finds the audio file via `glob(uploads_dir/{uuid_prefix}*)` (uuid_prefix = `video_id[5:]`), re-runs Whisper with selected model (or `stt_model` setting as fallback). `replace_subtitles_after_reextract` extended with `transcription_started_at` + `subtitle_source` params.
+- **Live re-transcription progress**: `_RETRANSCRIBE_PROGRESS: dict[str, str]` in `api.py` — updated from `on_progress` callback in the local re-extract path, returned in `GET /api/result/{video_id}` as `retranscribe_progress`. ResultPage shows animated "segment N…" text next to Re-transcribe button during operation.
+- `reextractSubtitles` in `api.ts` accepts optional `model` parameter passed to backend.
+
+#### Epic 46 ✅ — Video Download (30.10.2026)
+- **`GET /api/result/{video_id}/download?format=mp4|mp3&quality=best|1080p|720p|480p`** — runs yt-dlp in a temp dir, returns `FileResponse` with `BackgroundTask(shutil.rmtree, tmpdir)` for cleanup. Timeout 900s.
+- **MP4 format spec**: `bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best` (best); per-height spec for specific quality. MP3 uses `--audio-quality 320K/192K/128K`.
+- **`_ytdlp_cmd`** imported from `subtitle_extractor` — reused for bundled/custom yt-dlp path. Cookies applied when `cookies_path` is set.
+- **`app_settings` new keys**: `download_default_format` (mp4), `download_default_quality` (best) — seeded in `_seed_app_settings`, exposed in `AppSettingsRequest` model.
+- **Settings → General** "Download defaults" section: FORMAT and QUALITY dropdowns, saved with the main Save button.
+- **ResultPage**: Download button + MP4/MP3 format selector + quality selector in the top actions bar. Hidden for local file (STT) results (`isLocalFile`). `downloadVideo()` in `api.ts` uses fetch+blob approach to trigger browser save dialog.
+- **Home page auto-download**: "Also download when result is ready" checkbox (localStorage `yt_autoDownload_enabled`). When checked, stores `{format, quality}` in `yt_autoDownload` key before navigating. ResultPage reads it on first load (when `formatted_text` available), triggers `downloadVideo()`, clears the key.
+- Download state: `isDownloading`, `downloadError` in ResultPage; error banner dismissible.
+
+---
+
+## Running Locally
+
+### Backend
+```bash
+cd app/backend
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
+
+### Frontend
+```bash
+cd app/frontend
+npm install
+npm run dev        # → http://localhost:3000
+```
+
+### Docker (both services)
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+### Required: YouTube cookies
+Export from Chrome via "Get cookies.txt LOCALLY" extension → save to `app/data/www.youtube.com_cookies.txt`.
+Set `COOKIES_PATH` in `.env`. Re-export if you get 429 or sign-in errors.
+
+---
+
+## Project Structure
+
+```
+yt-summarizer/
+├── app/
+│   ├── backend/
+│   │   ├── main.py                      # App entry, DB init, router registration
+│   │   ├── config.py                    # Settings via pydantic-settings (.env)
+│   │   ├── models/
+│   │   │   ├── database.py              # Async engine, session factory, init_db()
+│   │   │   └── models.py                # ORM: Video, SubtitleRaw, SubtitleFormatted, PipelineSettings, AppSetting, ProcessingTask, BenchmarkRun, ProcessingQueueItem
+│   │   ├── routers/api.py               # REST endpoints
+│   │   └── services/
+│   │       ├── subtitle_extractor.py    # yt-dlp wrapper, VTT parser, error classification
+│   │       ├── text_formatter.py        # Overlap dedup + time-gap paragraph splitting
+│   │       ├── text_cleaner.py          # Ollama HTTP client, paragraph-by-paragraph LLM cleanup
+│   │       ├── text_summarizer.py       # Ollama HTTP client, single-pass + map-reduce + full_extract (extract_notes)
+│   │       ├── text_mindmapper.py       # Ollama HTTP client, LLM mindmap generation (streaming)
+│   │       ├── queue_service.py         # processing_queue CRUD + asyncio worker (sequential, stuck-item recovery)
+│   │       └── video_service.py         # DB CRUD, task lifecycle, pipeline settings CRUD
+│   ├── frontend/
+│   │   ├── src/
+│   │   │   ├── api.ts                   # Typed fetch wrappers for all endpoints
+│   │   │   ├── App.tsx                  # Routes
+│   │   │   ├── index.css                # All styles
+│   │   │   ├── components/StatusBar.tsx # Backend + Ollama health dots in nav
+│   │   │   ├── components/QueueBadge.tsx # Nav queue badge with active-count polling
+│   │   │   └── pages/                   # HomePage, ProcessingPage, ResultPage, HistoryPage, SettingsPage, QueuePage, BenchmarkPage, BenchmarksIndexPage
+│   │   ├── vite.config.ts               # Port 3000, proxy /api → localhost:8000
+│   │   └── Dockerfile                   # Multi-stage: Node builder → nginx
+│   └── data/
+│       ├── db/yt_summarizer.sqlite      # SQLite DB (auto-created, gitignored)
+│       └── www.youtube.com_cookies.txt  # YouTube cookies (gitignored)
+├── docs/
+│   ├── backlog/                         # Epics and user stories
+│   │   ├── BACKLOG.md
+│   │   └── epics/
+│   ├── requirements.md                  # Functional requirements (all phases)
+│   ├── effort-log.md                    # Session time log
+│   └── phase2-architecture.md           # LLM map-reduce design
+├── .env.example
+├── .gitignore
+├── CLAUDE.md
+├── docker-compose.yml
+├── docker-compose.dev.yml
+├── Makefile
+└── README.md
+```
+
+---
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/process` | Submit URL + language → returns task_id, video_id |
+| POST | `/api/process/file` | Upload local file (multipart: file + language) → returns task_id, video_id |
+| GET | `/api/status/{task_id}` | Poll status; returns `available_languages` on language error + `progress_text` for STT |
+| GET | `/api/result/{video_id}` | Formatted subtitle text + metadata + cleanup_status |
+| GET | `/api/history?page=N` | Paginated history (20 per page) |
+| DELETE | `/api/result/{video_id}` | Delete video + all related data |
+| POST | `/api/result/{video_id}/cleanup` | Trigger background AI cleanup |
+| DELETE | `/api/result/{video_id}/cleanup` | Cancel running cleanup |
+| POST | `/api/result/{video_id}/summary` | Trigger background summarization |
+| DELETE | `/api/result/{video_id}/summary` | Cancel running summarization |
+| GET | `/api/health` | `{backend: true, ollama: true/false}` |
+| GET | `/api/settings` | All settings: `{app, cleanup, summarization}` |
+| PUT | `/api/settings/app` | Save app settings (ollama_url, ytdlp_path, cookies_path) |
+| PUT | `/api/settings/{stage}` | Save pipeline settings for a stage |
+| DELETE | `/api/settings/{stage}` | Reset stage to hardcoded defaults |
+| GET | `/api/models` | Available Ollama models (live from Ollama) |
+| POST | `/api/settings/upload-cookies` | Upload cookies.txt file |
+| POST | `/api/history/delete-bulk` | Delete multiple videos by video_id list |
+| POST | `/api/queue/bulk` | Add URLs to processing queue (dedup, URL extraction from free-form lines) |
+| GET | `/api/queue` | All queue items ordered by sort_order + added_at |
+| GET | `/api/queue/counts` | Active item counts for nav badge |
+| DELETE | `/api/queue/all` | Clear all pending items |
+| DELETE | `/api/queue/failed` | Clear all failed items |
+| DELETE | `/api/queue/{id}` | Delete single pending item (409 if processing) |
+| GET | `/api/stt/models` | STT model catalog with `downloaded` flag |
+| POST | `/api/stt/models/{name}/download` | Start background model download |
+| GET | `/api/stt/models/{name}/download/status` | Poll download progress |
+| DELETE | `/api/stt/models/{name}` | Delete downloaded model files |
+| GET | `/api/settings/ytdlp-version` | Installed yt-dlp version string |
+| POST | `/api/settings/update-ytdlp` | Upgrade yt-dlp via pip in background |
+| GET | `/api/settings/storage` | Upload folder stats: file count + MB |
+| DELETE | `/api/settings/storage/uploads` | Clear all uploaded files |
+| POST | `/api/result/{video_id}/reextract` | Re-extract (YouTube) or re-transcribe (local file) subtitles |
+| GET | `/api/result/{video_id}/download` | Download video/audio via yt-dlp (`format`, `quality` query params) |
+
+---
+
+## Key Implementation Details
+
+**Single yt-dlp call**: `--print-json --write-subs --write-auto-subs --sub-lang {lang}` in one subprocess. Two separate calls trigger YouTube 429 rate limiting.
+
+**VTT rolling window**: YouTube auto-captions repeat timestamps with growing text. Keep longest text per timestamp group.
+
+**Overlap deduplication**: Sequential subtitle entries share text via suffix/prefix overlap — strip overlap before joining. Then group by ≥4 sec time gaps → paragraphs.
+
+**Task lifecycle**: `create_pending_task` creates `__pending__{video_id}` placeholder Video + task. On completion, `complete_task` detects existing video by `video_id` (not URL — handles youtu.be vs youtube.com), reassigns task FK, deletes placeholder. Must flush reassignment before delete to avoid ORM cascade nulling FK.
+
+**Language error UX**: When extraction fails with `LANGUAGE_NOT_AVAILABLE`, `available_languages` stored as JSON in `error_message`. Status endpoint parses and returns as separate field. Frontend shows quick-select buttons.
+
+**DB note**: `scalar_one_or_none()` on SubtitleFormatted/Video queries crashes when a video is reprocessed. Always use `.scalars().first()` with `.order_by(created_at.desc())`.
+
+**DB migrations**: No Alembic. `database.py` has `_migrate_db()` — checks `PRAGMA table_info` and runs `ALTER TABLE ... ADD COLUMN` for any new columns. Add entries there when extending the schema.
+
+**⚠️ DB backup rule**: Before ANY schema change (new column, new table, model change) — back up the database first:
+```bash
+copy data\db\yt_summarizer.sqlite data\db\yt_summarizer.sqlite.bak
+```
+Do this BEFORE restarting the backend with new model/migration code. No exceptions.
+
+**Ollama integration**: `text_cleaner.py` calls `POST {ollama_url}/api/chat`. First does a lightweight `GET /api/tags` to check availability — returns `None` silently if Ollama is down. `ollama_url` and model read from DB (`app_settings` + `pipeline_settings`) at request time — never from config. Same client reused for Phase 2 summarization.
+
+**App settings (single source of truth)**: `app_settings` table stores `ollama_url`, `ytdlp_path`, `cookies_path`. Seeded from `config.py` on first launch. After that, managed exclusively via web UI (Settings → General). `config.py` is infrastructure-only.
+
+**No model default**: `text_cleaner.py` has no fallback model. If model is null → cleanup returns None → status `failed`. User must select a model in Settings → AI Cleanup.
+
+**Cancel preserves text**: `reset_cleanup_status` / `reset_summary_status` reset only `status`, `started_at`, `finished_at`. `cleaned_text` / `summary_text` are never nulled on cancel — previous result stays visible.
+
+**Dedup on submit**: `POST /api/process` returns 409 `{video_id}` if video already processed — frontend redirects to `/result/{video_id}` silently. Bulk queue (`POST /api/queue/bulk`) checks both `videos` table and `processing_queue` (pending/processing) before insert; skips duplicates, returns `{added, invalid, duplicates}`.
+
+**URL extraction from free-form lines**: Both single and bulk endpoints strip surrounding text from each line using `https?://[^\s|"'<>]+` + trailing punctuation strip `[,;.:!?]+$`. Handles "URL | title", "title — URL", clipboard pastes from YouTube.
+
+**Queue as sole LLM path**: ALL LLM operations go through the queue — HomePage autoPipeline → `queueBulkAdd(["extract","cleanup","summary"])`; ResultPage buttons (Clean with AI / Summarize / Mind Map / pipeline guard) → `queueBulkAdd([url], [stage])`. Benchmark is the only exception. Ensures durability: restart resumes pending tasks automatically.
+
+**Queue worker**: `queue_service.py` — asyncio task started in `lifespan()`. Polls every 5s for `pending` items. Processes one item at a time. Supported stages: `extract`, `cleanup`, `summary`, `mindmap`. On restart, stuck `processing` items reset to `pending`. `video_id` stored at insert time for dedup. `_QUEUE_PROGRESS[item_id]` stores live progress text ("cleanup: paragraph 3/12") — returned via `get_queue()`, displayed in QueuePage banner + table row with active-stage highlighting. Per-item cancel Out of Scope; worker uses `is_cancelled=lambda: False`.
+
+---
+
+## Diagnostic Tools
+
+### `tools/debug_chapters.py`
+
+**Назначение**: проверить, на каком языке YouTube отдаёт заголовки глав через разные конфигурации yt-dlp, и подтвердить что описание видео является корректным источником.
+
+**Контекст**: создан в мае 2026 для диагностики проблемы — YouTube API всегда возвращает `info["chapters"]` на английском, независимо от кук, заголовков Accept-Language и player_client. Инструмент прогнал 6 конфигураций и подтвердил: description-таймкоды — единственный надёжный источник оригинального языка.
+
+**Когда использовать**:
+- Регрессия: заголовки глав снова на английском после обновления yt-dlp или изменений в YouTube
+- Новое гео/язык: проверить поведение для нового языка перед добавлением в систему
+- Отладка `[CHAPTER_SOURCE]` предупреждений в логе
+
+```bash
+python tools/debug_chapters.py "VIDEO_URL"
+python tools/debug_chapters.py "VIDEO_URL" "app/data/cookies.txt"
+```
+
+**Ожидаемый результат** для неанглоязычного видео: все 6 конфигураций → английские заголовки; блок "Description timecodes" → оригинальный язык.
+
+---
+
+## Documentation Update Checklist
+
+After every commit — пройти по списку и обновить релевантные файлы.
+
+| Файл | Когда обновлять |
+|------|-----------------|
+| `CLAUDE.md` | Изменилась архитектура, ключевые детали реализации, новые паттерны |
+| `docs/backlog/BACKLOG.md` | Новая фича, изменение статуса, known issue найден или закрыт |
+| `docs/backlog/epics/EPIC-NN.md` | Изменилось поведение конкретного эпика |
+| `docs/USER_GUIDE.md` | Изменилось пользовательское поведение, новые опции, новые предупреждения |
+| `docs/test-cases.md` | Новый сценарий, новый лог-тег, изменились критерии pass/fail |
+| `docs/system-behavior.md` | Изменилась логика pipeline, state machines, активность |
+| `README.md` | Изменились ключевые фичи, setup, позиционирование |
+| `docs/saas-transition.md` | Новое конкурентное наблюдение, стратегический инсайт *(gitignored)* |
+| **`docs/effort-log.md`** | **Всегда — в конце каждой сессии. Обязательно.** |
+
+**Правило**: если сомневаешься — обновляй. Документ проще поправить, чем восстанавливать контекст спустя месяц.
+
+---
+
+## Pre-release Checklist
+
+Before shipping to production, remove all debug `console.error` calls added across the frontend pages. They were added intentionally during development to surface API errors in the browser console. Search for `console.error` in `frontend/src/pages/` and `frontend/src/api.ts` and remove or replace with proper error reporting.
+
+---
+
+## References
+
+- **Functional Requirements**: `docs/requirements.md`
+- **Phase 2 LLM Architecture**: `docs/phase2-architecture.md`
+- **Effort Log**: `docs/effort-log.md`
+- **yt-dlp**: https://github.com/yt-dlp/yt-dlp
+- **FastAPI**: https://fastapi.tiangolo.com/
