@@ -37,35 +37,35 @@ Labels: `by-backend`, `reviewed` | Commit: `db66a96`
 
 ### Step 2 — Housekeeping (after step 1 is merged)
 
-**NS-06 — Commit untracked MCP server and tests**
+**NS-06 — Commit untracked MCP server and tests** ✅ Done · reviewed
 Origin: Owner, 2026-10-30 ("commit the untracked MCP server and tests"); fixes F6
 Value: Fresh clone works; `npm test` and MCP feature have coverage in git; agents in a worktree get the full codebase
-Fix: commit `app/mcp_server.py`, `app/tests/test_mcp_server.py`, `app/backend/tests/test_mindmap.py`, `app/frontend/src/__tests__/`, `vitest.config.ts`, `test-setup.ts`, `docs/guides/MCP_SETUP.md`
-Labels: `by-backend`, `by-mcp`, `by-frontend` | Status: 🔴 Open | Depends on: NS-07
+Fix: all files were already tracked — no commit needed
+Labels: `by-backend`, `by-mcp`, `by-frontend` | Note: files were already in git
 
-**NS-07 — Fix 2 failing backend tests**
+**NS-07 — Fix 2 failing backend tests** ✅ Done · reviewed
 Origin: Owner, 2026-10-30 ("fix the 2 failing tests"); fixes F14 (partial)
 Value: Suite goes green; regressions surface in CI, not in production
-Fix: `test_transcriber.py:59` and `:241` — replace hard-coded `11` with `len(MODEL_CATALOG) + len(QWEN_CATALOG)`
-Labels: `by-backend` | Status: 🔴 Open | Blocks: NS-06
+Fix: `test_transcriber.py:59` and `:241` — replaced hard-coded `11` with `len(MODEL_CATALOG) + len(QWEN_CATALOG)`
+Labels: `by-backend` | Commit: `e8be8a1`
 
-**NS-08 — One launcher, one port; scope kill-backend.bat**
+**NS-08 — One launcher, one port; scope kill-backend.bat** ✅ Done · local only
 Origin: Owner, 2026-10-30 ("one launcher and one port, kill-backend.bat must not kill every uvicorn"); fixes F12
 Value: Start/stop scripts no longer kill other projects' services; one `make dev` starts everything
-Fix: record backend PID in a pidfile; kill-backend.bat kills only that PID tree; remove or fix `start-backend.bat` (port 8000) and `start.sh` (port 8000); leave `start.vbs` and `Makefile` as the two launchers; align on port 9010
-Labels: `by-backend`, `by-cto` | Status: 🔴 Open
+Fix: launcher files updated locally (port 8000→9010, PID file in `kill-backend.bat`/`start.vbs`/`start.sh`) — no git record since all 4 launcher files are gitignored
+Labels: `by-backend`, `by-cto` | Note: no commit — launcher files are gitignored
 
-**NS-09 — Reset stale "processing" on startup**
+**NS-09 — Reset stale "processing" on startup** ✅ Done · reviewed
 Origin: Owner, 2026-10-30 ("stale processing status reset on start"); fixes F7
 Value: After server restart, UI no longer polls forever; Re-extract and Cancel work again
-Fix: at startup (`main.py`) reset all rows where `cleanup_status`, `summary_status`, or `mindmap_status` = `'processing'` to `NULL` (or `'failed'`); wrap each `_run_*` in try/except/finally that writes `'failed'`
-Labels: `by-backend` | Status: 🔴 Open
+Fix: startup in `main.py` resets all `processing` rows to `NULL`; try/except/finally on 3 stage functions sets `'failed'`
+Labels: `by-backend` | Commit: `729218e`
 
-**NS-10 — Fix .env loading path**
+**NS-10 — Fix .env loading path** ✅ Done · reviewed
 Origin: Owner, 2026-10-30 (".env loading"); fixes F16
 Value: Settings in `.env` actually apply; CORS and `OLLAMA_URL` become configurable without code changes
-Fix: `config.py:24` — change `env_file = "../.env"` to `env_file = Path(__file__).resolve().parents[2] / ".env"`
-Labels: `by-backend` | Status: 🔴 Open
+Fix: `config.py` — `env_file = Path(__file__).resolve().parents[2] / ".env"`; added `extra="ignore"` (`.env` contains non-backend keys `FRONTEND_PORT`, `BACKEND_HOST`)
+Labels: `by-backend` | Commit: `c9b0a92`
 
 ---
 
