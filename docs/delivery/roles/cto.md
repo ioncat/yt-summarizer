@@ -4,7 +4,7 @@
 
 - Tracker and labels: `by-backend`, `by-frontend`, `by-mcp`, `by-cto`, `reviewed`, `needs-owner`; board is `docs/delivery/backlog/BACKLOG.md`.
 - Owner's panel: none.
-- Pushing: only under `docs/team/WORK_MODES.md`; run the personal-data search per commit before each push.
+- Pushing: the owner pushes (CTO has no git credentials for the remote). CTO signals readiness: no secrets in commits, clean tree, green tests, reviews done.
 - Token spending: no separate limit; ask the owner before bulk model runs (multiple videos, benchmarks) and before any paid external API call.
 
 ## First day (New Start, 2026-10-31)
