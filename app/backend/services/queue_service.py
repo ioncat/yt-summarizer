@@ -329,41 +329,47 @@ async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
     from services.text_cleaner import clean_text
     from services.video_service import (
         get_result, get_stage_settings, get_app_setting,
-        set_cleanup_processing, finish_cleanup,
+        set_cleanup_processing, finish_cleanup, fail_cleanup_stage,
     )
 
-    async with AsyncSessionLocal() as db:
-        fmt = await get_result(db, yt_video_id)
-        if not fmt or not fmt.get("formatted_text"):
-            logger.warning("Queue cleanup: no formatted_text for %s, skipping", yt_video_id)
-            return
-        formatted_text = fmt["formatted_text"]
-        stage = await get_stage_settings(db, "cleanup")
-        ollama_url = await get_app_setting(db, "ollama_url")
-        parallel_workers = int(await get_app_setting(db, "parallel_workers") or "1")
-        model = stage.get("model")
-        if not model:
-            logger.warning("Queue cleanup: no cleanup model configured, skipping cleanup for %s", yt_video_id)
-            return
-        await set_cleanup_processing(db, yt_video_id, model=model)
+    try:
+        async with AsyncSessionLocal() as db:
+            fmt = await get_result(db, yt_video_id)
+            if not fmt or not fmt.get("formatted_text"):
+                logger.warning("Queue cleanup: no formatted_text for %s, skipping", yt_video_id)
+                return
+            formatted_text = fmt["formatted_text"]
+            stage = await get_stage_settings(db, "cleanup")
+            ollama_url = await get_app_setting(db, "ollama_url")
+            parallel_workers = int(await get_app_setting(db, "parallel_workers") or "1")
+            model = stage.get("model")
+            if not model:
+                logger.warning("Queue cleanup: no cleanup model configured, skipping cleanup for %s", yt_video_id)
+                return
+            await set_cleanup_processing(db, yt_video_id, model=model)
 
-    def on_cleanup_progress(done: int, total: int) -> None:
-        _QUEUE_PROGRESS[item_id] = f"cleanup: paragraph {done}/{total}"
+        def on_cleanup_progress(done: int, total: int) -> None:
+            _QUEUE_PROGRESS[item_id] = f"cleanup: paragraph {done}/{total}"
 
-    started_at = _dt.utcnow()
-    cleaned = await clean_text(
-        formatted_text,
-        system_prompt=stage.get("system_prompt"),
-        user_prompt_template=stage.get("user_prompt_template"),
-        model=model,
-        ollama_url=ollama_url,
-        is_cancelled=lambda: False,
-        on_progress=on_cleanup_progress,
-        parallel_workers=parallel_workers,
-    )
+        started_at = _dt.utcnow()
+        cleaned = await clean_text(
+            formatted_text,
+            system_prompt=stage.get("system_prompt"),
+            user_prompt_template=stage.get("user_prompt_template"),
+            model=model,
+            ollama_url=ollama_url,
+            is_cancelled=lambda: False,
+            on_progress=on_cleanup_progress,
+            parallel_workers=parallel_workers,
+        )
 
-    async with AsyncSessionLocal() as db:
-        await finish_cleanup(db, yt_video_id, cleaned, started_at=started_at)
+        async with AsyncSessionLocal() as db:
+            await finish_cleanup(db, yt_video_id, cleaned, started_at=started_at)
+    except Exception:
+        logger.exception("Queue cleanup: stage failed for %s", yt_video_id)
+        async with AsyncSessionLocal() as db:
+            await fail_cleanup_stage(db, yt_video_id)
+        raise
 
 
 async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
@@ -372,72 +378,78 @@ async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
     from services.text_summarizer import summarize_text, extract_notes, MAP_REDUCE_THRESHOLD
     from services.video_service import (
         get_result, get_stage_settings, get_app_setting,
-        set_summary_processing, finish_summary,
+        set_summary_processing, finish_summary, fail_summary_stage,
     )
 
-    async with AsyncSessionLocal() as db:
-        fmt = await get_result(db, yt_video_id)
-        if not fmt:
-            return
-        source_text = fmt.get("cleaned_text") or fmt.get("formatted_text")
-        if not source_text:
-            logger.warning("Queue summary: no source text for %s, skipping", yt_video_id)
-            return
-        language = fmt.get("language")
-        stage = await get_stage_settings(db, "summarization")
-        extract_stage = await get_stage_settings(db, "summarization_extract")
-        combine_stage = await get_stage_settings(db, "summarization_combine")
-        ollama_url = await get_app_setting(db, "ollama_url")
-        force_map_reduce = (await get_app_setting(db, "force_map_reduce") or "false") == "true"
-        parallel_workers = int(await get_app_setting(db, "parallel_workers") or "1")
-        model = stage.get("model")
-        if not model:
-            logger.warning("Queue summary: no summary model configured, skipping for %s", yt_video_id)
-            return
-        await set_summary_processing(db, yt_video_id, model=model)
+    try:
+        async with AsyncSessionLocal() as db:
+            fmt = await get_result(db, yt_video_id)
+            if not fmt:
+                return
+            source_text = fmt.get("cleaned_text") or fmt.get("formatted_text")
+            if not source_text:
+                logger.warning("Queue summary: no source text for %s, skipping", yt_video_id)
+                return
+            language = fmt.get("language")
+            stage = await get_stage_settings(db, "summarization")
+            extract_stage = await get_stage_settings(db, "summarization_extract")
+            combine_stage = await get_stage_settings(db, "summarization_combine")
+            ollama_url = await get_app_setting(db, "ollama_url")
+            force_map_reduce = (await get_app_setting(db, "force_map_reduce") or "false") == "true"
+            parallel_workers = int(await get_app_setting(db, "parallel_workers") or "1")
+            model = stage.get("model")
+            if not model:
+                logger.warning("Queue summary: no summary model configured, skipping for %s", yt_video_id)
+                return
+            await set_summary_processing(db, yt_video_id, model=model)
 
-    use_full_extract = (
-        not force_map_reduce
-        and bool(fmt.get("chapters"))
-        and len(source_text) >= MAP_REDUCE_THRESHOLD
-    )
-
-    def on_summary_progress(done: int, total: int) -> None:
-        label = "chapter" if use_full_extract else "chunk"
-        _QUEUE_PROGRESS[item_id] = f"summary: {label} {done}/{total}"
-
-    started_at = _dt.utcnow()
-    if use_full_extract:
-        summary, mode, chunks_count = await extract_notes(
-            source_text,
-            model=model,
-            ollama_url=ollama_url,
-            is_cancelled=lambda: False,
-            on_progress=on_summary_progress,
-            language=language,
-            parallel_workers=parallel_workers,
-        )
-    else:
-        summary, mode, chunks_count = await summarize_text(
-            source_text,
-            system_prompt=stage.get("system_prompt"),
-            user_prompt_template=stage.get("user_prompt_template"),
-            model=model,
-            ollama_url=ollama_url,
-            is_cancelled=lambda: False,
-            force_map_reduce=force_map_reduce,
-            extract_prompt=extract_stage.get("user_prompt_template"),
-            combine_prompt=combine_stage.get("user_prompt_template"),
-            on_progress=on_summary_progress,
-            language=language,
-            parallel_workers=parallel_workers,
+        use_full_extract = (
+            not force_map_reduce
+            and bool(fmt.get("chapters"))
+            and len(source_text) >= MAP_REDUCE_THRESHOLD
         )
 
-    async with AsyncSessionLocal() as db:
-        await finish_summary(
-            db, yt_video_id, summary, mode=mode,
-            chunks_count=chunks_count, started_at=started_at,
-        )
+        def on_summary_progress(done: int, total: int) -> None:
+            label = "chapter" if use_full_extract else "chunk"
+            _QUEUE_PROGRESS[item_id] = f"summary: {label} {done}/{total}"
+
+        started_at = _dt.utcnow()
+        if use_full_extract:
+            summary, mode, chunks_count = await extract_notes(
+                source_text,
+                model=model,
+                ollama_url=ollama_url,
+                is_cancelled=lambda: False,
+                on_progress=on_summary_progress,
+                language=language,
+                parallel_workers=parallel_workers,
+            )
+        else:
+            summary, mode, chunks_count = await summarize_text(
+                source_text,
+                system_prompt=stage.get("system_prompt"),
+                user_prompt_template=stage.get("user_prompt_template"),
+                model=model,
+                ollama_url=ollama_url,
+                is_cancelled=lambda: False,
+                force_map_reduce=force_map_reduce,
+                extract_prompt=extract_stage.get("user_prompt_template"),
+                combine_prompt=combine_stage.get("user_prompt_template"),
+                on_progress=on_summary_progress,
+                language=language,
+                parallel_workers=parallel_workers,
+            )
+
+        async with AsyncSessionLocal() as db:
+            await finish_summary(
+                db, yt_video_id, summary, mode=mode,
+                chunks_count=chunks_count, started_at=started_at,
+            )
+    except Exception:
+        logger.exception("Queue summary: stage failed for %s", yt_video_id)
+        async with AsyncSessionLocal() as db:
+            await fail_summary_stage(db, yt_video_id)
+        raise
 
 
 async def _run_transcribe(url: str, language: str = "auto", item_id: int = 0) -> dict[str, Any]:
@@ -539,41 +551,47 @@ async def _run_mindmap_stage(yt_video_id: str, item_id: int) -> None:
     from services.text_mindmapper import generate_mindmap
     from services.video_service import (
         get_result, get_stage_settings, get_app_setting,
-        start_mindmap_generation, finish_mindmap,
+        start_mindmap_generation, finish_mindmap, fail_mindmap_stage,
     )
 
-    async with AsyncSessionLocal() as db:
-        result = await get_result(db, yt_video_id)
-        if not result:
-            logger.warning("Queue mindmap: video %s not found", yt_video_id)
-            return
-        text = result.get("summary_text") or result.get("cleaned_text") or result.get("formatted_text")
-        if not text:
-            logger.warning("Queue mindmap: no text for %s, skipping", yt_video_id)
-            return
-        stage = await get_stage_settings(db, "summarization")
-        ollama_url = await get_app_setting(db, "ollama_url")
-        model = stage.get("model") if stage else None
-        if not ollama_url or not model:
-            logger.warning("Queue mindmap: missing ollama_url or model, skipping for %s", yt_video_id)
-            return
-        lang_code = result.get("language") or "ru"
-        lang_map = {"ru": "Russian", "en": "English", "uk": "Ukrainian", "de": "German",
-                    "fr": "French", "es": "Spanish", "zh": "Chinese", "ja": "Japanese"}
-        language = lang_map.get(lang_code.lower(), lang_code)
-        await start_mindmap_generation(db, yt_video_id)
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await get_result(db, yt_video_id)
+            if not result:
+                logger.warning("Queue mindmap: video %s not found", yt_video_id)
+                return
+            text = result.get("summary_text") or result.get("cleaned_text") or result.get("formatted_text")
+            if not text:
+                logger.warning("Queue mindmap: no text for %s, skipping", yt_video_id)
+                return
+            stage = await get_stage_settings(db, "summarization")
+            ollama_url = await get_app_setting(db, "ollama_url")
+            model = stage.get("model") if stage else None
+            if not ollama_url or not model:
+                logger.warning("Queue mindmap: missing ollama_url or model, skipping for %s", yt_video_id)
+                return
+            lang_code = result.get("language") or "ru"
+            lang_map = {"ru": "Russian", "en": "English", "uk": "Ukrainian", "de": "German",
+                        "fr": "French", "es": "Spanish", "zh": "Chinese", "ja": "Japanese"}
+            language = lang_map.get(lang_code.lower(), lang_code)
+            await start_mindmap_generation(db, yt_video_id)
 
-    _QUEUE_PROGRESS[item_id] = "mindmap: generating…"
-    mindmap_md = await generate_mindmap(
-        text=text,
-        ollama_url=ollama_url,
-        model=model,
-        language=language,
-        is_cancelled=lambda: False,
-    )
+        _QUEUE_PROGRESS[item_id] = "mindmap: generating…"
+        mindmap_md = await generate_mindmap(
+            text=text,
+            ollama_url=ollama_url,
+            model=model,
+            language=language,
+            is_cancelled=lambda: False,
+        )
 
-    async with AsyncSessionLocal() as db:
-        await finish_mindmap(db, yt_video_id, mindmap_md)
+        async with AsyncSessionLocal() as db:
+            await finish_mindmap(db, yt_video_id, mindmap_md)
+    except Exception:
+        logger.exception("Queue mindmap: stage failed for %s", yt_video_id)
+        async with AsyncSessionLocal() as db:
+            await fail_mindmap_stage(db, yt_video_id)
+        raise
 
 
 # ---------------------------------------------------------------------------

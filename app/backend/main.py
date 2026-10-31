@@ -45,6 +45,7 @@ for _name in ("sqlalchemy.engine", "sqlalchemy.engine.Engine", "sqlalchemy.pool"
 async def lifespan(app: FastAPI):
     from services.queue_service import queue_worker
     await init_db()
+    await _reset_stale_statuses()
     await _cleanup_uploads_on_start()
     worker_task = asyncio.create_task(queue_worker())
     yield
@@ -53,6 +54,34 @@ async def lifespan(app: FastAPI):
         await worker_task
     except asyncio.CancelledError:
         pass
+
+
+async def _reset_stale_statuses() -> None:
+    """On startup, reset pipeline statuses stuck at 'processing' from a previous crash."""
+    try:
+        from models.database import AsyncSessionLocal
+        from sqlalchemy import text
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                text("""
+                    UPDATE subtitles_formatted
+                    SET
+                        cleanup_status = CASE WHEN cleanup_status = 'processing' THEN NULL ELSE cleanup_status END,
+                        summary_status = CASE WHEN summary_status = 'processing' THEN NULL ELSE summary_status END,
+                        mindmap_status = CASE WHEN mindmap_status = 'processing' THEN NULL ELSE mindmap_status END
+                    WHERE cleanup_status = 'processing'
+                       OR summary_status = 'processing'
+                       OR mindmap_status = 'processing'
+                """)
+            )
+            if result.rowcount:
+                logging.getLogger("api").warning(
+                    "startup: reset %d row(s) with stale 'processing' status in subtitles_formatted",
+                    result.rowcount,
+                )
+            await db.commit()
+    except Exception as exc:
+        logging.getLogger("api").warning("startup: stale-status reset failed: %s", exc)
 
 
 async def _cleanup_uploads_on_start() -> None:

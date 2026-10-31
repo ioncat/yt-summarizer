@@ -727,6 +727,36 @@ async def reset_mindmap_status(db: AsyncSession, video_id: str) -> None:
     await db.commit()
 
 
+async def fail_cleanup_stage(db: AsyncSession, video_id: str) -> None:
+    fmt_id = await _get_fmt_id(db, video_id)
+    if fmt_id:
+        await db.execute(
+            text("UPDATE subtitles_formatted SET cleanup_status = 'failed' WHERE id = :id"),
+            {"id": fmt_id},
+        )
+        await db.commit()
+
+
+async def fail_summary_stage(db: AsyncSession, video_id: str) -> None:
+    fmt_id = await _get_fmt_id(db, video_id)
+    if fmt_id:
+        await db.execute(
+            text("UPDATE subtitles_formatted SET summary_status = 'failed' WHERE id = :id"),
+            {"id": fmt_id},
+        )
+        await db.commit()
+
+
+async def fail_mindmap_stage(db: AsyncSession, video_id: str) -> None:
+    fmt_id = await _get_fmt_id(db, video_id)
+    if fmt_id:
+        await db.execute(
+            text("UPDATE subtitles_formatted SET mindmap_status = 'failed' WHERE id = :id"),
+            {"id": fmt_id},
+        )
+        await db.commit()
+
+
 async def delete_video(db: AsyncSession, video_id: str) -> bool:
     stmt = select(Video).where(Video.video_id == video_id)
     video = (await db.execute(stmt)).scalar_one_or_none()
