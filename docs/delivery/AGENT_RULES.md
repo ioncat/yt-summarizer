@@ -30,6 +30,7 @@
 | Developer (MCP) | `app/mcp_server.py` and `app/tests/` |
 | CTO | `docs/delivery/AGENT_RULES.md`, `docs/delivery/roles/` |
 | Reviewer | read-only; findings go to the CTO in the report |
+| QA | read-only; drives the running app in a browser; test results go to the CTO |
 | Shared, each for its own entries | `docs/delivery/CHANGELOG.md` |
 
 ## Role addenda
@@ -39,3 +40,4 @@
 - [frontend](roles/frontend.md)
 - [mcp](roles/mcp.md)
 - [code-reviewer](roles/code-reviewer.md)
+- [qa](roles/qa.md)
