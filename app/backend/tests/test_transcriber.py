@@ -7,6 +7,7 @@ from pathlib import Path
 
 from services.transcriber import (
     MODEL_CATALOG,
+    QWEN_CATALOG,
     DEFAULT_CACHE_PATH,
     TranscriptionResult,
     get_available_models,
@@ -56,7 +57,7 @@ def test_en_only_models_have_1_language():
 
 def test_get_available_models_returns_all_catalog_entries():
     result = get_available_models("/nonexistent/cache")
-    assert len(result) == len(MODEL_CATALOG)
+    assert len(result) == len(MODEL_CATALOG) + len(QWEN_CATALOG)
 
 
 def test_get_available_models_shape():
@@ -238,7 +239,7 @@ async def test_stt_models_endpoint_returns_catalog(client):
     assert "models" in data
     models = data["models"]
     assert isinstance(models, list)
-    assert len(models) == len(MODEL_CATALOG)
+    assert len(models) == len(MODEL_CATALOG) + len(QWEN_CATALOG)
     first = models[0]
     assert all(k in first for k in ("name", "size_mb", "languages", "description", "downloaded"))
 
