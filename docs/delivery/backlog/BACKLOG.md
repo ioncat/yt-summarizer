@@ -75,7 +75,8 @@ Labels: `by-backend` | Commit: `c9b0a92`
 Origin: Owner, 2026-10-30 ("split the large files"); addresses review root cause 2
 Value: Pure move, no behaviour change — easy to verify; makes NS-11 safe (pipeline logic in small focused files)
 Fix: extract routers by area (process, result, settings, download, history) into `app/backend/routers/`; each file ≤ 400 lines. Rule: move and behaviour change never in one commit; reviewer checks `git diff --color-moved`; tests must not change
-Labels: `by-backend` | Status: 🔴 Open | Depends on: NS-09, NS-10
+Labels: `by-backend`, `reviewed` | Status: ✅ Done · reviewed | Commits: `54c43ae`, `41329dd` (restored yt-dlp update error log)
+Follow-up: `routers/result.py` (665 lines) and `routers/process.py` (459) are still over 400; split them after NS-11. Bugs seen and left alone: `upload_cookies` `db=None` default; `trigger_mindmap`/`trigger_reextract` skip the Ollama/model checks.
 
 **NS-13 — Split SettingsPage.tsx (1,585 lines)**
 Origin: Owner, 2026-10-30 ("split the large files"); addresses review root cause 2
