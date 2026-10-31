@@ -66,7 +66,7 @@ async def test_reextract_youtube_video(client, seeded_video):
         error_message="mocked — no yt-dlp in tests",
     )
 
-    with patch("routers.api.extract_subtitles", return_value=mock_extraction):
+    with patch("routers.result.extract_subtitles", return_value=mock_extraction):
         r = await client.post(
             f"/api/result/{seeded_video['video_id']}/reextract",
             json={"language": "auto"},

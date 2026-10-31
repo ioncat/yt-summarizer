@@ -89,7 +89,7 @@ async def _cleanup_uploads_on_start() -> None:
     try:
         from models.database import AsyncSessionLocal
         from services.video_service import get_app_setting
-        from routers.api import _cleanup_old_uploads
+        from routers.settings import _cleanup_old_uploads
         async with AsyncSessionLocal() as db:
             auto_delete = await get_app_setting(db, "upload_auto_delete") or "false"
             mode = await get_app_setting(db, "upload_auto_delete_mode") or "immediate"

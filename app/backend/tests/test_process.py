@@ -41,7 +41,7 @@ TEST_URL = "https://www.youtube.com/watch?v=xyzABC12345"
 
 @pytest.mark.asyncio
 async def test_process_new_video(client):
-    with patch("routers.api.extract_subtitles", return_value=MOCK_EXTRACTION):
+    with patch("routers.process.extract_subtitles", return_value=MOCK_EXTRACTION):
         r = await client.post("/api/process", json={"url": TEST_URL, "language": "ru"})
     assert r.status_code == 200
     data = r.json()
@@ -76,7 +76,7 @@ async def test_status_not_found(client):
 @pytest.mark.asyncio
 async def test_process_and_check_status(client):
     url = "https://www.youtube.com/watch?v=statusTest1"
-    with patch("routers.api.extract_subtitles", return_value=MOCK_EXTRACTION):
+    with patch("routers.process.extract_subtitles", return_value=MOCK_EXTRACTION):
         r = await client.post("/api/process", json={"url": url, "language": "ru"})
     assert r.status_code == 200
     task_id = r.json()["task_id"]
