@@ -13,10 +13,15 @@ app/data/db/*.db
 # Cookies (never commit!)
 app/data/cookies.txt
 app/data/*.cookies.txt
+app/data/*cookies*.txt
 app/data/www.youtube.com_cookies.txt
 
 # Uploaded media files (user-uploaded audio/video, can be large)
 app/data/uploads/
+
+# Database directory and SQLite files
+app/data/db/
+app/data/*.sqlite
 
 # ========================
 # Environment & Secrets

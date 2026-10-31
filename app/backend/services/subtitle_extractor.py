@@ -8,6 +8,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from enum import Enum
+from urllib.parse import urlparse
 
 from config import settings
 
@@ -74,6 +75,29 @@ def extract_video_id(url: str) -> str | None:
         if match:
             return match.group(1)
     return None
+
+
+_ALLOWED_YT_HOSTS = frozenset({"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"})
+
+
+def validate_youtube_url(url: str) -> str | None:
+    """Validate a YouTube URL and return its canonical form, or None if invalid.
+
+    Requires https scheme and a known YouTube host; rebuilds URL from the extracted
+    video id to strip any extra query parameters or path segments.
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return None
+    if parsed.scheme != "https":
+        return None
+    if parsed.netloc.lower() not in _ALLOWED_YT_HOSTS:
+        return None
+    video_id = extract_video_id(url)
+    if not video_id:
+        return None
+    return f"https://www.youtube.com/watch?v={video_id}"
 
 
 def _ytdlp_cmd(ytdlp_path: str | None) -> list[str]:
@@ -391,7 +415,7 @@ def _detect_language(info: dict) -> str:
 def _fetch_metadata(url: str, cookies_path: str | None, ytdlp_path: str) -> tuple[dict | None, str]:
     """Lightweight metadata-only yt-dlp call (no subtitle download)."""
     stdout, stderr, code = _run_ytdlp(
-        ["--no-playlist", "--skip-download", "--print-json", url],
+        ["--no-playlist", "--skip-download", "--print-json", "--", url],
         cookies_path, ytdlp_path=ytdlp_path, timeout=30,
     )
     if not stdout.strip():
@@ -446,7 +470,7 @@ def extract_subtitles(
                     "--sub-lang", language,
                     "--sub-format", "vtt",
                     "-o", os.path.join(tmpdir, "sub"),
-                    url,
+                    "--", url,
                 ],
                 cookies_path, ytdlp_path=ytdlp_path, timeout=60,
             )
@@ -603,7 +627,7 @@ def extract_audio(
                 "--audio-format", "mp3",
                 "--audio-quality", "0",
                 "-o", os.path.join(output_dir, "%(id)s.%(ext)s"),
-                url,
+                "--", url,
             ],
             cookies_path,
             ytdlp_path=ytdlp_path,

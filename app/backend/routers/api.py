@@ -27,7 +27,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import get_db
-from services.subtitle_extractor import _ytdlp_cmd, extract_subtitles, extract_video_id
+from services.subtitle_extractor import _ytdlp_cmd, extract_subtitles, extract_video_id, validate_youtube_url
 from services.text_cleaner import clean_text
 from services.text_formatter import format_subtitles
 from services.video_service import (
@@ -144,9 +144,10 @@ async def process_video(
     background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    video_id = extract_video_id(body.url)
-    if not video_id:
+    canonical = validate_youtube_url(body.url)
+    if not canonical:
         raise HTTPException(status_code=400, detail="Invalid YouTube URL")
+    video_id = extract_video_id(canonical)
 
     # Dedup: if video already processed, redirect to existing result
     existing = await get_result(db, video_id)
@@ -156,8 +157,8 @@ async def process_video(
             detail={"message": "Video already processed", "video_id": video_id},
         )
 
-    task = await create_pending_task(db, body.url, video_id)
-    background_tasks.add_task(_run_processing, task.id, body.url, body.language)
+    task = await create_pending_task(db, canonical, video_id)
+    background_tasks.add_task(_run_processing, task.id, canonical, body.language)
     return {"task_id": task.id, "video_id": video_id}
 
 
@@ -969,8 +970,10 @@ async def download_direct(
     quality: str = "best",
 ):
     """Download video/audio by URL directly, without subtitle extraction."""
-    if not url or url.startswith("local://"):
-        raise HTTPException(status_code=400, detail="Invalid URL")
+    canonical = validate_youtube_url(url)
+    if not canonical:
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL")
+    url = canonical
 
     ytdlp_path = await get_app_setting(db, "ytdlp_path")
     cookies_path = await get_app_setting(db, "cookies_path")
@@ -998,7 +1001,7 @@ async def download_direct(
 
         if cookies_path and Path(cookies_path).exists():
             args += ["--cookies", cookies_path]
-        args.append(url)
+        args += ["--", url]
 
         try:
             proc_result = await asyncio.wait_for(
@@ -1079,7 +1082,7 @@ async def download_video(
         if cookies_path and Path(cookies_path).exists():
             args += ["--cookies", cookies_path]
 
-        args.append(url)
+        args += ["--", url]
 
         try:
             proc_result = await asyncio.wait_for(
@@ -1292,18 +1295,22 @@ async def update_ytdlp():
     return {"status": "started"}
 
 
+_COOKIES_MAX_BYTES = 5 * 1024 * 1024  # 5 MB — cookie files are small
+
+
 @router.post("/settings/upload-cookies")
 async def upload_cookies(
     file: UploadFile = File(...),
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
     """Upload a cookies.txt file and save it to the data directory."""
+    content = await file.read()
+    if len(content) > _COOKIES_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Cookie file too large (max 5 MB)")
     cookies_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data"))
     os.makedirs(cookies_dir, exist_ok=True)
-    # Use original filename, fallback to cookies.txt
-    filename = file.filename if file.filename else "cookies.txt"
+    filename = Path(file.filename or "cookies.txt").name
     save_path = os.path.join(cookies_dir, filename)
-    content = await file.read()
     with open(save_path, "wb") as f:
         f.write(content)
     await save_app_settings(db, {"cookies_path": save_path})

@@ -16,7 +16,7 @@ export default function MindmapView({ text, title, onRegenerate }: Props) {
 
   useEffect(() => {
     if (!svgRef.current) return
-    const { root } = transformer.transform(text)
+    const { root } = transformer.transform(text.replace(/</g, '&lt;'))
     if (mmRef.current) {
       mmRef.current.setData(root).then(() => mmRef.current?.fit())
     } else {
