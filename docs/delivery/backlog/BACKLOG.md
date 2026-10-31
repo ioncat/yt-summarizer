@@ -4,6 +4,104 @@ Navigation and overview of all epics and user stories for YT Summarizer, organiz
 
 ---
 
+## 🔴 New Start — 2026-10-31 (active, blocks all new features)
+
+### Step 1 — Security minimum (each item is independently reviewable)
+
+**NS-01 — Bind backend to 127.0.0.1**
+Origin: Owner, 2026-10-30 ("bind the backend to 127.0.0.1"); fixes F2 (partial)
+Value: Closes LAN/Wi-Fi exposure; no network neighbour can reach the API unauthenticated
+Fix: change `backend_host` default to `"127.0.0.1"` in `config.py`; update `start.vbs`, `start.sh`, `Makefile`
+Labels: `by-backend` | Status: 🔴 Open
+
+**NS-02 — Cookie upload: basename only**
+Origin: Owner, 2026-10-30 ("keep only the base name of the uploaded cookie file"); fixes F1
+Value: Prevents path-traversal write; a crafted filename can no longer overwrite arbitrary files or code
+Fix: `api.py:upload_cookies` — replace `filename = file.filename` with `filename = Path(file.filename or "cookies.txt").name`; add a size cap
+Labels: `by-backend` | Status: 🔴 Open
+
+**NS-03 — yt-dlp: validate URL and prepend `--`**
+Origin: Owner, 2026-10-30 ("check URLs properly and put `--` before the URL in yt-dlp calls"); fixes F3
+Value: Prevents argument injection and SSRF; a `-`-prefixed "URL" can no longer be parsed as a yt-dlp flag
+Fix: parse URL with `urllib.parse`; require `https`; host must be in `{youtube.com, www.youtube.com, m.youtube.com, youtu.be}`; rebuild canonical URL from extracted id; insert `"--"` before every user-supplied URL in every yt-dlp call
+Labels: `by-backend` | Status: 🔴 Open
+
+**NS-04 — Mind map: disable HTML rendering**
+Origin: Owner, 2026-10-30 ("turn off HTML in markmap"); fixes F4
+Value: Prevents stored XSS; LLM output with `<script>` or `<img onerror=...>` can no longer run in the app origin
+Fix: pass a custom markdown-it instance with `html: false` to the `Transformer` in `MindmapView.tsx`; or escape `<` in text before `transform`
+Labels: `by-frontend` | Status: 🔴 Open
+
+**NS-05 — Gitignore uploads dir and cookie variants**
+Origin: Owner, 2026-10-30 ("gitignore app/data/uploads/ and the cookie files"); fixes F5
+Value: Private video/audio files and live YouTube session cookies cannot be committed to the public repo by mistake
+Fix: add to `.gitignore`: `app/data/uploads/`, `app/data/*cookies*.txt`, `app/data/*.sqlite`, `app/data/db/`; keep `!app/data/.gitkeep`
+Labels: `by-cto` | Status: 🔴 Open
+
+---
+
+### Step 2 — Housekeeping (after step 1 is merged)
+
+**NS-06 — Commit untracked MCP server and tests**
+Origin: Owner, 2026-10-30 ("commit the untracked MCP server and tests"); fixes F6
+Value: Fresh clone works; `npm test` and MCP feature have coverage in git; agents in a worktree get the full codebase
+Fix: commit `app/mcp_server.py`, `app/tests/test_mcp_server.py`, `app/backend/tests/test_mindmap.py`, `app/frontend/src/__tests__/`, `vitest.config.ts`, `test-setup.ts`, `docs/guides/MCP_SETUP.md`
+Labels: `by-backend`, `by-mcp`, `by-frontend` | Status: 🔴 Open | Depends on: NS-07
+
+**NS-07 — Fix 2 failing backend tests**
+Origin: Owner, 2026-10-30 ("fix the 2 failing tests"); fixes F14 (partial)
+Value: Suite goes green; regressions surface in CI, not in production
+Fix: `test_transcriber.py:59` and `:241` — replace hard-coded `11` with `len(MODEL_CATALOG) + len(QWEN_CATALOG)`
+Labels: `by-backend` | Status: 🔴 Open | Blocks: NS-06
+
+**NS-08 — One launcher, one port; scope kill-backend.bat**
+Origin: Owner, 2026-10-30 ("one launcher and one port, kill-backend.bat must not kill every uvicorn"); fixes F12
+Value: Start/stop scripts no longer kill other projects' services; one `make dev` starts everything
+Fix: record backend PID in a pidfile; kill-backend.bat kills only that PID tree; remove or fix `start-backend.bat` (port 8000) and `start.sh` (port 8000); leave `start.vbs` and `Makefile` as the two launchers; align on port 9010
+Labels: `by-backend`, `by-cto` | Status: 🔴 Open
+
+**NS-09 — Reset stale "processing" on startup**
+Origin: Owner, 2026-10-30 ("stale processing status reset on start"); fixes F7
+Value: After server restart, UI no longer polls forever; Re-extract and Cancel work again
+Fix: at startup (`main.py`) reset all rows where `cleanup_status`, `summary_status`, or `mindmap_status` = `'processing'` to `NULL` (or `'failed'`); wrap each `_run_*` in try/except/finally that writes `'failed'`
+Labels: `by-backend` | Status: 🔴 Open
+
+**NS-10 — Fix .env loading path**
+Origin: Owner, 2026-10-30 (".env loading"); fixes F16
+Value: Settings in `.env` actually apply; CORS and `OLLAMA_URL` become configurable without code changes
+Fix: `config.py:24` — change `env_file = "../.env"` to `env_file = Path(__file__).resolve().parents[2] / ".env"`
+Labels: `by-backend` | Status: 🔴 Open
+
+---
+
+### Step 3 — Restructure, no new features (after step 2 is merged)
+
+**NS-11 — Remove duplicate pipeline (BackgroundTasks vs queue)**
+Origin: Owner, 2026-10-30 ("remove the duplicated pipeline"); addresses review root cause 1
+Value: Every fix is made once; the two copies no longer drift; Cancel and progress reporting work for all paths
+Fix: route all LLM triggers (cleanup, summary, mindmap, extract) through `queue_service.py` exclusively; remove the duplicate `BackgroundTasks` code in `api.py`
+Labels: `by-backend` | Status: 🔴 Open | Depends on: NS-09
+
+**NS-12 — Split api.py into modules (1,644 lines)**
+Origin: Owner, 2026-10-30 ("split the large files"); addresses review root cause 2
+Value: Files stay under ~400 lines; side effects are visible; backend changes are faster to make and review
+Fix: extract routers by area (process, result, settings, download, history, MCP) into `app/backend/routers/`; each file ≤ 400 lines
+Labels: `by-backend` | Status: 🔴 Open | Depends on: NS-11
+
+**NS-13 — Split SettingsPage.tsx (1,585 lines)**
+Origin: Owner, 2026-10-30 ("split the large files"); addresses review root cause 2
+Value: Settings changes are contained; 59 `useState` calls visible per component
+Fix: extract each settings tab into its own component in `app/frontend/src/components/settings/`
+Labels: `by-frontend` | Status: 🔴 Open
+
+**NS-14 — Split ResultPage.tsx (1,276 lines)**
+Origin: Owner, 2026-10-30 ("split the large files"); addresses review root cause 2
+Value: Result view changes are contained; 31 `useState` calls visible per component
+Fix: extract tabs (Subtitles, Cleaned, Summary, MindMap, Chat) and the actions bar into separate components in `app/frontend/src/components/result/`
+Labels: `by-frontend` | Status: 🔴 Open
+
+---
+
 ## Phase 1: MVP - Subtitle Extraction & Formatting ✅
 
 ### Epic 1: Core Subtitle Extraction
