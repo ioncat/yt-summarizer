@@ -71,29 +71,44 @@ Labels: `by-backend` | Status: 🔴 Open
 
 ### Step 3 — Restructure, no new features (after step 2 is merged)
 
-**NS-11 — Remove duplicate pipeline (BackgroundTasks vs queue)**
-Origin: Owner, 2026-10-30 ("remove the duplicated pipeline"); addresses review root cause 1
-Value: Every fix is made once; the two copies no longer drift; Cancel and progress reporting work for all paths
-Fix: route all LLM triggers (cleanup, summary, mindmap, extract) through `queue_service.py` exclusively; remove the duplicate `BackgroundTasks` code in `api.py`
-Labels: `by-backend` | Status: 🔴 Open | Depends on: NS-09
-
 **NS-12 — Split api.py into modules (1,644 lines)**
 Origin: Owner, 2026-10-30 ("split the large files"); addresses review root cause 2
-Value: Files stay under ~400 lines; side effects are visible; backend changes are faster to make and review
-Fix: extract routers by area (process, result, settings, download, history, MCP) into `app/backend/routers/`; each file ≤ 400 lines
-Labels: `by-backend` | Status: 🔴 Open | Depends on: NS-11
+Value: Pure move, no behaviour change — easy to verify; makes NS-11 safe (pipeline logic in small focused files)
+Fix: extract routers by area (process, result, settings, download, history) into `app/backend/routers/`; each file ≤ 400 lines. Rule: move and behaviour change never in one commit; reviewer checks `git diff --color-moved`; tests must not change
+Labels: `by-backend` | Status: 🔴 Open | Depends on: NS-09, NS-10
 
 **NS-13 — Split SettingsPage.tsx (1,585 lines)**
 Origin: Owner, 2026-10-30 ("split the large files"); addresses review root cause 2
 Value: Settings changes are contained; 59 `useState` calls visible per component
-Fix: extract each settings tab into its own component in `app/frontend/src/components/settings/`
+Fix: add vitest smoke tests for the page first; extract each settings tab into `app/frontend/src/components/settings/`; owner confirms in running app after
 Labels: `by-frontend` | Status: 🔴 Open
 
 **NS-14 — Split ResultPage.tsx (1,276 lines)**
 Origin: Owner, 2026-10-30 ("split the large files"); addresses review root cause 2
 Value: Result view changes are contained; 31 `useState` calls visible per component
-Fix: extract tabs (Subtitles, Cleaned, Summary, MindMap, Chat) and the actions bar into separate components in `app/frontend/src/components/result/`
+Fix: add vitest smoke tests first; extract tabs (Subtitles, Cleaned, Summary, MindMap, Chat) and actions bar into `app/frontend/src/components/result/`; owner confirms in running app after
 Labels: `by-frontend` | Status: 🔴 Open
+
+**NS-11 — Remove duplicate pipeline (BackgroundTasks vs queue)**
+Origin: Owner, 2026-10-30 ("remove the duplicated pipeline"); addresses review root cause 1
+Value: Every fix is made once; the two copies no longer drift; Cancel and progress reporting work for all paths
+Fix (in order):
+1. Write API tests that fix current behaviour of each stage (cleanup, summary, mindmap, transcribe) — baseline before any change
+2. List all divergences between the two copies; owner decides on behaviour differences visible to the user (cancel, order, parallel vs sequential)
+3. Switch one stage at a time to queue-only; one commit per stage
+4. State lives in DB (`processing_queue`), not module-level dicts — eliminates eternal "processing" on reload
+5. Verify MCP server goes through queue too (not a third path)
+Labels: `by-backend` | Status: 🔴 Open | Depends on: NS-12
+
+---
+
+### After step 3 — small items unblocked by restructure
+
+**NS-15 — MCP `get_result`: add `kind` parameter**
+Origin: Owner, 2026-10-31 (found in live use); noted in new-start.md
+Value: MCP callers can get the full transcript instead of just the summary; current `include_text=true` silently returns the summary
+Fix: add `kind: Literal["subtitles","cleaned","summary","mindmap"] = "cleaned"` to `get_result`; return the matching field from the DB row
+Labels: `by-mcp` | Status: 🔵 Planned | Depends on: NS-11
 
 ---
 
