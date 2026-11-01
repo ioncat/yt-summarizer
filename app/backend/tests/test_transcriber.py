@@ -314,8 +314,15 @@ def _run_qwen(monkeypatch, cuda_available, fail_on_cuda=False, cuda_check_raises
     fake_qwen.Qwen3ASRModel = FakeQwen
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
     monkeypatch.setitem(sys.modules, "qwen_asr", fake_qwen)
+    monkeypatch.setattr("services.transcriber._convert_to_wav", lambda p: _fake_wav())
     result = _transcribe_qwen3_asr("missing.wav", "auto", "Qwen3-ASR-1.7B", device, "", None)
     return result, calls
+
+
+def _fake_wav():
+    fd, path = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    return path
 
 
 def test_qwen_uses_cuda_when_torch_reports_cuda(monkeypatch):
@@ -349,3 +356,133 @@ def test_qwen_explicit_cuda_falls_back_when_init_fails(monkeypatch):
     result, calls = _run_qwen(monkeypatch, cuda_available=False, fail_on_cuda=True, device="cuda")
     assert result.success
     assert result.device_used == "cpu"
+
+
+# ---------------------------------------------------------------------------
+# Qwen3-ASR input conversion (ffmpeg + model mocked)
+# ---------------------------------------------------------------------------
+
+def _qwen_env(monkeypatch, transcribe_raises=False):
+    import sys
+    import types
+    from unittest.mock import MagicMock
+
+    fake_torch = types.ModuleType("torch")
+    fake_torch.bfloat16 = "bf16"
+    fake_torch.float32 = "f32"
+    fake_torch.cuda = types.SimpleNamespace(is_available=MagicMock(return_value=False))
+    seen = {}
+
+    class FakeModel:
+        def transcribe(self, audio, language=None):
+            seen["audio"] = audio
+            seen["existed"] = os.path.exists(audio)
+            if transcribe_raises:
+                raise RuntimeError("model blew up")
+            return [types.SimpleNamespace(text="Hi.", language="English")]
+
+    class FakeQwen:
+        @staticmethod
+        def from_pretrained(name, dtype, device_map, max_new_tokens):
+            return FakeModel()
+
+    fake_qwen = types.ModuleType("qwen_asr")
+    fake_qwen.Qwen3ASRModel = FakeQwen
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "qwen_asr", fake_qwen)
+    return seen
+
+
+def _fake_run(calls, returncode=0, stderr=""):
+    import types
+
+    def run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return types.SimpleNamespace(returncode=returncode, stdout="", stderr=stderr)
+    return run
+
+
+def test_qwen_converts_input_to_wav_with_ffmpeg_arg_list(monkeypatch):
+    from services.transcriber import _transcribe_qwen3_asr
+    seen = _qwen_env(monkeypatch)
+    calls = []
+    monkeypatch.setattr("services.transcriber.shutil.which", lambda n: "/usr/bin/ffmpeg")
+    monkeypatch.setattr("services.transcriber.subprocess.run", _fake_run(calls))
+    result = _transcribe_qwen3_asr("talk.m4a", "auto", "Qwen3-ASR-1.7B", "cpu", "", None)
+    assert result.success
+    cmd, kwargs = calls[0]
+    assert isinstance(cmd, list)
+    assert not kwargs.get("shell")
+    wav = seen["audio"]
+    assert cmd == ["/usr/bin/ffmpeg", "-y", "-loglevel", "error", "-i", "talk.m4a",
+                   "-vn", "-ar", "16000", "-ac", "1", wav]
+    assert wav.endswith(".wav")
+    assert seen["existed"] is True
+
+
+def test_qwen_temp_wav_removed_after_success(monkeypatch):
+    from services.transcriber import _transcribe_qwen3_asr
+    seen = _qwen_env(monkeypatch)
+    monkeypatch.setattr("services.transcriber.shutil.which", lambda n: "ffmpeg")
+    monkeypatch.setattr("services.transcriber.subprocess.run", _fake_run([]))
+    assert _transcribe_qwen3_asr("a.m4a", "auto", "Qwen3-ASR-1.7B", "cpu", "", None).success
+    assert not os.path.exists(seen["audio"])
+
+
+def test_qwen_temp_wav_removed_after_model_failure(monkeypatch):
+    from services.transcriber import _transcribe_qwen3_asr
+    seen = _qwen_env(monkeypatch, transcribe_raises=True)
+    monkeypatch.setattr("services.transcriber.shutil.which", lambda n: "ffmpeg")
+    monkeypatch.setattr("services.transcriber.subprocess.run", _fake_run([]))
+    result = _transcribe_qwen3_asr("a.m4a", "auto", "Qwen3-ASR-1.7B", "cpu", "", None)
+    assert not result.success
+    assert "model blew up" in result.error_message
+    assert not os.path.exists(seen["audio"])
+
+
+def test_qwen_ffmpeg_failure_reports_error_and_leaves_no_temp_file(monkeypatch):
+    import glob
+    from services.transcriber import _transcribe_qwen3_asr
+    _qwen_env(monkeypatch)
+    before = set(glob.glob(os.path.join(tempfile.gettempdir(), "qwen_asr_*.wav")))
+    monkeypatch.setattr("services.transcriber.shutil.which", lambda n: "ffmpeg")
+    monkeypatch.setattr("services.transcriber.subprocess.run", _fake_run([], returncode=1, stderr="bad file"))
+    result = _transcribe_qwen3_asr("a.m4a", "auto", "Qwen3-ASR-1.7B", "cpu", "", None)
+    assert not result.success
+    assert "ffmpeg could not convert" in result.error_message
+    assert set(glob.glob(os.path.join(tempfile.gettempdir(), "qwen_asr_*.wav"))) == before
+
+
+def test_qwen_missing_ffmpeg_reports_error(monkeypatch):
+    from services.transcriber import _transcribe_qwen3_asr
+    _qwen_env(monkeypatch)
+    monkeypatch.setattr("services.transcriber.shutil.which", lambda n: None)
+    result = _transcribe_qwen3_asr("a.m4a", "auto", "Qwen3-ASR-1.7B", "cpu", "", None)
+    assert not result.success
+    assert "ffmpeg not found" in result.error_message
+
+
+def test_whisper_path_does_not_convert(monkeypatch):
+    import sys
+    import types
+    from services.transcriber import transcribe
+
+    class FakeWhisper:
+        def __init__(self, *a, **k):
+            pass
+
+        def transcribe(self, path, **k):
+            seg = types.SimpleNamespace(text=" hi ", start=0.0, end=1.0)
+            return iter([seg]), types.SimpleNamespace(duration=1.0, language="en")
+
+    fake_fw = types.ModuleType("faster_whisper")
+    fake_fw.WhisperModel = FakeWhisper
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake_fw)
+
+    def boom(*a, **k):
+        raise AssertionError("subprocess must not run on the Whisper path")
+
+    monkeypatch.setattr("services.transcriber.subprocess.run", boom)
+    result = transcribe("talk.m4a", model="base", device="cpu")
+    assert result.success
+    assert result.segments[0]["text"] == "hi"

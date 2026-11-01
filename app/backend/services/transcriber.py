@@ -8,8 +8,11 @@ Models are downloaded on demand from HuggingFace and cached locally.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
+import subprocess
+import tempfile
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -406,6 +409,25 @@ def _text_to_segments(text: str, total_duration: float) -> list[dict]:
     ]
 
 
+def _convert_to_wav(audio_path: str) -> str:
+    """Convert any audio/video file to a temporary 16 kHz mono wav; caller deletes it."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg not found on PATH — it is required to read this file for Qwen3-ASR")
+    fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="qwen_asr_")
+    os.close(fd)
+    cmd = [ffmpeg, "-y", "-loglevel", "error", "-i", audio_path, "-vn", "-ar", "16000", "-ac", "1", wav_path]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+    except Exception:
+        os.remove(wav_path)
+        raise
+    if proc.returncode != 0:
+        os.remove(wav_path)
+        raise RuntimeError(f"ffmpeg could not convert the file: {(proc.stderr or '').strip()[-300:]}")
+    return wav_path
+
+
 def _transcribe_qwen3_asr(
     audio_path: str,
     language: str,
@@ -466,7 +488,14 @@ def _transcribe_qwen3_asr(
         lang_arg = None if language == "auto" else language
 
         logger.info("qwen3-asr: transcribing path=%s lang=%s", audio_path, lang_arg)
-        results = model.transcribe(audio=audio_path, language=lang_arg)
+        wav_path = _convert_to_wav(audio_path)
+        try:
+            results = model.transcribe(audio=wav_path, language=lang_arg)
+        finally:
+            try:
+                os.remove(wav_path)
+            except OSError:
+                pass
 
         if not results:
             return TranscriptionResult(
