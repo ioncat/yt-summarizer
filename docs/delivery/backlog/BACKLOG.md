@@ -138,6 +138,13 @@ Value: names and terms the owner uses often (Claude Code, Ollama, project names)
 Fix (to be refined with the owner): a list of words in Settings → STT, passed to the speech engine as a hint (Whisper `initial_prompt`; check that Qwen3-ASR has an equivalent); optionally the same list added to the cleanup prompt so the LLM fixes leftover mishearings
 Labels: `by-backend`, `by-frontend` | Status: 🔵 Idea | Depends on: NS-11, NS-14
 
+**NS-20 — Qwen3-ASR fails: "Torch not compiled with CUDA enabled"** (bug, small, not caused by the refactor)
+Origin: Owner, 2026-11-01 (screenshot: Processing Failed on a file with Qwen3-ASR-1.7B active)
+Value: choosing Qwen3-ASR works on this machine instead of failing the job
+Cause (CTO check): the backend venv has `torch 2.15.0+cpu` (CPU-only build), while the GPU (RTX A4000) is seen by ctranslate2. `services/transcriber.py:436` picks `cuda:0` for Qwen from `ctranslate2.get_cuda_device_count()`, not from `torch.cuda.is_available()`, so torch is told to use a device it cannot use. Whisper is unaffected (QA S5 passed on CUDA)
+Fix: (1) code: for the Qwen engine decide the device by `torch.cuda.is_available()`, and fall back to CPU with a log line if CUDA init fails, as the Whisper path already does; test with torch mocked. (2) environment, owner's decision: install the CUDA build of torch into `app/backend/.venv` (a download of about 2.5 GB) for GPU speed; `requirements.txt` then needs a note on which torch build to install
+Labels: `by-backend` | Status: 🔴 Open | Order: after NS-14 (before NS-11 if the owner needs Qwen now)
+
 **NS-18 — Finish splitting the routers** (after NS-11)
 Origin: CTO, 2026-11-01; NS-12 review ("`result.py` 665 and `process.py` 459 lines, over the 400-line limit")
 Value: the rule "a file over about 400 lines is split" holds for the backend too
