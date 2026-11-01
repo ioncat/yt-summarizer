@@ -153,7 +153,9 @@ Origin: Owner, 2026-11-01 (screenshot: Processing Failed on a file with Qwen3-AS
 Value: choosing Qwen3-ASR works on this machine instead of failing the job
 Cause (CTO check): the backend venv has `torch 2.15.0+cpu` (CPU-only build), while the GPU (RTX A4000) is seen by ctranslate2. `services/transcriber.py:436` picks `cuda:0` for Qwen from `ctranslate2.get_cuda_device_count()`, not from `torch.cuda.is_available()`, so torch is told to use a device it cannot use. Whisper is unaffected (QA S5 passed on CUDA)
 Fix: (1) code: for the Qwen engine decide the device by `torch.cuda.is_available()`, and fall back to CPU with a log line if CUDA init fails, as the Whisper path already does; test with torch mocked. (2) environment, owner's decision: install the CUDA build of torch into `app/backend/.venv` (a download of about 2.5 GB) for GPU speed; `requirements.txt` then needs a note on which torch build to install
-Labels: `by-backend` | Status: 🔴 Open | Order: after NS-14 (before NS-11 if the owner needs Qwen now)
+Progress 2026-11-01: device fix `a4b14c7` and CUDA torch `2.14.1+cu126` (no CUDA wheel of 2.15.0 exists; cu130 needs driver 580+, the owner has 573.48) with the requirements note `0cebb65`; Qwen now runs on `cuda:0`. Found while testing: the Qwen path cannot read `.m4a` (`soundfile` "Format not recognised"), fix in progress (convert to wav with ffmpeg first)
+Seen, not in scope: Qwen stores the language as `Russian`, Whisper as `ru` (History badges); `requirements.txt` says `qwen-asr>=0.1.0` but 0.0.6 is installed; a failed re-transcribe is only a log warning and the old transcript stays silently (belongs to NS-16)
+Labels: `by-backend` | Status: 🟡 In progress
 
 **NS-18 — Finish splitting the routers** (after NS-11)
 Origin: CTO, 2026-11-01; NS-12 review ("`result.py` 665 and `process.py` 459 lines, over the 400-line limit")
