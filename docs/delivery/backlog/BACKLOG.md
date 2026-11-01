@@ -111,6 +111,32 @@ Value: MCP callers can get the full transcript instead of just the summary; curr
 Fix: add `kind: Literal["subtitles","cleaned","summary","mindmap"] = "cleaned"` to `get_result`; return the matching field from the DB row
 Labels: `by-mcp` | Status: 🔵 Planned | Depends on: NS-11
 
+**NS-16 — One cancel mechanism, two kinds of button** (🔴 first item after NS-11)
+Origin: Owner, 2026-11-01 ("the cancel button is a very important element; one global button, one global mechanism; the button on the video/audio page cancels whatever process of this item is in the queue"); found by QA baseline S6 (no cancel for a running job anywhere in the UI; Epic 12 had "Stop" on the result page)
+Value: any running or waiting job can be stopped from the UI, from the queue and from the page of its video or audio, whatever the stage (extract, transcribe, cleanup, summary, mind map)
+Fix: one cancel path in the backend, in the queue (cancel a pending job = remove; cancel a running job = set a cancel flag that the stage checks, status ends `cancelled`, never stuck in `processing`); the same endpoint serves both buttons. UI: a Cancel button on every active row of the queue page, and a Stop button on the result page whenever a job of this video is pending or running (cancels that job). QA S6 becomes a real scenario: start cleanup of the 3:33 video, press Stop, status returns to idle
+Labels: `by-backend`, `by-frontend` | Status: 🔵 Planned | Depends on: NS-11 (the single pipeline gives the single cancel path)
+
+**NS-17 — UI fixes found by the QA baseline (2026-11-01)** (start only after the refactor is finished and accepted)
+Origin: Owner, 2026-11-01 ("write all the small remarks into the backlog and fix them after the refactoring ends successfully"); QA baseline report
+Value: the app stops looking stuck or broken in everyday use
+Items, each a small separate commit:
+1. After "Clean with AI" the result page does not refresh when the job ends (Cleaned tab stays empty until reload); the Summary tab does refresh. One refresh behaviour for all tabs
+2. "Added to queue (summary/mindmap)" banners stay after the job is done and carry over between tabs
+3. Header character count changes between views (247 / 243 / 230)
+4. Bulk add: the single-URL form stays visible and the real textarea sits about 860 px lower; newlines typed into the single field glue the URLs together
+5. Queue table is wider than its card at 1024 px; the Remove/Cancel column is off-screen
+6. Queue row order changes between refreshes
+7. Mind map first renders tiny and low-contrast on the dark background
+8. Queue shows 155+ old rows; consider a "clear finished" action (ask the owner first; it deletes data)
+Labels: `by-frontend` (item 3 may need `by-backend`) | Status: 🔵 Planned | Depends on: NS-11, NS-13, NS-14 (most of these touch the pages being split)
+
+**NS-18 — Finish splitting the routers** (after NS-11)
+Origin: CTO, 2026-11-01; NS-12 review ("`result.py` 665 and `process.py` 459 lines, over the 400-line limit")
+Value: the rule "a file over about 400 lines is split" holds for the backend too
+Fix: split `routers/result.py` and `routers/process.py` by area; pure move, no behaviour change; the known bugs seen during NS-12 stay out of the move and become their own items: `upload_cookies` `db=None` default; `trigger_mindmap`/`trigger_reextract` skip the Ollama/model checks
+Labels: `by-backend` | Status: 🔵 Planned | Depends on: NS-11
+
 ---
 
 ## Phase 1: MVP - Subtitle Extraction & Formatting ✅
