@@ -107,7 +107,9 @@ Fix (in order):
 3. Switch one stage at a time to queue-only; one commit per stage
 4. State lives in DB (`processing_queue`), not module-level dicts — eliminates eternal "processing" on reload
 5. Verify MCP server goes through queue too (not a third path)
-Labels: `by-backend` | Status: 🔴 Open | Depends on: NS-12
+Stage 0 done 2026-11-01 (tests only, no production change): baseline tests `11d6d63`, `95b1066`, review follow-ups `29314af`; backend 155 and MCP 12 tests pass. Reviewed: clean. Map: MCP uses only the BackgroundTasks copy (no third path); the queue cannot handle local files (`local://` rejected), so file cleanup/summary/mind map/transcribe exist only in the BackgroundTasks copy; the ProcessingPage `startCleanup`/`startSummary` chain is dead code. Divergences ranked (8 data-affecting, 5 visible) are pinned as `# BASELINE: known bug` tests. Waiting for the owner's decisions on the divergences before stage 1
+Planned order (one commit per stage, review + QA after each): 0 delete the dead ProcessingPage chain; 1 queue items by `video_id` (local files) and fix the History bulk id; 2 mind map; 3 summary; 4 cleanup (DB-backed progress first); 5 file transcription; 6 re-extract/re-transcribe; 7 YouTube extract (`/api/process`, MCP and HomePage change with it)
+Labels: `by-backend` | Status: 🟡 Stage 0 done, decisions pending | Depends on: NS-12
 
 ---
 
@@ -158,6 +160,12 @@ Seen, not in scope: Qwen stores the language as `Russian`, Whisper as `ru` (Hist
 Done: `a4b14c7` (device by torch, CPU fallback), `0cebb65` (requirements note), `79304c9` (ffmpeg wav conversion), `0749a62` (review follow-ups: `qwen-asr>=0.0.6`, ffmpeg timeout/`-nostdin`/protocol whitelist, convert before model load), `a2cc87d` (language codes for both engines: re-transcribe with large-v3 had failed silently on `language="Russian"`). Torch is now `2.14.1+cu126` in `app/backend/.venv`. QA regression 3: S5 passes with large-v3 (0:06) and Qwen (0:09), language `RU`
 Left alone: `language_to_qwen_name(None)` would raise (no caller passes None today); Qwen with `uk` is silently auto-detected (warning in the log only); old results with a language name in the DB would not match the language dropdown (none exist: checked)
 Labels: `by-backend`, `reviewed` | Status: ✅ Done · reviewed
+
+**NS-22 — Three old tests depend on test order**
+Origin: Code Reviewer, 2026-11-01 (NS-11 stage 0 review)
+Value: the suite is reliable in any order and in parallel runs
+Fix: `test_summary::test_summary_uses_cleaned_text_when_available`, `test_queue::test_queue_bulk_add`, `test_process::test_process_new_video` fail (409 instead of 200) when the whole suite runs in reverse order, also at `11d6d63~1`; make each test own its data. Also `_setup` in the baseline tests changes shared settings without restoring them
+Labels: `by-backend` | Status: 🔴 Open | Order: after NS-11
 
 **NS-18 — Finish splitting the routers** (after NS-11)
 Origin: CTO, 2026-11-01; NS-12 review ("`result.py` 665 and `process.py` 459 lines, over the 400-line limit")
