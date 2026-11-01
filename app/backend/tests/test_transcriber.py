@@ -414,8 +414,10 @@ def test_qwen_converts_input_to_wav_with_ffmpeg_arg_list(monkeypatch):
     assert isinstance(cmd, list)
     assert not kwargs.get("shell")
     wav = seen["audio"]
-    assert cmd == ["/usr/bin/ffmpeg", "-y", "-loglevel", "error", "-i", "talk.m4a",
+    assert cmd == ["/usr/bin/ffmpeg", "-y", "-nostdin", "-loglevel", "error",
+                   "-protocol_whitelist", "file", "-i", "talk.m4a",
                    "-vn", "-ar", "16000", "-ac", "1", wav]
+    assert kwargs["timeout"] == 600
     assert wav.endswith(".wav")
     assert seen["existed"] is True
 
@@ -486,3 +488,60 @@ def test_whisper_path_does_not_convert(monkeypatch):
     result = transcribe("talk.m4a", model="base", device="cpu")
     assert result.success
     assert result.segments[0]["text"] == "hi"
+
+
+def _temp_wavs():
+    import glob
+    return set(glob.glob(os.path.join(tempfile.gettempdir(), "qwen_asr_*.wav")))
+
+
+def test_qwen_ffmpeg_timeout_reports_error_and_removes_wav(monkeypatch):
+    import subprocess as sp
+    from services.transcriber import _transcribe_qwen3_asr
+    _qwen_env(monkeypatch)
+    before = _temp_wavs()
+
+    def run(cmd, **kwargs):
+        raise sp.TimeoutExpired(cmd, kwargs["timeout"])
+
+    monkeypatch.setattr("services.transcriber.shutil.which", lambda n: "ffmpeg")
+    monkeypatch.setattr("services.transcriber.subprocess.run", run)
+    result = _transcribe_qwen3_asr("a.m4a", "auto", "Qwen3-ASR-1.7B", "cpu", "", None)
+    assert not result.success
+    assert "timed out" in result.error_message
+    assert _temp_wavs() == before
+
+
+def test_qwen_subprocess_raising_removes_wav(monkeypatch):
+    from services.transcriber import _transcribe_qwen3_asr
+    _qwen_env(monkeypatch)
+    before = _temp_wavs()
+
+    def run(cmd, **kwargs):
+        raise OSError("cannot start ffmpeg")
+
+    monkeypatch.setattr("services.transcriber.shutil.which", lambda n: "ffmpeg")
+    monkeypatch.setattr("services.transcriber.subprocess.run", run)
+    result = _transcribe_qwen3_asr("a.m4a", "auto", "Qwen3-ASR-1.7B", "cpu", "", None)
+    assert not result.success
+    assert "cannot start ffmpeg" in result.error_message
+    assert _temp_wavs() == before
+
+
+def test_qwen_conversion_failure_does_not_load_model(monkeypatch):
+    import sys
+    import types
+    from services.transcriber import _transcribe_qwen3_asr
+    _qwen_env(monkeypatch)
+    loaded = []
+
+    class Spy:
+        @staticmethod
+        def from_pretrained(*a, **k):
+            loaded.append(1)
+
+    sys.modules["qwen_asr"].Qwen3ASRModel = Spy
+    monkeypatch.setattr("services.transcriber.shutil.which", lambda n: None)
+    result = _transcribe_qwen3_asr("a.m4a", "auto", "Qwen3-ASR-1.7B", "cpu", "", None)
+    assert not result.success
+    assert loaded == []

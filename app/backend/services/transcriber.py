@@ -409,6 +409,9 @@ def _text_to_segments(text: str, total_duration: float) -> list[dict]:
     ]
 
 
+_FFMPEG_TIMEOUT_S = 600
+
+
 def _convert_to_wav(audio_path: str) -> str:
     """Convert any audio/video file to a temporary 16 kHz mono wav; caller deletes it."""
     ffmpeg = shutil.which("ffmpeg")
@@ -416,9 +419,13 @@ def _convert_to_wav(audio_path: str) -> str:
         raise RuntimeError("ffmpeg not found on PATH — it is required to read this file for Qwen3-ASR")
     fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="qwen_asr_")
     os.close(fd)
-    cmd = [ffmpeg, "-y", "-loglevel", "error", "-i", audio_path, "-vn", "-ar", "16000", "-ac", "1", wav_path]
+    cmd = [ffmpeg, "-y", "-nostdin", "-loglevel", "error", "-protocol_whitelist", "file",
+           "-i", audio_path, "-vn", "-ar", "16000", "-ac", "1", wav_path]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        os.remove(wav_path)
+        raise RuntimeError(f"ffmpeg timed out after {_FFMPEG_TIMEOUT_S} s while converting the file")
     except Exception:
         os.remove(wav_path)
         raise
@@ -460,36 +467,36 @@ def _transcribe_qwen3_asr(
 
         dtype = torch.bfloat16 if "cuda" in actual_device else torch.float32
 
-        logger.info("qwen3-asr: loading model=%s device=%s", model_name, actual_device)
-        if on_progress:
-            on_progress(0, 0.0, 0.0)
-
-        try:
-            model = Qwen3ASRModel.from_pretrained(
-                f"Qwen/{model_name}",
-                dtype=dtype,
-                device_map=actual_device,
-                max_new_tokens=4096,
-            )
-        except Exception as cuda_exc:
-            if "cuda" not in actual_device:
-                raise
-            logger.warning(
-                "qwen3-asr: CUDA init failed (%s) — falling back to CPU", cuda_exc
-            )
-            actual_device, dtype = "cpu", torch.float32
-            model = Qwen3ASRModel.from_pretrained(
-                f"Qwen/{model_name}",
-                dtype=dtype,
-                device_map=actual_device,
-                max_new_tokens=4096,
-            )
-
-        lang_arg = None if language == "auto" else language
-
-        logger.info("qwen3-asr: transcribing path=%s lang=%s", audio_path, lang_arg)
         wav_path = _convert_to_wav(audio_path)
         try:
+            logger.info("qwen3-asr: loading model=%s device=%s", model_name, actual_device)
+            if on_progress:
+                on_progress(0, 0.0, 0.0)
+
+            try:
+                model = Qwen3ASRModel.from_pretrained(
+                    f"Qwen/{model_name}",
+                    dtype=dtype,
+                    device_map=actual_device,
+                    max_new_tokens=4096,
+                )
+            except Exception as cuda_exc:
+                if "cuda" not in actual_device:
+                    raise
+                logger.warning(
+                    "qwen3-asr: CUDA init failed (%s) — falling back to CPU", cuda_exc
+                )
+                actual_device, dtype = "cpu", torch.float32
+                model = Qwen3ASRModel.from_pretrained(
+                    f"Qwen/{model_name}",
+                    dtype=dtype,
+                    device_map=actual_device,
+                    max_new_tokens=4096,
+                )
+
+            lang_arg = None if language == "auto" else language
+
+            logger.info("qwen3-asr: transcribing path=%s lang=%s", audio_path, lang_arg)
             results = model.transcribe(audio=wav_path, language=lang_arg)
         finally:
             try:
