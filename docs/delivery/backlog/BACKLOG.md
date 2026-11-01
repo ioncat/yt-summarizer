@@ -128,7 +128,8 @@ Items, each a small separate commit:
 5. Queue table is wider than its card at 1024 px; the Remove/Cancel column is off-screen
 6. Queue row order changes between refreshes
 7. Mind map first renders tiny and low-contrast on the dark background
-8. Queue shows 155+ old rows; consider a "clear finished" action (ask the owner first; it deletes data)
+8. A local-file result page has no source badge in the meta row (History has one)
+9. Queue shows 155+ old rows; consider a "clear finished" action (ask the owner first; it deletes data)
 Labels: `by-frontend` (item 3 may need `by-backend`) | Status: 🔵 Planned | Depends on: NS-11, NS-13, NS-14 (most of these touch the pages being split)
 
 **NS-18 — Finish splitting the routers** (after NS-11)

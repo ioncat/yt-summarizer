@@ -26,7 +26,7 @@ Check that the app is running: open `http://localhost:3001` in the built-in brow
 | S2 | Click "Clean with AI" on S1 result | Cleaned tab shows cleaned text |
 | S3 | Click "Summarize" on S1 result | Summary tab shows a summary |
 | S4 | Click "Generate Mind Map" on S1 result | Mind Map tab renders a diagram |
-| S5 | Upload a local audio file → transcribe | Subtitles tab shows a transcript |
+| S5 | Baseline: owner uploads an audio file (the built-in browser cannot fill a file input). Regression: press Re-transcribe on `/result/file-8dd2037a` | Subtitles tab shows a transcript; baseline 0:16 for 0:22 of audio (large-v3, CUDA) |
 | S6 | Start cleanup of a longer video, click Stop (queue row and result page) | No stuck "processing"; status returns to idle. Baseline 2026-11-01: no control for a running job exists, becomes real with NS-16 |
 | S7 | Submit two URLs in Bulk Add → Queue page | Both rows appear; first processes, second waits |
 | S8 | History page: search for the video from S1 | Row appears in search results |
