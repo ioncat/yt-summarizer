@@ -82,7 +82,14 @@ Follow-up: `routers/result.py` (665 lines) and `routers/process.py` (459) are st
 Origin: Owner, 2026-10-30 ("split the large files"); addresses review root cause 2
 Value: Settings changes are contained; 59 `useState` calls visible per component
 Fix: add vitest smoke tests for the page first; extract each settings tab into `app/frontend/src/components/settings/`; owner confirms in running app after
-Labels: `by-frontend` | Status: 🔴 Open
+Labels: `by-frontend`, `reviewed` | Status: ✅ Done · reviewed, waiting for the owner's visual check | Commits: `dfdb205` (8 smoke tests), `ab8bb82` (1,585 → 300 lines, 9 files)
+Left alone (own items later): cookie upload uses raw `fetch`; `StagePanel`/`FileStoragePanel` `handleSave` skip `onSaved`; `SttPanel.saveField` swallows errors; toast timers not cleared; no tests for cookie upload, clear uploads, STT download, yt-dlp update
+
+**NS-21 — `npm run build` fails at tsc (jest types)**
+Origin: Code Reviewer, 2026-11-01 (NS-13 review; the same two errors exist before NS-13)
+Value: the production build and any CI step pass; `tsc` no longer leaves stray `.js` files next to sources
+Fix: `@testing-library/jest-dom` asks for jest types while the project uses vitest: add the vitest globals types / jest-dom vitest entry to `tsconfig`; make `tsc` not emit (`--noEmit`)
+Labels: `by-frontend` | Status: 🔴 Open | Order: small, after NS-14
 
 **NS-14 — Split ResultPage.tsx (1,276 lines)**
 Origin: Owner, 2026-10-30 ("split the large files"); addresses review root cause 2

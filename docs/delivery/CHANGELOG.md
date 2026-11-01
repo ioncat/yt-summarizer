@@ -2,6 +2,10 @@
 
 Reverse-chronological, append-only. Format: see `documentation-conventions.md`.
 
+## 2026-11-01
+
+- **SettingsPage split (NS-13)**: 1,585-line `SettingsPage.tsx` split into 9 files under `components/settings/` (page now 300 lines); 8 smoke tests added first; pure move. Reviewed: clean. Commits: `dfdb205`, `ab8bb82`.
+
 ## 2026-10-31
 
 - **api.py split (NS-12)**: 1,644-line `routers/api.py` split into 7 routers plus an 18-line aggregator; pure move, 52 routes and OpenAPI schema unchanged. Reviewed: clean after one fix (restored yt-dlp update error log). Commits: `54c43ae`, `41329dd`.
