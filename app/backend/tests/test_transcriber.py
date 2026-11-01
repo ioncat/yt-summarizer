@@ -277,3 +277,75 @@ async def test_stt_settings_saved_and_returned(client):
         "stt_device": "auto",
         "stt_cache_path": "",
     })
+
+
+# ---------------------------------------------------------------------------
+# Qwen3-ASR device selection (torch / qwen_asr mocked)
+# ---------------------------------------------------------------------------
+
+def _run_qwen(monkeypatch, cuda_available, fail_on_cuda=False, cuda_check_raises=False, device="auto"):
+    import sys
+    import types
+    from unittest.mock import MagicMock
+    from services.transcriber import _transcribe_qwen3_asr
+
+    fake_torch = types.ModuleType("torch")
+    fake_torch.bfloat16 = "bf16"
+    fake_torch.float32 = "f32"
+    fake_torch.cuda = types.SimpleNamespace(
+        is_available=(MagicMock(side_effect=RuntimeError("boom")) if cuda_check_raises
+                      else MagicMock(return_value=cuda_available))
+    )
+    calls = []
+
+    class FakeModel:
+        def transcribe(self, audio, language=None):
+            return [types.SimpleNamespace(text="Hello world.", language="English")]
+
+    class FakeQwen:
+        @staticmethod
+        def from_pretrained(name, dtype, device_map, max_new_tokens):
+            calls.append((device_map, dtype))
+            if fail_on_cuda and "cuda" in device_map:
+                raise RuntimeError("Torch not compiled with CUDA enabled")
+            return FakeModel()
+
+    fake_qwen = types.ModuleType("qwen_asr")
+    fake_qwen.Qwen3ASRModel = FakeQwen
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "qwen_asr", fake_qwen)
+    result = _transcribe_qwen3_asr("missing.wav", "auto", "Qwen3-ASR-1.7B", device, "", None)
+    return result, calls
+
+
+def test_qwen_uses_cuda_when_torch_reports_cuda(monkeypatch):
+    result, calls = _run_qwen(monkeypatch, cuda_available=True)
+    assert result.success
+    assert result.device_used == "cuda:0"
+    assert calls == [("cuda:0", "bf16")]
+
+
+def test_qwen_uses_cpu_when_torch_has_no_cuda(monkeypatch):
+    result, calls = _run_qwen(monkeypatch, cuda_available=False)
+    assert result.success
+    assert result.device_used == "cpu"
+    assert calls == [("cpu", "f32")]
+
+
+def test_qwen_cpu_when_cuda_check_raises(monkeypatch):
+    result, calls = _run_qwen(monkeypatch, cuda_available=False, cuda_check_raises=True)
+    assert result.success
+    assert result.device_used == "cpu"
+
+
+def test_qwen_falls_back_to_cpu_when_cuda_init_fails(monkeypatch):
+    result, calls = _run_qwen(monkeypatch, cuda_available=True, fail_on_cuda=True)
+    assert result.success
+    assert result.device_used == "cpu"
+    assert calls == [("cuda:0", "bf16"), ("cpu", "f32")]
+
+
+def test_qwen_explicit_cuda_falls_back_when_init_fails(monkeypatch):
+    result, calls = _run_qwen(monkeypatch, cuda_available=False, fail_on_cuda=True, device="cuda")
+    assert result.success
+    assert result.device_used == "cpu"

@@ -432,8 +432,7 @@ def _transcribe_qwen3_asr(
             actual_device = "cpu"
         else:
             try:
-                import ctranslate2  # type: ignore
-                actual_device = "cuda:0" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
+                actual_device = "cuda:0" if torch.cuda.is_available() else "cpu"
             except Exception:
                 actual_device = "cpu"
 
@@ -443,12 +442,26 @@ def _transcribe_qwen3_asr(
         if on_progress:
             on_progress(0, 0.0, 0.0)
 
-        model = Qwen3ASRModel.from_pretrained(
-            f"Qwen/{model_name}",
-            dtype=dtype,
-            device_map=actual_device,
-            max_new_tokens=4096,
-        )
+        try:
+            model = Qwen3ASRModel.from_pretrained(
+                f"Qwen/{model_name}",
+                dtype=dtype,
+                device_map=actual_device,
+                max_new_tokens=4096,
+            )
+        except Exception as cuda_exc:
+            if "cuda" not in actual_device:
+                raise
+            logger.warning(
+                "qwen3-asr: CUDA init failed (%s) — falling back to CPU", cuda_exc
+            )
+            actual_device, dtype = "cpu", torch.float32
+            model = Qwen3ASRModel.from_pretrained(
+                f"Qwen/{model_name}",
+                dtype=dtype,
+                device_map=actual_device,
+                max_new_tokens=4096,
+            )
 
         lang_arg = None if language == "auto" else language
 
