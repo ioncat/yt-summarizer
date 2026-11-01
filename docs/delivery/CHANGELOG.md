@@ -4,6 +4,7 @@ Reverse-chronological, append-only. Format: see `documentation-conventions.md`.
 
 ## 2026-11-01
 
+- **Qwen3-ASR works (NS-20)**: the Qwen engine picks its device through torch and falls back to CPU; CUDA build of torch installed (`2.14.1+cu126`); audio is converted to wav with ffmpeg first, so `.m4a`/`.mp4`/`.mkv` work; both engines accept language codes and names (re-transcribe with large-v3 had failed silently on `Russian`); `requirements.txt` fixed (`qwen-asr>=0.0.6`, torch note). Reviewed: clean after follow-ups. Commits: `a4b14c7`, `0cebb65`, `79304c9`, `0749a62`, `a2cc87d`.
 - **ResultPage split (NS-14)**: 1,280-line `ResultPage.tsx` split into 10 files under `components/result/` (page now 424 lines); 14 smoke tests added first; pure move, 114 DOM snapshots identical before and after. Reviewed: clean. Commits: `dee1c7f`, `6c05d60`.
 - **SettingsPage split (NS-13)**: 1,585-line `SettingsPage.tsx` split into 9 files under `components/settings/` (page now 300 lines); 8 smoke tests added first; pure move. Reviewed: clean. Commits: `dfdb205`, `ab8bb82`.
 

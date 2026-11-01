@@ -155,7 +155,9 @@ Cause (CTO check): the backend venv has `torch 2.15.0+cpu` (CPU-only build), whi
 Fix: (1) code: for the Qwen engine decide the device by `torch.cuda.is_available()`, and fall back to CPU with a log line if CUDA init fails, as the Whisper path already does; test with torch mocked. (2) environment, owner's decision: install the CUDA build of torch into `app/backend/.venv` (a download of about 2.5 GB) for GPU speed; `requirements.txt` then needs a note on which torch build to install
 Progress 2026-11-01: device fix `a4b14c7` and CUDA torch `2.14.1+cu126` (no CUDA wheel of 2.15.0 exists; cu130 needs driver 580+, the owner has 573.48) with the requirements note `0cebb65`; Qwen now runs on `cuda:0`. Found while testing: the Qwen path cannot read `.m4a` (`soundfile` "Format not recognised"), fix in progress (convert to wav with ffmpeg first)
 Seen, not in scope: Qwen stores the language as `Russian`, Whisper as `ru` (History badges); `requirements.txt` says `qwen-asr>=0.1.0` but 0.0.6 is installed; a failed re-transcribe is only a log warning and the old transcript stays silently (belongs to NS-16)
-Labels: `by-backend` | Status: 🟡 In progress
+Done: `a4b14c7` (device by torch, CPU fallback), `0cebb65` (requirements note), `79304c9` (ffmpeg wav conversion), `0749a62` (review follow-ups: `qwen-asr>=0.0.6`, ffmpeg timeout/`-nostdin`/protocol whitelist, convert before model load), `a2cc87d` (language codes for both engines: re-transcribe with large-v3 had failed silently on `language="Russian"`). Torch is now `2.14.1+cu126` in `app/backend/.venv`. QA regression 3: S5 passes with large-v3 (0:06) and Qwen (0:09), language `RU`
+Left alone: `language_to_qwen_name(None)` would raise (no caller passes None today); Qwen with `uk` is silently auto-detected (warning in the log only); old results with a language name in the DB would not match the language dropdown (none exist: checked)
+Labels: `by-backend`, `reviewed` | Status: ✅ Done · reviewed
 
 **NS-18 — Finish splitting the routers** (after NS-11)
 Origin: CTO, 2026-11-01; NS-12 review ("`result.py` 665 and `process.py` 459 lines, over the 400-line limit")
