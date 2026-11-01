@@ -541,3 +541,15 @@ async def test_process_file_transcribes_and_stores_model_device_and_deletes_uplo
             await db.execute(text(f"DELETE FROM {t} WHERE video_id IN (SELECT id FROM videos WHERE video_id=:v)"), {"v": vid})
         await db.execute(text("DELETE FROM videos WHERE video_id=:v"), {"v": vid})
         await db.commit()
+
+
+async def test_history_style_url_of_a_local_file_is_queued_under_a_truncated_id(client, seeded_video):
+    # BASELINE: known bug — History "queue" builds youtube.com/watch?v=<video_id> for every selected
+    # row, including file-* items; the 11-char id parser keeps 'file-8dd203', the item is accepted,
+    # and the worker later skips the unknown video silently (item ends 'done', nothing processed).
+    r = await client.post("/api/queue/bulk", json={
+        "urls": ["https://www.youtube.com/watch?v=file-8dd2037a"], "pipeline_stages": ["cleanup"], "force": True})
+    assert r.status_code == 200 and r.json()["added"] == 1
+    item = (await client.get("/api/queue")).json()["items"][0]
+    assert item["video_id"] == "file-8dd203"
+    await q._run_cleanup_stage("file-8dd203", item["id"])  # what the worker would do: silent no-op
