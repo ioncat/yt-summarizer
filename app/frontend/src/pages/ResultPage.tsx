@@ -1,54 +1,22 @@
-import { useEffect, useRef, useState, lazy, Suspense } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import ReactMarkdown from 'react-markdown'
 import {
-  getResult, deleteResult,
-  startCleanup, cancelCleanup, startSummary,
-  cancelSummary,
-  startMindmap, cancelMindmap,
-  reextractSubtitles,
-  saveChatHistory, clearChatHistory,
-  getSettings, getModels, saveSettings, saveAppSettings,
+  getResult, startSummary,
+  getSettings, getModels,
   getSttModels,
-  queueBulkAdd, toggleFavorite,
   downloadVideo,
   ResultResponse, SttModelInfo,
 } from '../api'
-import { renderText } from '../utils/renderText'
-
-const MindmapView = lazy(() => import('../components/MindmapView'))
-
-type Tab = 'subtitles' | 'cleaned' | 'summary' | 'mindmap' | 'chat'
-
-function MarkdownContent({ text }: { text: string }) {
-  return (
-    <div className="formatted-text markdown-content">
-      <ReactMarkdown>{text}</ReactMarkdown>
-    </div>
-  )
-}
-
-function formatDuration(seconds: number | null): string {
-  if (seconds === 0) return '0:00'
-  if (!seconds) return '—'
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso.endsWith('Z') ? iso : iso.replace(' ', 'T') + 'Z')
-  const dd  = String(d.getDate()).padStart(2, '0')
-  const mm  = String(d.getMonth() + 1).padStart(2, '0')
-  const yyyy = d.getFullYear()
-  const hh  = String(d.getHours()).padStart(2, '0')
-  const min = String(d.getMinutes()).padStart(2, '0')
-  return `${dd}.${mm}.${yyyy}, ${hh}:${min}`
-}
-
-function MetaDot() {
-  return <span className="w-1 h-1 rounded-full bg-outline-variant flex-shrink-0" />
-}
+import { Tab } from '../components/result/helpers'
+import { ResultHeader } from '../components/result/ResultHeader'
+import { MetaRibbons } from '../components/result/MetaRibbons'
+import { ActionsBar } from '../components/result/ActionsBar'
+import { ErrorBanners } from '../components/result/ErrorBanners'
+import { TabsBar } from '../components/result/TabsBar'
+import { TabContent } from '../components/result/TabContent'
+import { ChatInputBar } from '../components/result/ChatInputBar'
+import { useResultChat } from '../components/result/useResultChat'
+import { useResultHandlers } from '../components/result/useResultHandlers'
 
 export default function ResultPage() {
   const { videoId } = useParams<{ videoId: string }>()
@@ -85,19 +53,15 @@ export default function ResultPage() {
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState('')
 
-  // Chat
   const [ollamaUrl, setOllamaUrl]   = useState('')
-  const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
-  const [chatInput, setChatInput]     = useState('')
-  const [isChatting, setIsChatting]   = useState(false)
-  const [chatCopied, setChatCopied]   = useState(false)
-  const ollamaMessagesRef    = useRef<Array<{ role: string; content: string }>>([])
-  const chatEndRef           = useRef<HTMLDivElement>(null)
-  const chatInputRef         = useRef<HTMLTextAreaElement>(null)
-  const chatHistoryLoadedRef = useRef(false)
   const autoSummarizeAfterCleanupRef = useRef(false)
   const [queuedMsg, setQueuedMsg] = useState<string | null>(null)
-  const CHAT_WARN_CHARS = 100_000
+
+  const {
+    chatHistory, setChatHistory, chatInput, setChatInput, isChatting, chatCopied,
+    chatEndRef, chatInputRef, chatHistoryLoadedRef,
+    sendChatMessage, deleteChatMessage, handleClearChat, copyChat,
+  } = useResultChat({ videoId, result, chatModel, summaryModel, ollamaUrl, setActiveTab })
 
   // Notifications
   const originalTitleRef = useRef(document.title)
@@ -321,307 +285,29 @@ export default function ResultPage() {
     }
   }, [result?.summary_status]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chatHistory])
-
-  async function sendChatMessage() {
-    const question = chatInput.trim()
-    const activeChatModel = chatModel || summaryModel
-    if (!question || isChatting || !ollamaUrl || !activeChatModel || !result) return
-
-    if (ollamaMessagesRef.current.length === 0) {
-      const sourceText = result.cleaned_text ?? result.formatted_text ?? ''
-      const CHAT_SYSTEM = 'You are a helpful assistant answering questions about a video. ' +
-        'The full transcript is provided below. Answer questions based on the transcript content. ' +
-        'Respond in the same language as the question.'
-      ollamaMessagesRef.current = [
-        { role: 'system', content: CHAT_SYSTEM },
-        { role: 'user', content: `Video transcript:\n\n${sourceText}` },
-        { role: 'assistant', content: result.summary_text
-            ? `I have read the transcript. Here is a summary:\n\n${result.summary_text}`
-            : 'I have read the transcript.' },
-      ]
-    }
-
-    ollamaMessagesRef.current = [...ollamaMessagesRef.current, { role: 'user', content: question }]
-    setChatHistory(prev => [...prev, { role: 'user', content: question }, { role: 'assistant', content: '' }])
-    setChatInput('')
-    setIsChatting(true)
-
-    let fullResponse = ''
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: activeChatModel, messages: ollamaMessagesRef.current }),
-      })
-      if (!response.ok) throw new Error(`Ollama error ${response.status}`)
-
-      const reader  = response.body!.getReader()
-      const decoder = new TextDecoder()
-      let buffer    = ''
-
-      const processLine = (line: string) => {
-        if (!line.trim()) return
-        try {
-          const json  = JSON.parse(line)
-          const token = json.message?.content ?? json.response ?? ''
-          if (token) {
-            fullResponse += token
-            setChatHistory(prev => {
-              const updated = [...prev]
-              updated[updated.length - 1] = { role: 'assistant', content: fullResponse }
-              return updated
-            })
-          }
-        } catch { /* skip malformed */ }
-      }
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) { if (buffer.trim()) processLine(buffer); break }
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop()!
-        lines.forEach(processLine)
-      }
-
-      ollamaMessagesRef.current = [...ollamaMessagesRef.current, { role: 'assistant', content: fullResponse }]
-      if (fullResponse && videoId) {
-        const savedHistory = [
-          ...chatHistory,
-          { role: 'user' as const, content: question },
-          { role: 'assistant' as const, content: fullResponse },
-        ]
-        saveChatHistory(videoId, savedHistory).catch(() => {})
-        setActiveTab('chat')
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error'
-      setChatHistory(prev => {
-        const updated = [...prev]
-        updated[updated.length - 1] = { role: 'assistant', content: `⚠ ${msg}` }
-        return updated
-      })
-    } finally {
-      setIsChatting(false)
-      chatInputRef.current?.focus()
-    }
-  }
-
-  async function deleteChatMessage(index: number) {
-    const updated = chatHistory.filter((_, i) => i !== index)
-    setChatHistory(updated)
-    if (videoId) saveChatHistory(videoId, updated).catch(() => {})
-  }
-
-  async function handleClearChat() {
-    if (!window.confirm('Clear entire chat history? This cannot be undone.')) return
-    setChatHistory([])
-    ollamaMessagesRef.current = []
-    if (videoId) clearChatHistory(videoId).catch(() => {})
-  }
-
-  function copyChat() {
-    if (!result || chatHistory.length === 0) return
-    const lines = [
-      `Video: ${result.title ?? ''}`,
-      `\nSummary:\n${result.summary_text ?? ''}`,
-      ...chatHistory.map(m => `\n${m.role === 'user' ? 'Q' : 'A'}: ${m.content}`),
-    ].join('\n')
-    navigator.clipboard.writeText(lines).then(() => { setChatCopied(true); setTimeout(() => setChatCopied(false), 2000) })
-  }
-
   const displayText =
     activeTab === 'summary' ? result?.summary_text :
     activeTab === 'cleaned' ? (result?.cleaned_text ?? result?.formatted_text) :
     activeTab === 'chat'    ? null :
     result?.formatted_text
 
-  async function handleCopy() {
-    if (!displayText) return
-    await navigator.clipboard.writeText(displayText)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  async function handleCancelCleanup() {
-    if (!videoId) return
-    stopPolling(); stopCleanupTimer()
-    try { await cancelCleanup(videoId) } catch (err) { console.error('[Result] cancelCleanup failed:', err) }
-    setCleanupElapsedSeconds(null); cleanupElapsedRef.current = null; setLocalCleanupDuration(null)
-    setResult(prev => prev ? { ...prev, cleanup_status: null, cleaned_text: null, cleanup_duration_seconds: null } : prev)
-  }
-
-  async function handleCancelSummary() {
-    if (!videoId) return
-    stopSummaryPolling(); stopSummaryTimer()
-    try { await cancelSummary(videoId) } catch (err) { console.error('[Result] cancelSummary failed:', err) }
-    setSummaryElapsedSeconds(null); summaryElapsedRef.current = null; setLocalSummaryDuration(null)
-    setResult(prev => prev ? { ...prev, summary_status: null, summary_text: null, summary_duration_seconds: null } : prev)
-  }
-
-  async function handleDelete() {
-    if (!videoId) return
-    if (!window.confirm('Delete this video and all its data? This cannot be undone.')) return
-    try { await deleteResult(videoId); navigate('/history') }
-    catch (err) { console.error('[Result] deleteResult failed:', err) }
-  }
-
-  async function handleDownload() {
-    if (!videoId) return
-    setDownloadError('')
-    setIsDownloading(true)
-    try {
-      await downloadVideo(videoId, downloadFormat, downloadQuality)
-    } catch (err: any) {
-      setDownloadError(err.message ?? 'Download failed')
-    } finally {
-      setIsDownloading(false)
-    }
-  }
-
   const isLocalFile = result?.subtitle_source === 'transcript' && result?.video_id?.startsWith('file-')
 
-  async function handleReextract() {
-    if (!videoId) return
-    const ok = window.confirm(
-      isLocalFile
-        ? 'Re-transcribe this file with Whisper?\n\n' +
-          'This will:\n' +
-          '• Replace the current Subtitles tab content with a fresh transcription\n' +
-          '• Clear the Cleaned tab (you will need to re-run AI Cleanup)\n' +
-          '• Clear the Summary tab (you will need to re-run summarization)\n\n' +
-          'Note: the original file must still be present in the uploads folder.\n\nContinue?'
-        : 'Re-extract subtitles from YouTube?\n\n' +
-          'This will:\n' +
-          '• Replace the current Subtitles tab content with a fresh download\n' +
-          '• Clear the Cleaned tab (you will need to re-run AI Cleanup)\n' +
-          '• Clear the Summary tab (you will need to re-run summarization)\n\n' +
-          'Continue?'
-    )
-    if (!ok) return
-    setReextractError('')
-    try {
-      await reextractSubtitles(videoId, reextractLang, isLocalFile ? sttModel : undefined)
-      setResult(prev => prev ? { ...prev, reextract_in_progress: true } : prev)
-      loadResult()
-    } catch (err: any) {
-      console.error('[Result] reextract failed:', err)
-      setReextractError(err.message ?? (isLocalFile ? 'Failed to re-transcribe. The original file may have been deleted.' : 'Failed to re-extract subtitles'))
-    }
-  }
-
-  async function handleCleanupModelChange(newModel: string) {
-    setCleanupModel(newModel)
-    try {
-      await saveSettings('cleanup', {
-        system_prompt: cleanupPromptsRef.current.system_prompt,
-        user_prompt_template: cleanupPromptsRef.current.user_prompt_template,
-        model: newModel || null,
-      })
-    } catch (err) { console.error('[Result] saveSettings cleanup model failed:', err) }
-  }
-
-  async function handleSummaryModelChange(newModel: string) {
-    setSummaryModel(newModel)
-    try {
-      await saveSettings('summarization', {
-        system_prompt: summaryPromptsRef.current.system_prompt,
-        user_prompt_template: summaryPromptsRef.current.user_prompt_template,
-        model: newModel || null,
-      })
-    } catch (err) { console.error('[Result] saveSettings summary model failed:', err) }
-  }
-
-  async function handleChatModelChange(newModel: string) {
-    setChatModel(newModel)
-    try {
-      await saveSettings('chat', { system_prompt: null, user_prompt_template: null, model: newModel || null })
-    } catch (err) { console.error('[Result] saveSettings chat model failed:', err) }
-  }
-
-  async function handleCleanup() {
-    if (!videoId || !result) return
-    requestNotifyPermission()
-    try {
-      setCleanupError('')
-      if (result.url?.startsWith('local://')) {
-        await startCleanup(videoId)
-      } else {
-        await queueBulkAdd([result.url], ['cleanup'], true)
-      }
-      setQueuedMsg('cleanup')
-      stopPolling()
-      pollRef.current = setInterval(() => loadResult(false), 3000)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error'
-      console.error('[Cleanup] failed:', err)
-      setCleanupError(msg)
-    }
-  }
-
-  async function handleSummarize() {
-    if (!videoId || !result) return
-    if (!result.cleanup_status && !result.cleaned_text) {
-      const confirmed = window.confirm(
-        'AI Cleanup has not been run yet.\n\nTo get a quality summary, cleanup should run first.\n\nRun cleanup → summarize pipeline now?'
-      )
-      if (!confirmed) return
-      try {
-        setSummaryError('')
-        if (result.url?.startsWith('local://')) {
-          await startCleanup(videoId)
-          autoSummarizeAfterCleanupRef.current = true
-        } else {
-          await queueBulkAdd([result.url], ['cleanup', 'summary'], true)
-        }
-        setQueuedMsg('cleanup+summary')
-        stopPolling()
-        pollRef.current = setInterval(() => loadResult(false), 3000)
-      } catch (err: unknown) {
-        console.error('[Pipeline] failed:', err)
-        setSummaryError(err instanceof Error ? err.message : 'Unknown error')
-      }
-      return
-    }
-    requestNotifyPermission()
-    try {
-      setSummaryError('')
-      if (result.url?.startsWith('local://')) {
-        await startSummary(videoId)
-      } else {
-        await queueBulkAdd([result.url], ['summary'], true)
-      }
-      setQueuedMsg('summary')
-      stopSummaryPolling()
-      summaryPollRef.current = setInterval(() => loadResult(false), 3000)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error'
-      console.error('[Summary] failed:', err)
-      setSummaryError(msg)
-    }
-  }
-
-  async function handleMindmap(force = false) {
-    if (!videoId || !result) return
-    try {
-      setMindmapError('')
-      if (force) setResult(r => r ? { ...r, mindmap_text: null, mindmap_status: null } : r)
-      if (result.url?.startsWith('local://')) {
-        await startMindmap(videoId, force)
-      } else {
-        await queueBulkAdd([result.url], ['mindmap'], true)
-      }
-      setQueuedMsg('mindmap')
-      stopMindmapPolling()
-      mindmapPollRef.current = setInterval(() => loadResult(false), 3000)
-    } catch (err: unknown) {
-      console.error('[Mindmap] failed:', err)
-      setMindmapError(err instanceof Error ? err.message : 'Unknown error')
-    }
-  }
+  const {
+    handleCopy, handleCancelCleanup, handleCancelSummary, handleDelete, handleDownload,
+    handleReextract, handleCleanupModelChange, handleSummaryModelChange, handleChatModelChange,
+    handleCleanup, handleSummarize, handleMindmap,
+  } = useResultHandlers({
+    videoId, result, navigate, displayText, setCopied,
+    stopPolling, stopCleanupTimer, stopSummaryPolling, stopSummaryTimer, stopMindmapPolling,
+    setCleanupElapsedSeconds, cleanupElapsedRef, setLocalCleanupDuration,
+    setSummaryElapsedSeconds, summaryElapsedRef, setLocalSummaryDuration,
+    setResult, setDownloadError, setIsDownloading, downloadFormat, downloadQuality,
+    isLocalFile, reextractLang, sttModel, setReextractError, loadResult,
+    setCleanupModel, cleanupPromptsRef, setSummaryModel, summaryPromptsRef, setChatModel,
+    requestNotifyPermission, setCleanupError, setSummaryError, setMindmapError, setQueuedMsg,
+    pollRef, summaryPollRef, mindmapPollRef, autoSummarizeAfterCleanupRef,
+  })
 
   // ── Error / loading states ──────────────────────────────────────────────────
   if (error) return (
@@ -648,10 +334,6 @@ export default function ResultPage() {
     activeTab === 'summary' ? summaryCount :
     activeTab === 'cleaned' ? cleanedCount : subtitlesCount
 
-  const selectCls = 'bg-surface-container-low border border-outline-variant rounded-lg px-4 py-2 text-label-md focus:ring-2 focus:ring-primary/20 outline-none appearance-none disabled:opacity-50'
-  const btnSecondary = 'flex items-center gap-2 px-5 py-2 bg-surface-container-lowest text-secondary border border-outline-variant rounded-lg text-label-md font-medium hover:bg-surface-container-low active:scale-[0.98] transition-all'
-  const btnDanger    = 'flex items-center gap-2 px-5 py-2 text-error border border-error/30 rounded-lg text-label-md font-medium hover:bg-error/5 active:scale-[0.98] transition-all'
-  const btnAi        = 'flex items-center gap-2 px-5 py-2 bg-primary-container text-on-primary-container rounded-lg text-label-md font-medium hover:opacity-90 active:scale-[0.98] transition-all shadow-sm'
 
   return (
     <>
@@ -659,151 +341,16 @@ export default function ResultPage() {
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden">
 
           {/* ── Card header: title + star ── */}
-          <div className="p-6 border-b border-outline-variant">
-            <div className="flex justify-between items-start mb-4 gap-3">
-              <h2 className="text-headline-xl font-bold text-on-surface flex-1 leading-tight">
-                {result.title ?? 'Untitled'}
-              </h2>
-              <button
-                onClick={async () => {
-                  const r = await toggleFavorite(videoId!)
-                  setResult(prev => prev ? { ...prev, is_favorite: r.is_favorite } : prev)
-                }}
-                title={result.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
-                className="material-symbols-outlined text-[28px] transition-colors flex-shrink-0 focus:outline-none"
-                style={{
-                  fontVariationSettings: result.is_favorite ? "'FILL' 1" : "'FILL' 0",
-                  color: result.is_favorite ? '#f59e0b' : undefined,
-                }}
-              >star</button>
-            </div>
+          <ResultHeader result={result} videoId={videoId} setResult={setResult} displayCharCount={displayCharCount} />
 
-            {/* Meta row */}
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-secondary text-body-sm">
-              {result.author && (
-                <div><span className="font-semibold text-on-surface">Channel:</span> {result.author}</div>
-              )}
-              <div><span className="font-semibold text-on-surface">Duration:</span> {formatDuration(result.duration)}</div>
-              {result.language && (
-                <div><span className="font-semibold text-on-surface">Language:</span> {result.language.toUpperCase()}</div>
-              )}
-              {displayCharCount != null && (
-                <div><span className="font-semibold text-on-surface">Characters:</span> {displayCharCount.toLocaleString()}</div>
-              )}
-              <div><span className="font-semibold text-on-surface">Saved:</span> {formatDate(result.created_at)}</div>
-            </div>
-          </div>
-
-          {/* ── Meta ribbon: Subtitles tab stage info ── */}
-          {activeTab === 'subtitles' && (result.subtitle_source === 'transcript' || result.subtitles_type) && (
-            <div className="px-6 py-3 bg-surface-container-low border-b border-outline-variant flex flex-wrap items-center gap-x-3 gap-y-1 text-label-sm text-secondary">
-              {result.subtitle_source === 'transcript' ? (
-                <>
-                  <span className="material-symbols-outlined text-[16px]">mic</span>
-                  {result.transcription_duration_seconds != null
-                    ? <span>Transcribed in {formatDuration(result.transcription_duration_seconds)}</span>
-                    : <span>Whisper transcript</span>
-                  }
-                  {result.transcription_model && (
-                    <><span className="meta-sep">·</span><span className="font-medium text-on-surface-variant">{result.transcription_model}</span></>
-                  )}
-                  {result.transcription_device && (
-                    <><span className="meta-sep">·</span>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${result.transcription_device === 'cuda' ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' : 'bg-surface-container text-secondary'}`}>
-                      {result.transcription_device.toUpperCase()}
-                    </span></>
-                  )}
-                  {result.transcription_finished_at && (
-                    <><span className="meta-sep">·</span><span title="Transcription completed">{formatDate(result.transcription_finished_at)}</span></>
-                  )}
-                </>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined text-[16px]">closed_caption</span>
-                  <span>{result.subtitles_type === 'automatic_captions' ? 'Auto-captions' : result.subtitles_type === 'subtitles' ? 'Manual subtitles' : result.subtitles_type}</span>
-                  <span className="meta-sep">·</span><span title="Extracted">{formatDate(result.created_at)}</span>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* ── Meta ribbon: cleanup processing ── */}
-          {activeTab === 'cleaned' && result.cleanup_status === 'processing' && cleanupElapsedSeconds != null && (
-            <div className="px-6 py-3 bg-surface-container-low border-b border-outline-variant flex flex-wrap items-center gap-3 text-label-sm text-secondary">
-              <span className="material-symbols-outlined text-[16px] pulse-dot">sync</span>
-              Cleaning {formatDuration(cleanupElapsedSeconds)}
-              {result.cleanup_paragraphs_done != null && result.cleanup_paragraphs_total != null && (
-                <><MetaDot />paragraph {result.cleanup_paragraphs_done} / {result.cleanup_paragraphs_total}</>
-              )}
-            </div>
-          )}
-
-          {/* ── Meta ribbon: cleanup done ── */}
-          {activeTab === 'cleaned' && result.cleanup_status !== 'processing' && cleanupDuration != null && (
-            <div className="px-6 py-3 bg-surface-container-low border-b border-outline-variant flex flex-wrap items-center gap-3 text-label-sm text-secondary">
-              <span className="material-symbols-outlined text-[16px]">timer</span>
-              Cleaned in {formatDuration(cleanupDuration)}
-              {result.cleanup_model && (
-                <><MetaDot /><span className="font-bold text-on-surface">{result.cleanup_model}</span></>
-              )}
-              <MetaDot />
-              <span className="px-2 py-0.5 rounded-full bg-primary-container/20 text-primary font-bold text-tag-uppercase">AI Cleanup</span>
-              {(() => {
-                const count = result.cleaned_text ? result.cleaned_text.split('\n\n').filter(p => p.trim()).length : null
-                return count != null ? <><MetaDot />{count} paragraphs</> : null
-              })()}
-              {result.cleanup_finished_at && (
-                <><MetaDot />{formatDate(result.cleanup_finished_at)}</>
-              )}
-            </div>
-          )}
-
-          {/* ── Meta ribbon: summary processing ── */}
-          {activeTab === 'summary' && result.summary_status === 'processing' && summaryElapsedSeconds != null && (
-            <div className="px-6 py-3 bg-surface-container-low border-b border-outline-variant flex flex-wrap items-center gap-3 text-label-sm text-secondary">
-              <span className="material-symbols-outlined text-[16px] pulse-dot">sync</span>
-              Summarizing {formatDuration(summaryElapsedSeconds)}
-              {result.summary_chunks_done != null && result.summary_chunks_total != null && (
-                <><MetaDot />{result.chapters ? 'chapter' : 'chunk'} {result.summary_chunks_done} / {result.summary_chunks_total}</>
-              )}
-            </div>
-          )}
-
-          {/* ── Meta ribbon: summary done ── */}
-          {activeTab === 'summary' && result.summary_status !== 'processing' && summaryDuration != null && (
-            <div className="px-6 py-3 bg-surface-container-low border-b border-outline-variant flex flex-wrap items-center gap-3 text-label-sm text-secondary">
-              <span className="material-symbols-outlined text-[16px]">timer</span>
-              Summarized in {formatDuration(summaryDuration)}
-              {result.summary_model && (
-                <><MetaDot /><span className="font-bold text-on-surface">{result.summary_model}</span></>
-              )}
-              {result.summary_mode === 'single' && (
-                <><MetaDot /><span className="px-2 py-0.5 rounded-full bg-primary-container/20 text-primary font-bold text-tag-uppercase">Single Pass</span></>
-              )}
-              {result.summary_mode === 'map_reduce' && (
-                <>
-                  <MetaDot /><span className="px-2 py-0.5 rounded-full bg-primary-container/20 text-primary font-bold text-tag-uppercase">Map-Reduce</span>
-                  {result.summary_chunks_count != null && <><MetaDot />{result.summary_chunks_count} chunks</>}
-                </>
-              )}
-              {result.summary_mode === 'full_extract' && (
-                <>
-                  <MetaDot /><span className="px-2 py-0.5 rounded-full bg-primary-container/20 text-primary font-bold text-tag-uppercase">Full Extract</span>
-                  {result.summary_chunks_count != null && <><MetaDot />{result.summary_chunks_count} chapters</>}
-                </>
-              )}
-              {(() => {
-                const inputLen  = result.cleaned_text?.length ?? result.formatted_text?.length ?? null
-                const outputLen = result.summary_text?.length ?? null
-                if (!inputLen || !outputLen || outputLen >= inputLen) return null
-                const pct = Math.round((1 - outputLen / inputLen) * 100)
-                return <><MetaDot />{pct}% compressed</>
-              })()}
-              {result.summary_finished_at && (
-                <><MetaDot />{formatDate(result.summary_finished_at)}</>
-              )}
-            </div>
-          )}
+          <MetaRibbons
+            result={result}
+            activeTab={activeTab}
+            cleanupElapsedSeconds={cleanupElapsedSeconds}
+            summaryElapsedSeconds={summaryElapsedSeconds}
+            cleanupDuration={cleanupDuration}
+            summaryDuration={summaryDuration}
+          />
 
           {/* ── Queue message ── */}
           {queuedMsg && (
@@ -823,457 +370,54 @@ export default function ResultPage() {
           <div className="p-6 space-y-5">
 
             {/* Action buttons */}
-            <div className="flex flex-wrap items-center gap-3">
-
-              {/* Subtitles tab controls */}
-              {activeTab === 'subtitles' && (
-                <>
-                  {/* STT model selector — only for local file transcriptions */}
-                  {isLocalFile && (
-                    <div className="relative min-w-[160px]">
-                      <select
-                        value={sttModel}
-                        onChange={e => {
-                          setSttModel(e.target.value)
-                          saveAppSettings({ stt_model: e.target.value }).catch(() => {})
-                        }}
-                        className={`${selectCls} w-full pr-8`}
-                        title="STT model for re-transcription"
-                      >
-                        <option value="">— STT model —</option>
-                        {sttModels.filter(m => m.downloaded).map(m => (
-                          <option key={m.name} value={m.name}>{m.name}</option>
-                        ))}
-                      </select>
-                      <span className="material-symbols-outlined absolute right-2 top-2.5 text-secondary pointer-events-none text-[16px]">expand_more</span>
-                    </div>
-                  )}
-                  <select
-                    value={reextractLang}
-                    onChange={e => setReextractLang(e.target.value)}
-                    disabled={!!result.reextract_in_progress}
-                    className={`${selectCls} min-w-[120px]`}
-                  >
-                    <option value="auto">Auto</option>
-                    <option value="ru">Russian</option>
-                    <option value="en">English</option>
-                    <option value="uk">Ukrainian</option>
-                  </select>
-                  <button
-                    onClick={handleReextract}
-                    disabled={!!result.reextract_in_progress || result.cleanup_status === 'processing' || result.summary_status === 'processing'}
-                    className={`${btnSecondary} disabled:opacity-50`}
-                    title={isLocalFile ? 'Re-run Whisper transcription. Cleanup and Summary will be cleared.' : 'Re-fetch subtitles from YouTube. Cleanup and Summary will be cleared.'}
-                  >
-                    <span className="material-symbols-outlined text-[18px]">refresh</span>
-                    {result.reextract_in_progress ? (isLocalFile ? 'Re-transcribing…' : 'Re-extracting…') : (isLocalFile ? 'Re-transcribe' : 'Re-extract')}
-                  </button>
-                  {result.reextract_in_progress && isLocalFile && result.retranscribe_progress && (
-                    <span className="text-label-sm text-secondary animate-pulse">{result.retranscribe_progress}</span>
-                  )}
-                </>
-              )}
-
-              {/* Cleaned tab controls */}
-              {activeTab === 'cleaned' && (
-                <>
-                  <div className="relative min-w-[180px]">
-                    <select
-                      value={cleanupModel}
-                      onChange={e => handleCleanupModelChange(e.target.value)}
-                      disabled={models.length === 0}
-                      title={models.length === 0 ? 'Ollama offline' : 'Model for AI cleanup'}
-                      className={`${selectCls} w-full pr-8`}
-                    >
-                      <option value="">— cleanup model —</option>
-                      {models.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                    <span className="material-symbols-outlined absolute right-2 top-2.5 text-secondary pointer-events-none text-[16px]">expand_more</span>
-                  </div>
-                  {result.cleanup_status === 'processing' ? (
-                    <button onClick={handleCancelCleanup} className={btnSecondary}>
-                      <span className="material-symbols-outlined text-[18px]">stop_circle</span>Stop
-                    </button>
-                  ) : (
-                    <button onClick={handleCleanup} className={btnAi}>
-                      <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
-                      {result.cleanup_status === 'done' ? 'Re-run AI cleanup' : 'Clean with AI'}
-                    </button>
-                  )}
-                </>
-              )}
-
-              {/* Summary tab controls */}
-              {activeTab === 'summary' && (
-                <>
-                  <div className="relative min-w-[180px]">
-                    <select
-                      value={summaryModel}
-                      onChange={e => handleSummaryModelChange(e.target.value)}
-                      disabled={models.length === 0}
-                      title={models.length === 0 ? 'Ollama offline' : 'Model for summarization'}
-                      className={`${selectCls} w-full pr-8`}
-                    >
-                      <option value="">— summary model —</option>
-                      {models.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                    <span className="material-symbols-outlined absolute right-2 top-2.5 text-secondary pointer-events-none text-[16px]">expand_more</span>
-                  </div>
-                  {result.summary_status === 'processing' ? (
-                    <button onClick={handleCancelSummary} className={btnSecondary}>
-                      <span className="material-symbols-outlined text-[18px]">stop_circle</span>Stop
-                    </button>
-                  ) : (
-                    <button onClick={handleSummarize} className={btnAi}>
-                      <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
-                      {result.summary_status === 'done' ? 'Re-run summary' : 'Summarize'}
-                    </button>
-                  )}
-                </>
-              )}
-
-              {/* Mindmap tab controls */}
-              {activeTab === 'mindmap' && (
-                result.mindmap_status === 'processing' ? (
-                  <button onClick={async () => { await cancelMindmap(videoId!); stopMindmapPolling(); setResult(r => r ? { ...r, mindmap_status: null } : r) }} className={btnSecondary}>
-                    <span className="material-symbols-outlined text-[18px]">stop_circle</span>Stop
-                  </button>
-                ) : (
-                  <button onClick={() => handleMindmap(!!result.mindmap_text)} className={btnAi}>
-                    <span className="material-symbols-outlined text-[18px]">account_tree</span>
-                    {result.mindmap_text ? 'Regenerate mind map' : 'Generate mind map'}
-                  </button>
-                )
-              )}
-
-              {/* Chat tab controls */}
-              {activeTab === 'chat' && (
-                <div className="relative min-w-[180px]">
-                  <select
-                    value={chatModel || summaryModel}
-                    onChange={e => handleChatModelChange(e.target.value)}
-                    disabled={models.length === 0}
-                    title={models.length === 0 ? 'Ollama offline' : 'Model for chat'}
-                    className={`${selectCls} w-full pr-8`}
-                  >
-                    <option value="">— chat model —</option>
-                    {models.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                  <span className="material-symbols-outlined absolute right-2 top-2.5 text-secondary pointer-events-none text-[16px]">expand_more</span>
-                </div>
-              )}
-
-              {/* Benchmark — not applicable for local file transcriptions */}
-              {activeTab !== 'chat' && !isLocalFile && (
-                <a href={`/benchmark/${result.video_id}`} className={btnSecondary}>
-                  <span className="material-symbols-outlined text-[18px]">balance</span>Benchmark
-                </a>
-              )}
-
-              {/* Divider */}
-              {activeTab !== 'chat' && <div className="h-8 w-px bg-outline-variant mx-1" />}
-
-              {/* Copy / chat-specific actions */}
-              {activeTab === 'chat' ? (
-                chatHistory.length > 0 && (
-                  <>
-                    <button onClick={copyChat} className={btnSecondary}>
-                      <span className="material-symbols-outlined text-[18px]">content_copy</span>
-                      {chatCopied ? 'Copied!' : 'Copy chat'}
-                    </button>
-                    <button onClick={handleClearChat} className={btnDanger}>
-                      <span className="material-symbols-outlined text-[18px]">delete</span>Clear chat
-                    </button>
-                  </>
-                )
-              ) : (
-                displayText && (
-                  <button onClick={handleCopy} className={btnSecondary}>
-                    <span className="material-symbols-outlined text-[18px]">content_copy</span>
-                    {copied ? 'Copied!' : 'Copy text'}
-                  </button>
-                )
-              )}
-
-              {/* Open video — not applicable for local file transcriptions */}
-              {!isLocalFile && (
-                <a href={result.url} target="_blank" rel="noreferrer" className={btnSecondary}>
-                  <span className="material-symbols-outlined text-[18px]">open_in_new</span>Open video
-                </a>
-              )}
-
-              {/* Download — not applicable for local file transcriptions */}
-              {!isLocalFile && (
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={handleDownload}
-                    disabled={isDownloading}
-                    className={btnSecondary + ' disabled:opacity-50'}
-                  >
-                    <span className="material-symbols-outlined text-[18px]">
-                      {isDownloading ? 'hourglass_top' : 'download'}
-                    </span>
-                    {isDownloading ? 'Downloading…' : 'Download'}
-                  </button>
-                  <select
-                    value={downloadFormat}
-                    onChange={e => setDownloadFormat(e.target.value as 'mp4' | 'mp3')}
-                    className="h-9 px-2 text-[11px] bg-surface-container-low border border-outline-variant rounded-lg text-on-surface focus:outline-none focus:border-primary"
-                    title="Format"
-                  >
-                    <option value="mp4">MP4</option>
-                    <option value="mp3">MP3</option>
-                  </select>
-                  <select
-                    value={downloadQuality}
-                    onChange={e => setDownloadQuality(e.target.value)}
-                    className="h-9 px-2 text-[11px] bg-surface-container-low border border-outline-variant rounded-lg text-on-surface focus:outline-none focus:border-primary"
-                    title="Quality"
-                  >
-                    <option value="best">Best</option>
-                    <option value="1080p">1080p</option>
-                    <option value="720p">720p</option>
-                    <option value="480p">480p</option>
-                  </select>
-                </div>
-              )}
-
-              {/* Delete */}
-              <button onClick={handleDelete} className={btnDanger}>
-                <span className="material-symbols-outlined text-[18px]">delete</span>Delete
-              </button>
-            </div>
+            <ActionsBar
+              activeTab={activeTab} result={result} videoId={videoId} isLocalFile={isLocalFile}
+              sttModel={sttModel} setSttModel={setSttModel} sttModels={sttModels}
+              reextractLang={reextractLang} setReextractLang={setReextractLang} handleReextract={handleReextract}
+              cleanupModel={cleanupModel} handleCleanupModelChange={handleCleanupModelChange} models={models}
+              handleCancelCleanup={handleCancelCleanup} handleCleanup={handleCleanup}
+              summaryModel={summaryModel} handleSummaryModelChange={handleSummaryModelChange}
+              handleCancelSummary={handleCancelSummary} handleSummarize={handleSummarize}
+              stopMindmapPolling={stopMindmapPolling} setResult={setResult} handleMindmap={handleMindmap}
+              chatModel={chatModel} handleChatModelChange={handleChatModelChange}
+              chatHistory={chatHistory} copyChat={copyChat} chatCopied={chatCopied} handleClearChat={handleClearChat}
+              displayText={displayText} handleCopy={handleCopy} copied={copied}
+              handleDownload={handleDownload} isDownloading={isDownloading}
+              downloadFormat={downloadFormat} setDownloadFormat={setDownloadFormat}
+              downloadQuality={downloadQuality} setDownloadQuality={setDownloadQuality}
+              handleDelete={handleDelete}
+            />
 
             {/* Error banners */}
-            {downloadError && (
-              <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3 flex items-start gap-3">
-                <span className="material-symbols-outlined text-error text-[18px] mt-0.5 shrink-0">error</span>
-                <div>
-                  <p className="text-body-sm text-on-error-container">{downloadError}</p>
-                  <button
-                    onClick={() => setDownloadError('')}
-                    className="mt-1 text-label-sm text-on-error-container/70 hover:text-on-error-container underline"
-                  >Dismiss</button>
-                </div>
-              </div>
-            )}
-            {reextractError && (
-              <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3 flex items-start gap-3">
-                <span className="material-symbols-outlined text-error text-[18px] mt-0.5 shrink-0">error</span>
-                <div>
-                  <p className="text-body-sm text-on-error-container">{reextractError}</p>
-                  <button
-                    onClick={() => setReextractError('')}
-                    className="mt-1 text-label-sm text-on-error-container/70 hover:text-on-error-container underline"
-                  >Dismiss</button>
-                </div>
-              </div>
-            )}
-            {activeTab === 'cleaned' && (result.cleanup_status === 'failed' || cleanupError) && (
-              <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3">
-                <p className="text-body-sm text-on-error-container">
-                  {cleanupError || 'Cleanup failed. Possible causes: Ollama not running, no model selected, or model timed out on large paragraphs. Check backend log.'}
-                </p>
-              </div>
-            )}
-            {activeTab === 'summary' && (result.summary_status === 'failed' || summaryError) && (
-              <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3">
-                <p className="text-body-sm text-on-error-container">
-                  {summaryError || 'Summarization failed. Possible causes: Ollama not running, no model selected, or a stage timed out. For very long texts try a stronger model or wait for hierarchical map-reduce.'}
-                </p>
-              </div>
-            )}
-            {activeTab === 'mindmap' && (result.mindmap_status === 'failed' || mindmapError) && (
-              <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3">
-                <p className="text-body-sm text-on-error-container">
-                  {mindmapError || 'Mind map generation failed. Check Ollama and model settings.'}
-                </p>
-              </div>
-            )}
+            <ErrorBanners
+              result={result} activeTab={activeTab}
+              downloadError={downloadError} setDownloadError={setDownloadError}
+              reextractError={reextractError} setReextractError={setReextractError}
+              cleanupError={cleanupError} summaryError={summaryError} mindmapError={mindmapError}
+            />
 
             {/* Tabs bar */}
-            <div className="-mx-6 px-6 border-b border-outline-variant">
-              <div className="flex items-end gap-8">
-                {(['mindmap', 'subtitles', 'cleaned', 'summary'] as Tab[]).map(tab => {
-                  const isActive = activeTab === tab
-                  const isProcessing =
-                    (tab === 'cleaned'  && result.cleanup_status === 'processing') ||
-                    (tab === 'summary'  && result.summary_status === 'processing') ||
-                    (tab === 'mindmap'  && result.mindmap_status === 'processing')
-                  const label =
-                    tab === 'mindmap'   ? 'Mind Map'  :
-                    tab === 'subtitles' ? 'Subtitles' :
-                    tab === 'cleaned'   ? 'Cleaned'   : 'Summary'
-                  return (
-                    <button
-                      key={tab}
-                      onClick={() => setActiveTab(tab)}
-                      className={`pb-3 text-label-md font-medium transition-colors flex items-center gap-1.5 ${
-                        isActive ? 'text-primary font-bold border-b-2 border-primary' : 'text-secondary hover:text-on-surface'
-                      }`}
-                    >
-                      {isProcessing && (
-                        <span className="material-symbols-outlined text-[12px] pulse-dot">sync</span>
-                      )}
-                      {label}
-                      {isProcessing && <span className="text-[11px]">…</span>}
-                    </button>
-                  )
-                })}
-                {chatHistory.length > 0 && (
-                  <button
-                    onClick={() => setActiveTab('chat')}
-                    className={`pb-3 text-label-md font-medium transition-colors ${
-                      activeTab === 'chat' ? 'text-primary font-bold border-b-2 border-primary' : 'text-secondary hover:text-on-surface'
-                    }`}
-                  >
-                    Chat <span className="text-[11px]">({chatHistory.length})</span>
-                  </button>
-                )}
-              </div>
-            </div>
+            <TabsBar result={result} activeTab={activeTab} setActiveTab={setActiveTab} chatHistory={chatHistory} />
           </div>
 
           {/* ── Tab content ── */}
-          <div className="px-6 pb-8">
-
-            {/* MD toggle pill — shown inside content for summary and cleaned tabs */}
-            {(activeTab === 'summary' || activeTab === 'cleaned') && (
-              <div className="flex justify-end mb-2">
-                <button
-                  onClick={() => { const next = !markdownEnabled; setMarkdownEnabled(next); localStorage.setItem('yt-md-enabled', String(next)) }}
-                  title={markdownEnabled ? 'Markdown ON — click for plain text' : 'Enable Markdown rendering'}
-                  className={`px-2 py-0.5 rounded border text-[10px] font-bold tracking-wider transition-colors ${markdownEnabled ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant text-secondary hover:bg-surface-container-high'}`}
-                >MD</button>
-              </div>
-            )}
-
-            {activeTab === 'summary' ? (
-              !result.summary_text ? (
-                <div className="py-12 text-center text-secondary text-body-md">
-                  {result.summary_status === 'processing' ? 'Summarization is running…'
-                    : result.summary_status === 'failed' ? 'Summary failed. Click "Re-run summary" to try again.'
-                    : 'No summary yet. Click "Summarize" above to generate one.'}
-                </div>
-              ) : (
-                <>
-                  {markdownEnabled ? <MarkdownContent text={result.summary_text!} /> : <div className="formatted-text">{renderText(result.summary_text!)}</div>}
-                  {chatBarVisible && <div className="h-20" />}
-                </>
-              )
-            ) : activeTab === 'mindmap' ? (
-              result.mindmap_status === 'processing' ? (
-                <div className="py-12 flex items-center justify-center gap-3 text-secondary text-body-md">
-                  <span className="material-symbols-outlined pulse-dot">account_tree</span>
-                  Generating mind map…
-                </div>
-              ) : result.mindmap_status === 'failed' || mindmapError ? (
-                <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3 text-on-error-container text-body-sm">
-                  {mindmapError || 'Mind map generation failed. Check Ollama and model settings.'}
-                </div>
-              ) : result.mindmap_text ? (
-                <Suspense fallback={<div className="py-8 text-center text-secondary text-body-md">Loading…</div>}>
-                  <MindmapView text={result.mindmap_text} title={result.title ?? undefined} onRegenerate={() => handleMindmap(true)} />
-                </Suspense>
-              ) : (
-                <div className="py-16 text-center text-secondary text-body-md">
-                  <span className="material-symbols-outlined text-[48px] block mb-4 text-outline-variant">account_tree</span>
-                  No mind map yet. Click "Generate mind map" above to create one.
-                </div>
-              )
-            ) : activeTab === 'chat' ? (
-              chatHistory.length === 0 ? (
-                <div className="py-12 text-center text-secondary text-body-md">
-                  No chat history. Ask a question in the input bar below.
-                </div>
-              ) : (
-                <>
-                  <div className="chat-thread">
-                    {chatHistory.map((msg, i) => (
-                      <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
-                        {msg.content
-                          ? (msg.role === 'assistant'
-                              ? <ReactMarkdown>{msg.content}</ReactMarkdown>
-                              : msg.content)
-                          : (msg.role === 'assistant' && isChatting
-                              ? <span className="chat-typing"><span className="chat-typing-dot" /><span className="chat-typing-dot" /><span className="chat-typing-dot" /></span>
-                              : null)}
-                        {msg.content && (
-                          <>
-                            <button className="chat-msg-copy" onClick={() => navigator.clipboard.writeText(msg.content)} title="Copy message">⎘</button>
-                            <button className="chat-msg-copy chat-msg-delete" onClick={() => deleteChatMessage(i)} title="Delete message">🗑</button>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                    <div ref={chatEndRef} />
-                  </div>
-                  {chatBarVisible && <div className="h-20" />}
-                </>
-              )
-            ) : activeTab === 'cleaned' && !result.cleaned_text ? (
-              <div className="py-12 text-center text-secondary text-body-md">
-                {result.cleanup_status === 'processing' ? 'AI cleanup is running…'
-                  : result.cleanup_status === 'failed' ? 'Cleanup failed. Click "Re-run AI cleanup" to try again.'
-                  : 'No cleaned version yet. Click "Clean with AI" above to start.'}
-              </div>
-            ) : (
-              displayText
-                ? markdownEnabled ? <MarkdownContent text={displayText} /> : <div className="formatted-text">{renderText(displayText)}</div>
-                : null
-            )}
-          </div>
+          <TabContent
+            result={result} activeTab={activeTab}
+            markdownEnabled={markdownEnabled}
+            setMarkdownEnabled={setMarkdownEnabled}
+            chatBarVisible={chatBarVisible} mindmapError={mindmapError} handleMindmap={handleMindmap}
+            chatHistory={chatHistory} isChatting={isChatting} deleteChatMessage={deleteChatMessage}
+            chatEndRef={chatEndRef} displayText={displayText}
+          />
         </div>
       </div>
 
       {/* ── Floating chat input bar ── */}
       {chatBarVisible && (
-        <div className="fixed bottom-6 left-0 md:left-64 right-0 z-30 px-6 md:px-8 pointer-events-none">
-          <div className="max-w-[1200px] mx-auto flex justify-center pointer-events-none">
-          <div className="w-full max-w-2xl pointer-events-auto">
-          <div className="bg-surface/95 dark:bg-surface-container-low/95 backdrop-blur-md border border-outline-variant rounded-2xl shadow-2xl px-5 py-4 space-y-2">
-            {(() => {
-              const sourceLen = (result.cleaned_text ?? result.formatted_text ?? '').length
-              return sourceLen > CHAT_WARN_CHARS ? (
-                <p className="text-label-sm text-secondary">⚠ Text is very long ({Math.round(sourceLen / 1000)}K chars) — response quality may vary</p>
-              ) : null
-            })()}
-            {chatHistory.length === 0 && (
-              <p className="text-label-sm text-secondary">Ask a follow-up question about the video</p>
-            )}
-            <div className="flex items-center gap-3 bg-surface-container-low border border-outline-variant rounded-xl px-4 py-2 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
-              <textarea
-                ref={chatInputRef}
-                rows={1}
-                placeholder="Ask about the video…"
-                value={chatInput}
-                disabled={isChatting}
-                onChange={e => {
-                  setChatInput(e.target.value)
-                  e.target.style.height = 'auto'
-                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
-                }}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage() }
-                }}
-                className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-body-md text-on-surface placeholder:text-secondary/60 resize-none"
-              />
-              <button
-                onClick={sendChatMessage}
-                disabled={isChatting || !chatInput.trim()}
-                title="Send"
-                className="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center hover:scale-105 active:scale-95 transition-transform disabled:opacity-50 flex-shrink-0"
-              >
-                {isChatting
-                  ? <span className="material-symbols-outlined text-[18px] pulse-dot">autorenew</span>
-                  : <span className="material-symbols-outlined text-[18px]">send</span>
-                }
-              </button>
-            </div>
-          </div>
-          </div>
-          </div>
-        </div>
+        <ChatInputBar
+          result={result} chatHistory={chatHistory} chatInput={chatInput} setChatInput={setChatInput}
+          isChatting={isChatting} chatInputRef={chatInputRef} sendChatMessage={sendChatMessage}
+        />
       )}
     </>
   )
