@@ -16,7 +16,7 @@ The CTO tells you when to run and what to test. Main triggers:
 
 ## Before you start
 
-Check that the app is running: open `http://localhost:3000` in the built-in browser. If you get a connection error, tell the CTO and stop — you cannot start the app yourself.
+Check that the app is running: open `http://localhost:3001` in the built-in browser. If you get a connection error, tell the CTO and stop — you cannot start the app yourself.
 
 ## Smoke-test plan
 

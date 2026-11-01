@@ -15,7 +15,7 @@
 | 12 Personal data | The repository is public. Personal data: uploaded video/audio files in `app/data/uploads/`, YouTube cookie files in `app/data/`. Guard tests: none yet |
 | 14 Quality gates | Tests: backend: `cd app/backend && python -m pytest -q`; MCP: `cd app && python -m pytest -q tests`; frontend: `cd app/frontend && npm test`. Static analysis: none. Other gates: none |
 | 15 Docs | `CHANGELOG.md` and the tracker issue closed by the CTO, per `documentation-conventions.md` |
-| 16 UI | Owner confirms visually in the browser (frontend at `localhost:3000`, backend at `localhost:9010`); agent screenshots are not sufficient |
+| 16 UI | Owner confirms visually in the browser (frontend at `localhost:3001`, backend at `localhost:9010`); agent screenshots are not sufficient |
 | 19 Tests and the live DB | A fixture sets the DB path to a throwaway DB for every test: `app/backend/tests/conftest.py` patches `models.database.engine` with `sqlite+aiosqlite:///:memory:` before importing the app |
 | 20 Task tracker | The board is `docs/delivery/backlog/BACKLOG.md` (epics in `docs/delivery/backlog/epics/`, written by `docs/delivery/product-delivery-conventions.md`), no tracker key. Only the CTO writes to it (among agents). Each handout carries an issue id; name it in your report and commit message. Issue format: `Origin:` first (who asked, when, in what words); user-facing issues use User story + Given/When/Then + edge cases + out of scope + dependencies; technical ones the short form Every issue also carries a `Value:` line right after `Origin:` (what gets better and for whom); an issue without it is not handed out. |
 | 21 Labels | `by-backend`, `by-frontend`, `by-mcp`, `by-cto`, `reviewed`, `needs-owner` |
