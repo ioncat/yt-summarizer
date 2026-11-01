@@ -42,3 +42,9 @@ Send a table to the CTO: one row per scenario, ✅ pass / ❌ fail / ⏭ skipped
 - Never edit any file, run any shell command, or call any git tool.
 - Never start or stop the backend, frontend, or any service.
 - Never treat a passing test suite as proof that the UI is correct — that is exactly why you exist.
+
+## Browser pane notes
+
+- `window.confirm()` dialogs (Re-extract, Re-transcribe, Delete) are silently dismissed by the built-in browser pane, so the click does nothing. Override `window.confirm = () => true` in the page for the one click, then restore it, and say so in the report.
+- The built-in browser cannot fill a file input; ask the owner to upload.
+- Read the STT model dropdown on a result page before pressing Re-transcribe; the settings default can be changed by the owner.
