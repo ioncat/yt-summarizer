@@ -132,6 +132,12 @@ Items, each a small separate commit:
 9. Queue shows 155+ old rows; consider a "clear finished" action (ask the owner first; it deletes data)
 Labels: `by-frontend` (item 3 may need `by-backend`) | Status: 🔵 Planned | Depends on: NS-11, NS-13, NS-14 (most of these touch the pages being split)
 
+**NS-19 — Word list for speech-to-text** (idea, after the refactor; a new feature)
+Origin: Owner, 2026-11-01 (QA baseline S5: "Claude Code" heard as "PlotCode"; the owner says no transcriber he has tried recognises this name)
+Value: names and terms the owner uses often (Claude Code, Ollama, project names) come out right in transcripts
+Fix (to be refined with the owner): a list of words in Settings → STT, passed to the speech engine as a hint (Whisper `initial_prompt`; check that Qwen3-ASR has an equivalent); optionally the same list added to the cleanup prompt so the LLM fixes leftover mishearings
+Labels: `by-backend`, `by-frontend` | Status: 🔵 Idea | Depends on: NS-11, NS-14
+
 **NS-18 — Finish splitting the routers** (after NS-11)
 Origin: CTO, 2026-11-01; NS-12 review ("`result.py` 665 and `process.py` 459 lines, over the 400-line limit")
 Value: the rule "a file over about 400 lines is split" holds for the backend too
