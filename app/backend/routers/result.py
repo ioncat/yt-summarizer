@@ -230,8 +230,8 @@ async def _run_reextract(video_id: str, language: str = "auto", model: str | Non
             _RETRANSCRIBE_PROGRESS.pop(video_id, None)
             if not transcription.success:
                 _reextract_logger.warning(
-                    "retranscribe: failed video_id=%s error=%s",
-                    video_id, transcription.error_message,
+                    "retranscribe: failed video_id=%s model=%s language=%s device=%s error=%s",
+                    video_id, stt_model, language, stt_device, transcription.error_message,
                 )
                 return
 

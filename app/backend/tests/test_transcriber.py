@@ -376,6 +376,7 @@ def _qwen_env(monkeypatch, transcribe_raises=False):
     class FakeModel:
         def transcribe(self, audio, language=None):
             seen["audio"] = audio
+            seen["language"] = language
             seen["existed"] = os.path.exists(audio)
             if transcribe_raises:
                 raise RuntimeError("model blew up")
@@ -545,3 +546,64 @@ def test_qwen_conversion_failure_does_not_load_model(monkeypatch):
     result = _transcribe_qwen3_asr("a.m4a", "auto", "Qwen3-ASR-1.7B", "cpu", "", None)
     assert not result.success
     assert loaded == []
+
+
+# ---------------------------------------------------------------------------
+# Language forms: ISO codes for Whisper and storage, names for Qwen3-ASR
+# ---------------------------------------------------------------------------
+
+def test_language_to_code_accepts_codes_and_names():
+    from services.transcriber import language_to_code
+    assert language_to_code("ru") == "ru"
+    assert language_to_code("Russian") == "ru"
+    assert language_to_code("russian") == "ru"
+    assert language_to_code("auto") == "auto"
+    assert language_to_code("xx") == "xx"
+
+
+def test_language_to_qwen_name():
+    from services.transcriber import language_to_qwen_name
+    assert language_to_qwen_name("ru") == "Russian"
+    assert language_to_qwen_name("Russian") == "Russian"
+    assert language_to_qwen_name("uk") is None
+
+
+@pytest.mark.parametrize("given", ["ru", "Russian"])
+def test_whisper_receives_iso_code(monkeypatch, given):
+    import sys
+    import types
+    from services.transcriber import transcribe
+    seen = {}
+
+    class FakeWhisper:
+        def __init__(self, *a, **k):
+            pass
+
+        def transcribe(self, path, language=None, **k):
+            seen["language"] = language
+            return iter([]), types.SimpleNamespace(duration=1.0, language="ru")
+
+    fake_fw = types.ModuleType("faster_whisper")
+    fake_fw.WhisperModel = FakeWhisper
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake_fw)
+    assert transcribe("a.wav", language=given, model="base", device="cpu").success
+    assert seen["language"] == "ru"
+
+
+@pytest.mark.parametrize("given,expected", [("ru", "Russian"), ("Russian", "Russian"), ("uk", None), ("auto", None)])
+def test_qwen_receives_language_name(monkeypatch, given, expected):
+    from services.transcriber import _transcribe_qwen3_asr
+    seen = _qwen_env(monkeypatch)
+    monkeypatch.setattr("services.transcriber.shutil.which", lambda n: "ffmpeg")
+    monkeypatch.setattr("services.transcriber.subprocess.run", _fake_run([]))
+    assert _transcribe_qwen3_asr("a.m4a", given, "Qwen3-ASR-1.7B", "cpu", "", None).success
+    assert seen["language"] == expected
+
+
+def test_qwen_stores_iso_code_as_detected_language(monkeypatch):
+    from services.transcriber import _transcribe_qwen3_asr
+    _qwen_env(monkeypatch)  # fake model reports language "English"
+    monkeypatch.setattr("services.transcriber.shutil.which", lambda n: "ffmpeg")
+    monkeypatch.setattr("services.transcriber.subprocess.run", _fake_run([]))
+    result = _transcribe_qwen3_asr("a.m4a", "auto", "Qwen3-ASR-1.7B", "cpu", "", None)
+    assert result.detected_language == "en"

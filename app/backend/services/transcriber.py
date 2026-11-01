@@ -239,6 +239,31 @@ class TranscriptionResult:
     device_used: str | None = None
 
 
+# Qwen3-ASR names languages ("Russian"); Whisper and the rest of the app use ISO codes ("ru").
+_QWEN_LANG_CODES = {
+    "Chinese": "zh", "English": "en", "Cantonese": "yue", "Arabic": "ar", "German": "de",
+    "French": "fr", "Spanish": "es", "Portuguese": "pt", "Indonesian": "id", "Italian": "it",
+    "Korean": "ko", "Russian": "ru", "Thai": "th", "Vietnamese": "vi", "Japanese": "ja",
+    "Turkish": "tr", "Hindi": "hi", "Malay": "ms", "Dutch": "nl", "Swedish": "sv",
+    "Danish": "da", "Finnish": "fi", "Polish": "pl", "Czech": "cs", "Filipino": "tl",
+    "Persian": "fa", "Greek": "el", "Romanian": "ro", "Hungarian": "hu", "Macedonian": "mk",
+}
+_LANG_NAMES_BY_CODE = {code: name for name, code in _QWEN_LANG_CODES.items()}
+_LANG_CODES_BY_LOWER_NAME = {name.lower(): code for name, code in _QWEN_LANG_CODES.items()}
+
+
+def language_to_code(language: str) -> str:
+    """Accept an ISO code or an English language name; return the ISO code ("auto" passes through)."""
+    if not language:
+        return language
+    return _LANG_CODES_BY_LOWER_NAME.get(language.strip().lower(), language)
+
+
+def language_to_qwen_name(language: str) -> str | None:
+    """Return Qwen3-ASR's language name for a code or name, or None if Qwen does not support it."""
+    return _LANG_NAMES_BY_CODE.get(language_to_code(language).lower())
+
+
 def transcribe(
     audio_path: str,
     *,
@@ -343,7 +368,7 @@ def _transcribe_faster_whisper(
             else:
                 raise
 
-        lang_arg = None if language == "auto" else language
+        lang_arg = None if language == "auto" else language_to_code(language)
         segments_iter, info = whisper_model.transcribe(
             audio_path,
             language=lang_arg,
@@ -494,7 +519,11 @@ def _transcribe_qwen3_asr(
                     max_new_tokens=4096,
                 )
 
-            lang_arg = None if language == "auto" else language
+            lang_arg = None
+            if language != "auto":
+                lang_arg = language_to_qwen_name(language)
+                if lang_arg is None:
+                    logger.warning("qwen3-asr: language %r is not supported — auto-detecting", language)
 
             logger.info("qwen3-asr: transcribing path=%s lang=%s", audio_path, lang_arg)
             results = model.transcribe(audio=wav_path, language=lang_arg)
@@ -512,7 +541,7 @@ def _transcribe_qwen3_asr(
 
         result = results[0]
         text = (result.text or "").strip()
-        detected = result.language or (language if language != "auto" else "unknown")
+        detected = language_to_code(result.language or (language if language != "auto" else "unknown"))
 
         total_duration = _get_audio_duration(audio_path)
         segments = _text_to_segments(text, total_duration)
