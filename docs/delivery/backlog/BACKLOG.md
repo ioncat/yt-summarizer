@@ -137,7 +137,9 @@ Items, each a small separate commit:
 6. Queue row order changes between refreshes
 7. Mind map first renders tiny and low-contrast on the dark background
 8. A local-file result page has no source badge in the meta row (History has one)
-9. Queue shows 155+ old rows; consider a "clear finished" action (ask the owner first; it deletes data)
+9. Re-extract on the Subtitles tab of a cached video shows no feedback (no queue row, nothing changes); a 409 appeared once during QA regression 1, origin unknown; check whether this existed before the refactor
+10. markmap throws `NotSupportedError ... SVGLength` when the mind map is drawn while its tab is hidden (render still ends fine)
+11. Queue shows 155+ old rows; consider a "clear finished" action (ask the owner first; it deletes data)
 Labels: `by-frontend` (item 3 may need `by-backend`) | Status: 🔵 Planned | Depends on: NS-11, NS-13, NS-14 (most of these touch the pages being split)
 
 **NS-19 — Word list for speech-to-text** (idea, after the refactor; a new feature)
