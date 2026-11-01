@@ -22,6 +22,7 @@ app/data/uploads/
 # Database directory and SQLite files
 app/data/db/
 app/data/*.sqlite
+app/data/backend.pid
 
 # ========================
 # Environment & Secrets
