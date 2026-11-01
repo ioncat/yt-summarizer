@@ -95,7 +95,8 @@ Labels: `by-frontend` | Status: 🔴 Open | Order: small, after NS-14
 Origin: Owner, 2026-10-30 ("split the large files"); addresses review root cause 2
 Value: Result view changes are contained; 31 `useState` calls visible per component
 Fix: add vitest smoke tests first; extract tabs (Subtitles, Cleaned, Summary, MindMap, Chat) and actions bar into `app/frontend/src/components/result/`; owner confirms in running app after
-Labels: `by-frontend` | Status: 🔴 Open
+Labels: `by-frontend`, `reviewed` | Status: ✅ Done · reviewed, waiting for the owner's visual check | Commits: `dee1c7f` (14 smoke tests), `6c05d60` (1,280 → 424 lines, 10 files in `components/result/`), `78a8f78` (gitignore `backend.pid`)
+Review method worth reusing: 114 DOM snapshots (19 fixtures × initial state + 5 tabs) identical before and after. Left alone: the page is 24 lines over 400 (polling/timers stay); `useResultHandlers` takes about 40 parameters (group them at the next change); cancel errors only logged; mind-map Stop has no try/catch; `sendChatMessage` stale closure; Stop on a queued video cancels only the backend flag (NS-16)
 
 **NS-11 — Remove duplicate pipeline (BackgroundTasks vs queue)**
 Origin: Owner, 2026-10-30 ("remove the duplicated pipeline"); addresses review root cause 1

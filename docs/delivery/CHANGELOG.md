@@ -4,6 +4,7 @@ Reverse-chronological, append-only. Format: see `documentation-conventions.md`.
 
 ## 2026-11-01
 
+- **ResultPage split (NS-14)**: 1,280-line `ResultPage.tsx` split into 10 files under `components/result/` (page now 424 lines); 14 smoke tests added first; pure move, 114 DOM snapshots identical before and after. Reviewed: clean. Commits: `dee1c7f`, `6c05d60`.
 - **SettingsPage split (NS-13)**: 1,585-line `SettingsPage.tsx` split into 9 files under `components/settings/` (page now 300 lines); 8 smoke tests added first; pure move. Reviewed: clean. Commits: `dfdb205`, `ab8bb82`.
 
 ## 2026-10-31
