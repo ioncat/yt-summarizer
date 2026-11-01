@@ -75,6 +75,7 @@ async def test_queue_cleanup_success_writes_same_fields_as_background_copy(seede
 
 async def test_queue_cleanup_cannot_be_cancelled_flag_is_ignored(seeded_video):
     # BASELINE: known gap — is_cancelled is a constant False; the Stop button's flag is never read
+    # correct: a cancel request stops the queue stage and resets the status to NULL like the BG copy
     from routers import result as res
     res._CANCEL_SET.add(VIDEO_ID)
     gate = Gate(result="Cleaned text.")
@@ -87,6 +88,7 @@ async def test_queue_cleanup_cannot_be_cancelled_flag_is_ignored(seeded_video):
 
 async def test_queue_cleanup_without_model_or_text_is_silently_skipped(seeded_video):
     # BASELINE: known gap — returns normally, so the queue item would end 'done' with nothing done
+    # correct: the item ends 'failed' with a message (no model / no text / unknown video)
     await client_put_cleanup_model(None)
     await q._run_cleanup_stage(VIDEO_ID, 1)
     assert (await fmt_row())["cleanup_status"] is None
@@ -141,6 +143,7 @@ async def test_queue_summary_success_progress_and_fields(seeded_video):
 
 async def test_queue_summary_without_model_is_silently_skipped(seeded_video):
     # BASELINE: known gap — same silent skip as cleanup
+    # correct: the item ends 'failed' with a message (no summarization model)
     from httpx import AsyncClient, ASGITransport
     from main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
@@ -175,6 +178,7 @@ async def test_queue_mindmap_success_and_progress(seeded_video):
 
 async def test_queue_mindmap_without_model_is_silently_skipped_unlike_background_copy(seeded_video):
     # BASELINE: background copy ends 'failed' here; the queue copy leaves the status untouched
+    # correct: one behaviour for both; the owner decides (failed with a message is the likely choice)
     from httpx import AsyncClient, ASGITransport
     from main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
@@ -229,6 +233,7 @@ async def test_queue_extract_of_new_video_creates_video_and_returns_ids():
 
 
 async def test_queue_extract_on_existing_video_adds_a_second_formatted_row(client, full_video_cleanup):
+    # correct: one formatted row per video; a forced extract replaces the text and clears derived data like re-extract
     # BASELINE: known bug — a forced re-run (History "re-run") does not replace the text like the
     # BackgroundTasks re-extract does; it adds a second subtitles_formatted row and orphans the
     # derived data (cleanup/summary) of the first.
@@ -258,6 +263,7 @@ async def test_queue_extract_failure_raises_with_message_and_marks_task_failed()
 
 async def test_queue_transcribe_stores_no_model_or_device_unlike_file_upload_path():
     # BASELINE: known gap — transcription_model/device are not passed to complete_task here
+    # correct: model and device are stored as on the file-upload path
     from services.subtitle_extractor import AudioExtractionResult
     from services.transcriber import TranscriptionResult
     vid = "queueStt001"
@@ -421,6 +427,7 @@ async def test_bulk_add_pending_duplicate_and_same_url_twice_in_one_batch(client
 
 async def test_bulk_add_rejects_local_file_urls_so_local_items_cannot_use_the_queue(client, seeded_video):
     # BASELINE: known gap — local:// results (file-*) can only be processed by the BackgroundTasks copy
+    # correct: the queue accepts local items by video_id
     r = await client.post("/api/queue/bulk", json={"urls": ["local://talk.m4a"], "pipeline_stages": ["cleanup"], "force": True})
     assert r.status_code == 400
     assert r.json()["detail"]["message"] == "No valid YouTube URLs"
@@ -552,4 +559,7 @@ async def test_history_style_url_of_a_local_file_is_queued_under_a_truncated_id(
     assert r.status_code == 200 and r.json()["added"] == 1
     item = (await client.get("/api/queue")).json()["items"][0]
     assert item["video_id"] == "file-8dd203"
-    await q._run_cleanup_stage("file-8dd203", item["id"])  # what the worker would do: silent no-op
+    # correct: a file-* row is queued under its real id (or refused), and never ends 'done' doing nothing
+    await _run_worker([item["id"]])
+    done = await _item(item["id"])
+    assert done["status"] == "done" and done["error_message"] is None  # silent no-op

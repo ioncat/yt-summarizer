@@ -132,6 +132,7 @@ async def test_cleanup_empty_llm_result_ends_failed(client, seeded_video):
 
 async def test_cleanup_exception_leaves_status_processing_forever(client, seeded_video):
     # BASELINE: known bug — _run_cleanup has no try/except, a crash leaves 'processing'
+    # correct: the status ends 'failed' (as the queue copy does) and the error is reported
     async def boom(*a, **k):
         raise RuntimeError("llm exploded")
 
@@ -145,6 +146,7 @@ async def test_cleanup_exception_leaves_status_processing_forever(client, seeded
 
 async def test_cleanup_second_request_while_running_starts_a_second_concurrent_run(client, seeded_video):
     # BASELINE: known bug — no guard against a second run of the same stage
+    # correct: the second request is refused (409) or joins the run in progress; one run at a time
     gate = Gate()
     with patch("routers.result.clean_text", gate.llm()):
         t1 = await _run_blocked(client, "post", f"{URL}/cleanup", gate)
@@ -259,6 +261,7 @@ async def test_summary_empty_result_ends_failed(client, seeded_video):
 
 async def test_summary_exception_leaves_status_processing_forever(client, seeded_video):
     # BASELINE: known bug — _run_summary has no try/except
+    # correct: the status ends 'failed' and the error is reported
     async def boom(*a, **k):
         raise RuntimeError("llm exploded")
 
@@ -323,6 +326,7 @@ async def test_mindmap_unknown_video_404(client):
 
 async def test_mindmap_without_model_endpoint_says_processing_but_run_ends_failed(client, seeded_video):
     # BASELINE: known bug — no model/Ollama check at the endpoint (cleanup/summary have one)
+    # correct: 400 up front like cleanup and summary, status stays untouched
     await client.put("/api/settings/summarization", json={"model": None})
     r = await client.post(f"{URL}/mindmap")
     assert r.status_code == 200 and r.json() == {"status": "processing"}
@@ -352,6 +356,7 @@ async def test_mindmap_cancel_resets_status_and_keeps_previous_text(client, seed
 
 async def test_mindmap_exception_leaves_status_processing_forever(client, seeded_video):
     # BASELINE: known bug — _run_mindmap has no try/except
+    # correct: the status ends 'failed' and the error is reported
     async def boom(*a, **k):
         raise RuntimeError("llm exploded")
 
@@ -401,7 +406,7 @@ async def test_reextract_refused_409_while_cleanup_or_summary_processing(client,
 
 async def test_reextract_failed_extraction_changes_nothing_and_reports_nothing(client, video_with_raw_cleanup):
     # BASELINE: known bug — failure is only a log line; the caller got 200 and the old text stays
-    from services.subtitle_extractor import ExtractionResult, VideoMetadata
+    # correct: the failure is visible to the caller (status/error), the old text may stay (NS-16)
     failed = SimpleNamespace(success=False, error_type="x", error_message="boom",
                              available_languages=[], language=None, subtitles=[], metadata=None)
     before = (await fmt_row())["formatted_text"]
