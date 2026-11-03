@@ -143,6 +143,7 @@ Items, each a small separate commit:
 10. markmap throws `NotSupportedError ... SVGLength` when the mind map is drawn while its tab is hidden (render still ends fine)
 11. Queue shows 155+ old rows; consider a "clear finished" action (ask the owner first; it deletes data)
 12. Owner, 2026-11-03: the owner ticked "download" together with the standard pipeline, but the queue row (`shorts/Ip8NJMk42wE`) shows only `extract → cleanup → summary → mindmap`; download is not shown as a stage. Not yet checked whether the download is skipped or only missing from the display (first look: does NS-11 stage design have a place for it); record only, do not fix now
+13. Owner, 2026-11-03 (same row, `failed`: "This video has no subtitles available."): when the video has no subtitles but the user also chose the download option, the download must still happen; the job should report "no subtitles" without failing the download. The owner also suggested telling the user interactively that there are no subtitles and offering to download the file (the rest of his sentence was garbled in dictation: probably "so it can be transcribed"; confirm with him). Related to item 12 and to NS-11 stage 7 (YouTube extract); record only, do not fix now
 Labels: `by-frontend` (item 3 may need `by-backend`) | Status: 🔵 Planned | Depends on: NS-11, NS-13, NS-14 (most of these touch the pages being split)
 
 **NS-19 — Word list for speech-to-text** (idea, after the refactor; a new feature)
