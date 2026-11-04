@@ -176,6 +176,17 @@ Value: a saved video or audio file from YouTube is recognised by its name instea
 Feature: a video or audio file downloaded from YouTube is saved under the original title of that video's page (the title shown on YouTube). Local files keep their own name. To refine with the owner: characters not allowed in Windows file names, very long titles, two videos with the same title, and the file extension; the name must be reduced to a safe base name (project rule: file names from outside are never used as paths)
 Labels: `by-backend` | Status: 🔵 Idea | Depends on: NS-11 (the download is part of the pipeline, see NS-17 items 12-13)
 
+**NS-24 — Queue takes any number of videos; bulk add is easy to find** (bug to confirm + UI, after the refactor)
+Origin: Owner, 2026-11-04 ("when I put many in a row, not all of them run; it seems to hit a limit and stop accepting; remove that limit. And make bulk add of URLs: 10 URLs in a column in a window in the UI, all go into the queue and are processed one after another")
+Value: the owner pastes a list of links once and walks away; every link is queued and processed in turn
+CTO check 2026-11-04 (code and live DB, nothing run):
+- No count limit exists in `POST /api/queue/bulk` (`routers/process.py:331`) or `add_items` (`queue_service.py:66`): `urls: list[str]` has no max length; the DB holds 186 queue rows (184 done, 1 failed, 1 processing)
+- The worker runs one item at a time (`queue_service.py:603`), so a long list simply takes long; a long pipeline (extract → cleanup → summary → mindmap, minutes per video) can look like "stopped accepting"
+- Links that are skipped without a clear message: a duplicate inside the same batch is reported as "invalid"; a video already processed or already in the queue is skipped (`duplicates`); a URL without a recognisable video id is "invalid"
+- Bulk add already exists on the Home page ("Bulk Add" panel, one URL per line) and on History; NS-17 item 4 notes it is hard to find (the textarea sits about 860 px lower than the single-URL field)
+Not found: any cap. The failure the owner saw is not reproduced yet; to do: (1) reproduce with 20-30 distinct URLs through the UI and read the report the page shows and `data/logs/backend.log`; (2) if links vanish, find where (frontend report, backend dedup, worker); (3) make the skip reasons explicit per URL (new / already processed / already in queue / duplicate in the list / not a YouTube link); (4) make the bulk window the main add form (a textarea, one URL per line, pipeline choice, one "Add all" button); (5) a test that adds 50 URLs and gets 50 rows back in order
+Labels: `by-backend`, `by-frontend` | Status: 🔵 Planned | Depends on: NS-11, NS-17 item 4 (same form)
+
 **NS-18 — Finish splitting the routers** (after NS-11)
 Origin: CTO, 2026-11-01; NS-12 review ("`result.py` 665 and `process.py` 459 lines, over the 400-line limit")
 Value: the rule "a file over about 400 lines is split" holds for the backend too
