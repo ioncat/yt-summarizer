@@ -170,6 +170,12 @@ Value: the suite is reliable in any order and in parallel runs
 Fix: `test_summary::test_summary_uses_cleaned_text_when_available`, `test_queue::test_queue_bulk_add`, `test_process::test_process_new_video` fail (409 instead of 200) when the whole suite runs in reverse order, also at `11d6d63~1`; make each test own its data. Also `_setup` in the baseline tests changes shared settings without restoring them
 Labels: `by-backend` | Status: 🔴 Open | Order: after NS-11
 
+**NS-23 — Downloaded files keep the video's original title** (feature, after the refactor)
+Origin: Owner, 2026-11-04
+Value: a saved video or audio file from YouTube is recognised by its name instead of an id
+Feature: a video or audio file downloaded from YouTube is saved under the original title of that video's page (the title shown on YouTube). Local files keep their own name. To refine with the owner: characters not allowed in Windows file names, very long titles, two videos with the same title, and the file extension; the name must be reduced to a safe base name (project rule: file names from outside are never used as paths)
+Labels: `by-backend` | Status: 🔵 Idea | Depends on: NS-11 (the download is part of the pipeline, see NS-17 items 12-13)
+
 **NS-18 — Finish splitting the routers** (after NS-11)
 Origin: CTO, 2026-11-01; NS-12 review ("`result.py` 665 and `process.py` 459 lines, over the 400-line limit")
 Value: the rule "a file over about 400 lines is split" holds for the backend too
