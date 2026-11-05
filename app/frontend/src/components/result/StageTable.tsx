@@ -1,7 +1,7 @@
-import { ResultResponse, StageRun } from '../../api'
+import { ResultResponse, StageName, StageRun, StageRunDetail } from '../../api'
 import { formatDate, formatDuration } from './helpers'
 
-const ORDER = ['extract', 'transcribe', 'cleanup', 'summary', 'mindmap'] as const
+const ORDER: StageName[] = ['extract', 'transcribe', 'cleanup', 'summary', 'mindmap']
 const LABEL: Record<string, string> = {
   extract: 'Subtitles', transcribe: 'Speech-to-text', cleanup: 'Cleanup', summary: 'Summary', mindmap: 'Mind map',
 }
@@ -26,7 +26,7 @@ const REASON: Record<string, string> = {
   upstream_failed: 'an earlier step failed',
 }
 
-function seconds(run: StageRun): number | null {
+function seconds(run: StageRunDetail): number | null {
   if (!run.started_at || !run.finished_at) return null
   const s = (Date.parse(run.finished_at) - Date.parse(run.started_at)) / 1000
   return Number.isFinite(s) && s >= 0 ? Math.round(s) : null
@@ -35,14 +35,15 @@ function seconds(run: StageRun): number | null {
 function Row({ stage, run }: { stage: string; run: StageRun }) {
   const st = STATUS[run.status] ?? { text: run.status, cls: 'text-on-surface-variant' }
   const shown = run.last_done            // the run the saved result came from
-  const took = seconds(shown ?? run)
+  const made: StageRunDetail = shown ?? run
+  const took = seconds(made)
   return (
     <tr className="border-t border-outline-variant/40 align-top">
       <td className="py-2 pr-4 font-medium text-on-surface">{LABEL[stage] ?? stage}</td>
       <td className={`py-2 pr-4 font-semibold ${st.cls}`}>{st.text}</td>
       <td className="py-2 pr-4 text-on-surface-variant">{(shown?.model ?? run.model) || '—'}</td>
       <td className="py-2 pr-4 text-on-surface-variant whitespace-nowrap">
-        {(shown ?? run).finished_at ? formatDate((shown ?? run).finished_at as string) : '—'}
+        {made.finished_at ? formatDate(made.finished_at) : '—'}
         {took != null && <> · {formatDuration(took)}</>}
       </td>
       <td className="py-2 text-on-surface-variant">
@@ -62,9 +63,9 @@ function Row({ stage, run }: { stage: string; run: StageRun }) {
 
 export function StageTable({ result }: { result: ResultResponse }) {
   const stages = result.stages ?? {}
-  const present = ORDER.filter(s => stages[s])
+  const present = ORDER.flatMap((s): Array<[StageName, StageRun]> => { const run = stages[s]; return run ? [[s, run]] : [] })
   if (present.length === 0) return null
-  const anyFailed = present.some(s => stages[s].status === 'failed')
+  const anyFailed = present.some(([, run]) => run.status === 'failed')
   return (
     <details open={anyFailed} className="px-6 py-3 border-t border-outline-variant text-body-sm">
       <summary className="cursor-pointer text-label-md font-semibold text-secondary select-none">
@@ -81,7 +82,7 @@ export function StageTable({ result }: { result: ResultResponse }) {
               <th className="pb-1 font-medium">Details</th>
             </tr>
           </thead>
-          <tbody>{present.map(s => <Row key={s} stage={s} run={stages[s]} />)}</tbody>
+          <tbody>{present.map(([s, run]) => <Row key={s} stage={s} run={run} />)}</tbody>
         </table>
       </div>
     </details>
