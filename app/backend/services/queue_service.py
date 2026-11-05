@@ -603,6 +603,13 @@ async def _run_transcribe(url: str, language: str = "auto", item_id: int = 0) ->
     return {"video_id": yt_video_id, "db_video_id": None}
 
 
+class StageFailure(RuntimeError):
+    """A stage that cannot run at all (no model, no text, no such video): its message is stored and shown to the user.
+
+    NS-11 decision: this used to be a silent skip (the queue item ended 'done' having done nothing).
+    """
+
+
 async def _run_mindmap_stage(yt_video_id: str, item_id: int) -> None:
     """Run mindmap generation for a video."""
     from services.text_mindmapper import generate_mindmap
@@ -615,19 +622,16 @@ async def _run_mindmap_stage(yt_video_id: str, item_id: int) -> None:
         async with AsyncSessionLocal() as db:
             result = await get_result(db, yt_video_id)
             if not result:
-                logger.warning("Queue mindmap: video %s not found", yt_video_id)
-                return
+                raise StageFailure(f"Mind map: video {yt_video_id} is not in History")
             text = result.get("summary_text") or result.get("cleaned_text") or result.get("formatted_text")
             if not text:
-                logger.warning("Queue mindmap: no text for %s, skipping", yt_video_id)
-                return
+                raise StageFailure("Mind map: the video has no text to build a mind map from")
             stage = await get_stage_settings(db, "summarization")
             ollama_url = await get_app_setting(db, "ollama_url")
             model = stage.get("model") if stage else None
             begin_llm_run(await get_app_setting(db, "llm_max_num_ctx"))
             if not ollama_url or not model:
-                logger.warning("Queue mindmap: missing ollama_url or model, skipping for %s", yt_video_id)
-                return
+                raise StageFailure("Mind map needs an Ollama URL and a summarization model: set them in Settings")
             lang_code = result.get("language") or "ru"
             lang_map = {"ru": "Russian", "en": "English", "uk": "Ukrainian", "de": "German",
                         "fr": "French", "es": "Spanish", "zh": "Chinese", "ja": "Japanese"}
@@ -644,11 +648,16 @@ async def _run_mindmap_stage(yt_video_id: str, item_id: int) -> None:
         )
 
         async with AsyncSessionLocal() as db:
-            await finish_mindmap(db, yt_video_id, mindmap_md, error=llm_failure_reason())
+            await finish_mindmap(
+                db, yt_video_id, mindmap_md,
+                error=llm_failure_reason() or (None if mindmap_md else "The model returned no mind map"),
+            )
     except Exception as exc:
         logger.exception("Queue mindmap: stage failed for %s", yt_video_id)
+        # a StageFailure's own message first: the reason box of an earlier stage must not leak into it
+        reason = str(exc)[:500] if isinstance(exc, StageFailure) else (llm_failure_reason() or str(exc)[:500])
         async with AsyncSessionLocal() as db:
-            await fail_mindmap_stage(db, yt_video_id, error=llm_failure_reason() or str(exc)[:500])
+            await fail_mindmap_stage(db, yt_video_id, error=reason)
         raise
 
 

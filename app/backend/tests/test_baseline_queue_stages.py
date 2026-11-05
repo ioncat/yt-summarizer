@@ -176,15 +176,61 @@ async def test_queue_mindmap_success_and_progress(seeded_video):
     assert gate.calls[0]["language"] == "Russian" and gate.calls[0]["is_cancelled"]() is False
 
 
-async def test_queue_mindmap_without_model_is_silently_skipped_unlike_background_copy(seeded_video):
-    # BASELINE: background copy ends 'failed' here; the queue copy leaves the status untouched
-    # correct: one behaviour for both; the owner decides (failed with a message is the likely choice)
+async def test_queue_mindmap_without_model_ends_failed_with_a_message(seeded_video):
+    # was: BASELINE known gap — the queue copy left the status untouched (silent skip, the item ended 'done').
+    # NS-11 owner decision 5: a silent skip becomes an explicit failure with a message (the BG copy already failed).
     from httpx import AsyncClient, ASGITransport
     from main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         await c.put("/api/settings/summarization", json={"model": None})
-    await q._run_mindmap_stage(VIDEO_ID, 1)
-    assert (await fmt_row())["mindmap_status"] is None
+    with pytest.raises(q.StageFailure):
+        await q._run_mindmap_stage(VIDEO_ID, 1)
+    row = await fmt_row()
+    assert row["mindmap_status"] == "failed"
+    assert row["mindmap_error"] == "Mind map needs an Ollama URL and a summarization model: set them in Settings"
+
+
+async def test_queue_mindmap_without_text_ends_failed_with_a_message(seeded_video):
+    await set_fmt(formatted_text=None)
+    with pytest.raises(q.StageFailure):
+        await q._run_mindmap_stage(VIDEO_ID, 1)
+    row = await fmt_row()
+    assert row["mindmap_status"] == "failed" and "no text" in row["mindmap_error"]
+
+
+async def test_queue_mindmap_for_an_unknown_video_raises_a_message_instead_of_passing_silently():
+    with pytest.raises(q.StageFailure, match="not in History"):
+        await q._run_mindmap_stage("no-such-video", 1)
+
+
+async def test_queue_mindmap_stage_failure_message_is_not_replaced_by_an_earlier_llm_reason(seeded_video):
+    from services.ollama_options import begin_llm_run, record_failure_reason
+    begin_llm_run(None)
+    record_failure_reason("an older stage's reason")   # what the long-lived worker context may still hold
+    await set_fmt(formatted_text=None)
+    with pytest.raises(q.StageFailure):
+        await q._run_mindmap_stage(VIDEO_ID, 1)
+    assert "no text" in (await fmt_row())["mindmap_error"]
+
+
+async def test_queue_mindmap_empty_result_stores_a_reason(seeded_video):
+    gate = Gate(result=None)
+    gate.release.set()
+    with patch("services.text_mindmapper.generate_mindmap", gate.llm()):
+        await q._run_mindmap_stage(VIDEO_ID, 1)
+    row = await fmt_row()
+    assert row["mindmap_status"] == "failed" and row["mindmap_error"] == "The model returned no mind map"
+
+
+async def test_queue_item_for_a_mindmap_without_model_ends_failed_not_done(seeded_video):
+    from httpx import AsyncClient, ASGITransport
+    from main import app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        await c.put("/api/settings/summarization", json={"model": None})
+    item = await _add(["mindmap"])
+    await _run_worker([item])
+    row = await _item(item)
+    assert row["status"] == "failed" and "summarization model" in row["error_message"]
 
 
 async def test_queue_mindmap_empty_result_failed_and_exception_failed_and_reraised(seeded_video):
