@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import AsyncSessionLocal
 from services.ollama_options import begin_llm_run, llm_failure_reason
+from services.stage_control import MINDMAP_CANCEL, StageCancelled
 
 logger = logging.getLogger("queue_service")
 
@@ -324,6 +325,20 @@ async def _set_done(item_id: int, video_id: str | None, db_video_id: str | None)
         await db.commit()
 
 
+async def _set_skipped(item_id: int, message: str) -> None:
+    """A stage was stopped by the user: not a failure, not a success."""
+    _QUEUE_PROGRESS.pop(item_id, None)
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            text(
+                "UPDATE processing_queue SET status = 'skipped', finished_at = datetime('now'), "
+                "error_message = :msg WHERE id = :id"
+            ),
+            {"msg": message[:2000], "id": item_id},
+        )
+        await db.commit()
+
+
 async def _set_failed(item_id: int, error_message: str) -> None:
     _QUEUE_PROGRESS.pop(item_id, None)
     async with AsyncSessionLocal() as db:
@@ -615,7 +630,7 @@ async def _run_mindmap_stage(yt_video_id: str, item_id: int) -> None:
     from services.text_mindmapper import generate_mindmap
     from services.video_service import (
         get_result, get_stage_settings, get_app_setting,
-        start_mindmap_generation, finish_mindmap, fail_mindmap_stage,
+        start_mindmap_generation, finish_mindmap, fail_mindmap_stage, reset_mindmap_status,
     )
 
     try:
@@ -638,20 +653,30 @@ async def _run_mindmap_stage(yt_video_id: str, item_id: int) -> None:
             language = lang_map.get(lang_code.lower(), lang_code)
             await start_mindmap_generation(db, yt_video_id)
 
+        MINDMAP_CANCEL.discard(yt_video_id)  # a flag left over from an earlier run must not stop this one
         _QUEUE_PROGRESS[item_id] = "mindmap: generating…"
         mindmap_md = await generate_mindmap(
             text=text,
             ollama_url=ollama_url,
             model=model,
             language=language,
-            is_cancelled=lambda: False,
+            is_cancelled=lambda: yt_video_id in MINDMAP_CANCEL,
         )
+
+        if yt_video_id in MINDMAP_CANCEL:
+            # Stop pressed (NS-11 decision 1, as in the background copy): the status is reset, a saved map is kept
+            MINDMAP_CANCEL.discard(yt_video_id)
+            async with AsyncSessionLocal() as db:
+                await reset_mindmap_status(db, yt_video_id)
+            raise StageCancelled("Mind map cancelled")
 
         async with AsyncSessionLocal() as db:
             await finish_mindmap(
                 db, yt_video_id, mindmap_md,
                 error=llm_failure_reason() or (None if mindmap_md else "The model returned no mind map"),
             )
+    except StageCancelled:
+        raise
     except Exception as exc:
         logger.exception("Queue mindmap: stage failed for %s", yt_video_id)
         # a StageFailure's own message first: the reason box of an earlier stage must not leak into it
@@ -724,6 +749,10 @@ async def queue_worker() -> None:
 
             await _set_done(item_id, yt_video_id, db_video_id)
             logger.info("Queue worker: item %d done video_id=%s", item_id, yt_video_id)
+
+        except StageCancelled as e:
+            logger.info("Queue worker: item %d cancelled: %s", item_id, e)
+            await _set_skipped(item_id, str(e))
 
         except Exception as e:
             logger.error("Queue worker: item %d failed: %s", item_id, e, exc_info=True)

@@ -100,3 +100,39 @@ def clear_router_state() -> None:
         d.clear()
     from services import queue_service as q
     q._QUEUE_PROGRESS.clear()
+
+
+# --- queue helpers for the stage tests (NS-11 stage 2 on) -------------------------------------------
+
+async def add_item(stages, url=None, video_id=VIDEO_ID, language=None) -> int:
+    """A pending queue item for an existing video, queued the way the app does it."""
+    from services import queue_service as q
+    async with AsyncSessionLocal() as db:
+        return (await q.add_items(db, [url or f"https://www.youtube.com/watch?v={video_id}"], stages, language=language))[0]
+
+
+async def get_item(item_id: int) -> dict:
+    from services import queue_service as q
+    async with AsyncSessionLocal() as db:
+        return next(i for i in await q.get_queue(db) if i["id"] == item_id)
+
+
+async def run_worker(item_ids: list[int], timeout: float = 15.0) -> None:
+    """Run the queue worker until every given item is done / failed / skipped (or the timeout)."""
+    import time
+    from services import queue_service as q
+    task = asyncio.create_task(q.queue_worker())
+    try:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            async with AsyncSessionLocal() as db:
+                rows = (await db.execute(text("SELECT status FROM processing_queue WHERE id IN (%s)" %
+                                              ",".join(str(i) for i in item_ids)))).all()
+            if rows and all(r[0] in ("done", "failed", "skipped") for r in rows):
+                break
+            await asyncio.sleep(0.05)
+    finally:
+        q._WORKER_STOP = True
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        q._WORKER_STOP = False
