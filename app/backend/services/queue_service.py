@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.database import AsyncSessionLocal
 from services.ollama_options import begin_llm_run, llm_failure_reason
 from services import stage_runs
-from services.file_stt import LOCAL_PREFIX, run_queued_file
+from services.file_stt import LOCAL_PREFIX, release_upload, run_queued_file
 from services.stage_progress import ProgressWriter
 from services.queue_by_id import STAGE_COLUMNS, release_stage_status
 from services.stage_control import (
@@ -214,10 +214,11 @@ async def get_queue_counts(db: AsyncSession) -> dict[str, int]:
     return counts
 
 
-async def delete_item(db: AsyncSession, item_id: int) -> str:
-    """Delete a pending item. Returns 'deleted' | 'not_found' | 'conflict'."""
+async def delete_item(db: AsyncSession, item_id: int, upload_message: str = "Removed from the queue") -> str:
+    """Delete a pending item. Returns 'deleted' | 'not_found' | 'conflict'. `upload_message` is what the task of a removed
+    upload shows (Stop says "Transcription stopped")."""
     result = await db.execute(
-        text("SELECT status, video_id, pipeline_stages FROM processing_queue WHERE id = :id"),
+        text("SELECT status, video_id, pipeline_stages, url, db_video_id FROM processing_queue WHERE id = :id"),
         {"id": item_id},
     )
     row = result.fetchone()
@@ -233,6 +234,9 @@ async def delete_item(db: AsyncSession, item_id: int) -> str:
         for stage in STAGE_COLUMNS:
             if f'"{stage}"' in (row[2] or ""):
                 await release_stage_status(db, row[1], stage)  # it was to run this stage: no status stuck 'processing'
+    if row[0] == "pending" and (row[3] or "").startswith(LOCAL_PREFIX):
+        # an upload that will not be transcribed after all: its task must not stay pending for ever (NS-11 stage 5)
+        await release_upload(db, row[1], row[4], upload_message)
     return "deleted"
 
 
@@ -244,6 +248,10 @@ async def clear_pending(db: AsyncSession) -> int:
                  "AND video_id IS NOT NULL"),
         )).fetchall()
     ]
+    uploads = (await db.execute(
+        text("SELECT video_id, db_video_id FROM processing_queue WHERE status = 'pending' AND url LIKE 'local://%' "
+             "AND video_id IS NOT NULL"),
+    )).fetchall()
     result = await db.execute(
         text("DELETE FROM processing_queue WHERE status = 'pending'")
     )
@@ -251,6 +259,8 @@ async def clear_pending(db: AsyncSession) -> int:
     for stage in STAGE_COLUMNS:
         for video_id in {v for v, stages in removed if f'"{stage}"' in stages}:
             await release_stage_status(db, video_id, stage)  # that stage will never run: no stuck 'processing'
+    for video_id, db_video_id in uploads:
+        await release_upload(db, video_id, db_video_id, "Removed from the queue")   # the uploads' tasks end failed, not pending
     return result.rowcount
 
 

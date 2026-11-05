@@ -105,8 +105,7 @@ async def stop_upload(db, video_id: str) -> str:
     if status == "processing":
         TRANSCRIBE_CANCEL.add(video_id)
         return "stopping"
-    if await delete_item(db, item_id) == "deleted":
-        await release_upload(db, video_id, db_video_id, STOPPED_MESSAGE)
+    if await delete_item(db, item_id, STOPPED_MESSAGE) == "deleted":      # (releases the task and the run)
         return "stopped"
     TRANSCRIBE_CANCEL.add(video_id)          # it started in the meantime: tell the running one
     return "stopping"
