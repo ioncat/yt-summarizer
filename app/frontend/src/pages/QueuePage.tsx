@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { getQueue, deleteQueueItem, clearQueuePending, clearQueueFailed, retryQueueItem, retryAllFailed, QueueItem } from '../api'
+import NewItemForm from '../components/queue/NewItemForm'
 
 function activeStage(progress: string | null): string | null {
   if (!progress) return null
@@ -35,6 +36,7 @@ export default function QueuePage() {
   const [items, setItems] = useState<QueueItem[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedError, setExpandedError] = useState<number | null>(null)
+  const [newOpen, setNewOpen] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   async function load() {
@@ -118,6 +120,13 @@ export default function QueuePage() {
             <h2 className="text-headline-lg font-bold text-on-surface">Processing Queue</h2>
           </div>
           <div className="flex gap-3 flex-wrap">
+            <button
+              onClick={() => setNewOpen(o => !o)}
+              className="px-4 py-2 bg-primary text-on-primary rounded-lg text-label-md font-semibold hover:opacity-90 transition-opacity flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[16px]">add</span>
+              New
+            </button>
             {failedCount > 0 && (
               <button
                 onClick={handleRetryAllFailed}
@@ -152,6 +161,8 @@ export default function QueuePage() {
             </Link>
           </div>
         </div>
+
+        {newOpen && <NewItemForm onAdded={load} onClose={() => setNewOpen(false)} />}
 
         {/* Processing banner */}
         {processingItem && (
