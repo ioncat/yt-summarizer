@@ -552,3 +552,27 @@ async def test_run_summary_timeout_says_the_job_is_not_lost_and_how_to_check_it(
     assert result.startswith("ERROR: Summarization is still not finished after 300s")
     assert "not lost" in result
     assert "get_result(video_id='vidQ', parts=['status'])" in result and "parts=['summary']" in result
+
+
+# ─── run_cleanup waits behind the queue (NS-11 stage 4a note) ───────────────────
+
+@pytest.mark.asyncio
+async def test_run_cleanup_tool_text_says_it_may_wait_behind_the_queue_for_300_s():
+    import mcp_server
+    tools = await mcp_server.mcp.list_tools()
+    text = next(t for t in tools if t.name == "run_cleanup").description
+    assert "queue" in text and "300 s" in text and "NOT lost" in text
+    assert 'get_result(video_id, parts=["status"])' in text and 'parts=["cleaned"]' in text
+
+
+@pytest.mark.asyncio
+async def test_run_cleanup_timeout_says_the_job_is_not_lost_and_how_to_check_it():
+    with respx.mock(assert_all_called=False) as mock, patch("asyncio.sleep", _noop_sleep):
+        mock.get(f"{BASE}/api/health").mock(return_value=httpx.Response(200, json={"backend": True, "ollama": True}))
+        mock.post(f"{BASE}/api/result/vidC/cleanup").mock(return_value=httpx.Response(200, json={"status": "processing"}))
+        mock.get(f"{BASE}/api/result/vidC").mock(
+            return_value=httpx.Response(200, json={"cleanup_status": "processing", "cleaned_text": None}))
+        result = await run_cleanup("vidC")
+    assert result.startswith("ERROR: Cleanup is still not finished after 300s")
+    assert "not lost" in result
+    assert "get_result(video_id='vidC', parts=['status'])" in result and "parts=['cleaned']" in result
