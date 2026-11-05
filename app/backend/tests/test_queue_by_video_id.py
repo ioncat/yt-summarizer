@@ -192,3 +192,10 @@ async def test_force_does_not_apply_to_video_ids(client, local_video):
     assert (await client.post("/api/queue/bulk", json=body)).json()["added"] == 1
     again = (await client.post("/api/queue/bulk", json=body)).json()
     assert again["added"] == 0 and again["duplicates"] == [LOCAL_ID]  # as the docstring says
+
+
+async def test_blank_video_ids_are_a_400_not_a_silent_no_op(client, local_video):
+    for ids in ([" "], [""], ["\t\n"], [LOCAL_ID, "  "]):
+        r = await client.post("/api/queue/bulk", json={"video_ids": ids, "pipeline_stages": ["cleanup"]})
+        assert r.status_code == 400 and "empty id" in r.json()["detail"], ids
+    assert (await client.get("/api/queue")).json()["items"] == []  # the valid id next to a blank one is not added

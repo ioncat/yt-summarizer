@@ -353,6 +353,8 @@ async def queue_bulk_add(
 
     if not body.urls and not body.video_ids:
         raise HTTPException(status_code=400, detail="No URLs provided")
+    if any(not v.strip() for v in body.video_ids):
+        raise HTTPException(status_code=400, detail="video_ids contains an empty id")
     if body.video_ids:
         by_id_stages = body.pipeline_stages
         if not by_id_stages or any(s not in RESULT_STAGES for s in by_id_stages):
