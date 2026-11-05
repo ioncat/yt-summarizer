@@ -5,6 +5,7 @@ import logging
 from typing import Callable, Optional
 
 import httpx
+from services.http_client import http_client
 
 from .ollama_options import build_options, empty_answer_message, record_failure_reason
 from .text_utils import normalize_chapter_headings
@@ -261,7 +262,7 @@ async def summarize_text(
         return None, "single", 0
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with http_client() as client:
             # Availability check
             try:
                 await client.get(f"{ollama_url}/api/tags", timeout=3.0)
@@ -459,7 +460,7 @@ async def extract_notes(
         return None, "full_extract", 0
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with http_client() as client:
             try:
                 await client.get(f"{ollama_url}/api/tags", timeout=3.0)
             except httpx.ConnectError:

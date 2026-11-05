@@ -7,6 +7,7 @@ import json
 import logging
 
 import httpx
+from services.http_client import http_client
 
 from .ollama_options import build_options, empty_answer_message, record_failure_reason
 
@@ -64,7 +65,7 @@ async def generate_mindmap(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        async with http_client(timeout=TIMEOUT) as client:
             # Quick health check
             logger.info("[mindmapper] health check %s/api/tags", ollama_url)
             try:

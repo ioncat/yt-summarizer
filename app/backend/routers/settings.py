@@ -7,7 +7,8 @@ import sys
 from pathlib import Path
 from typing import Annotated
 
-import httpx
+import httpx
+from services.http_client import http_client
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -150,7 +151,7 @@ async def get_ytdlp_version():
 async def get_ytdlp_latest_version():
     """Fetch the latest yt-dlp version from PyPI."""
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with http_client(timeout=5.0) as client:
             resp = await client.get("https://pypi.org/pypi/yt-dlp/json")
             if resp.status_code == 200:
                 data = resp.json()

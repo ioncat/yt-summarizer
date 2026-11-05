@@ -4,6 +4,7 @@ import logging
 from typing import Annotated
 
 import httpx
+from services.http_client import http_client
 from fastapi import APIRouter, Depends, HTTPException, Request as _Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -33,7 +34,7 @@ async def health_check(db: Annotated[AsyncSession, Depends(get_db)]):
     ollama_url = await get_app_setting(db, "ollama_url")
     if ollama_url:
         try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
+            async with http_client(timeout=3.0) as client:
                 resp = await client.get(f"{ollama_url}/api/tags")
                 ollama_ok = resp.status_code == 200
         except Exception:
@@ -48,7 +49,7 @@ async def list_models(db: Annotated[AsyncSession, Depends(get_db)]):
     if not ollama_url:
         raise HTTPException(status_code=400, detail="Ollama URL not configured")
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with http_client(timeout=5.0) as client:
             resp = await client.get(f"{ollama_url}/api/tags")
             resp.raise_for_status()
             models = [m["name"] for m in resp.json().get("models", [])]
@@ -87,7 +88,7 @@ async def chat_proxy(body: ChatRequest, db: Annotated[AsyncSession, Depends(get_
 
     async def stream_ollama():
         try:
-            async with httpx.AsyncClient(timeout=None) as client:
+            async with http_client(timeout=None) as client:
                 async with client.stream("POST", f"{ollama_url}/api/chat", json=payload) as resp:
                     if resp.status_code != 200:
                         yield json.dumps({"error": f"Ollama error {resp.status_code}"}).encode()

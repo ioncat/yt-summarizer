@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from models.database import init_db
+from services.http_client import ssl_context
 from models import models  # noqa: F401 — registers models with Base.metadata
 from routers.api import router as api_router
 
@@ -48,6 +49,7 @@ for _name in ("sqlalchemy.engine", "sqlalchemy.engine.Engine", "sqlalchemy.pool"
 async def lifespan(app: FastAPI):
     from services.queue_service import queue_worker
     await init_db()
+    await asyncio.to_thread(ssl_context)  # build the shared SSL context off the event loop (NS-28 item 3)
     await _reset_stale_statuses()
     await _cleanup_uploads_on_start()
     worker_task = asyncio.create_task(queue_worker())

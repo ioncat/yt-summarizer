@@ -6,6 +6,7 @@ import re
 from typing import Callable, Optional
 
 import httpx
+from services.http_client import http_client
 
 from .ollama_options import build_options, empty_answer_message, record_failure_reason
 
@@ -169,7 +170,7 @@ async def clean_text(
     logger.info("clean_text: %d paragraphs, parallel_workers=%d", total, workers)
 
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as client:
+        async with http_client(timeout=httpx.Timeout(120.0)) as client:
             await client.get(f"{ollama_url}/api/tags", timeout=3.0)
 
             sem = asyncio.Semaphore(workers)
