@@ -1,4 +1,4 @@
-import { cancelMindmap, saveAppSettings, ResultResponse, SttModelInfo } from '../../api'
+import { cancelMindmap, saveAppSettings, stopReextract, ResultResponse, SttModelInfo } from '../../api'
 import { Setter, Tab, ChatMsg, selectCls, btnSecondary, btnDanger, btnAi, withStageStopped } from './helpers'
 
 interface ActionsBarProps {
@@ -91,6 +91,18 @@ export function ActionsBar({ activeTab, result, videoId, isLocalFile, sttModel, 
                   </button>
                   {result.reextract_in_progress && isLocalFile && result.retranscribe_progress && (
                     <span className="text-label-sm text-secondary animate-pulse">{result.retranscribe_progress}</span>
+                  )}
+                  {result.reextract_in_progress && (
+                    <button
+                      onClick={async () => {
+                        try { await stopReextract(videoId!) } catch (err) { console.error('[Result] stopReextract failed:', err) }
+                        setResult(r => r ? { ...r, reextract_in_progress: false } : r)   // nothing is replaced; the next poll confirms
+                      }}
+                      className={btnSecondary}
+                      title="Stop: the current subtitles and everything made from them stay"
+                    >
+                      Stop
+                    </button>
                   )}
                 </>
               )}

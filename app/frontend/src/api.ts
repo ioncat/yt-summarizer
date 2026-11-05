@@ -323,6 +323,16 @@ export async function reextractSubtitles(videoId: string, language: string = 'au
   }
 }
 
+/** Stop a re-extract / re-transcribe: a queued one leaves the queue, a running one ends after the segment in hand; nothing is replaced. */
+export async function stopReextract(videoId: string): Promise<void> {
+  const res = await fetch(`${BASE}/result/${encodeURIComponent(videoId)}/reextract`, { method: 'DELETE' })
+  if (res.status === 404) return   // it is already over: the next poll shows how it ended
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(errorText(body, 'Could not stop the re-extract'))
+  }
+}
+
 export async function downloadDirect(
   videoUrl: string,
   format: 'mp4' | 'mp3' = 'mp4',
