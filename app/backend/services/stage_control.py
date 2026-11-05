@@ -7,6 +7,10 @@ the queue could not be stopped. routers/result.py still exposes the same set obj
 from __future__ import annotations
 
 MINDMAP_CANCEL: set[str] = set()  # video ids whose running mind map must stop
+SUMMARY_CANCEL: set[str] = set()  # video ids whose running summarization must stop
+# Live chunk progress of a running summarization {video_id: {"done": n, "total": m}}, shown on the result page
+# (GET /api/result/<id> adds summary_chunks_done / summary_chunks_total while it runs)
+SUMMARY_PROGRESS: dict[str, dict] = {}
 
 
 class StageCancelled(Exception):

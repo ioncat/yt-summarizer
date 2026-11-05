@@ -20,7 +20,7 @@ from models.database import get_db
 from services.subtitle_extractor import extract_subtitles, extract_video_id, validate_youtube_url, _ytdlp_cmd
 from services.text_cleaner import clean_text
 from services.text_summarizer import summarize_text, extract_notes, MAP_REDUCE_THRESHOLD
-from services.stage_control import MINDMAP_CANCEL
+from services.stage_control import MINDMAP_CANCEL, SUMMARY_CANCEL, SUMMARY_PROGRESS
 from services.video_service import (
     delete_video,
     finish_cleanup,
@@ -50,12 +50,12 @@ router = APIRouter()
 
 # In-memory cancel flags — cleared when cleanup/summary finishes or is cancelled
 _CANCEL_SET: set[str] = set()
-_SUMMARY_CANCEL_SET: set[str] = set()
+_SUMMARY_CANCEL_SET = SUMMARY_CANCEL  # shared with the queue worker (services/stage_control.py)
 _MINDMAP_CANCEL_SET = MINDMAP_CANCEL  # shared with the queue worker (services/stage_control.py): the same set object
 
 # In-memory progress: {video_id: {"done": int, "total": int}}
 _CLEANUP_PROGRESS: dict[str, dict] = {}
-_SUMMARY_PROGRESS: dict[str, dict] = {}
+_SUMMARY_PROGRESS = SUMMARY_PROGRESS  # same dict object as in services/stage_control.py
 # Videos currently being re-extracted (set of video_id)
 _REEXTRACT_SET: set[str] = set()
 # Live re-transcription progress: {video_id: progress_text}

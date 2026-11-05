@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.database import AsyncSessionLocal
 from services.ollama_options import begin_llm_run, llm_failure_reason
 from services.queue_by_id import release_mindmap_status
-from services.stage_control import MINDMAP_CANCEL, StageCancelled
+from services.stage_control import MINDMAP_CANCEL, SUMMARY_CANCEL, SUMMARY_PROGRESS, StageCancelled
 
 logger = logging.getLogger("queue_service")
 
@@ -476,7 +476,7 @@ async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
     from services.text_summarizer import summarize_text, extract_notes, MAP_REDUCE_THRESHOLD
     from services.video_service import (
         get_result, get_stage_settings, get_app_setting,
-        set_summary_processing, finish_summary, fail_summary_stage,
+        set_summary_processing, finish_summary, fail_summary_stage, reset_summary_status,
     )
 
     try:
@@ -509,14 +509,16 @@ async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
         def on_summary_progress(done: int, total: int) -> None:
             label = "chapter" if use_full_extract else "chunk"
             _QUEUE_PROGRESS[item_id] = f"summary: {label} {done}/{total}"
+            SUMMARY_PROGRESS[yt_video_id] = {"done": done, "total": total}  # what the result page shows
 
+        SUMMARY_CANCEL.discard(yt_video_id)  # a flag left over from an earlier run must not stop this one
         started_at = _dt.utcnow()
         if use_full_extract:
             summary, mode, chunks_count = await extract_notes(
                 source_text,
                 model=model,
                 ollama_url=ollama_url,
-                is_cancelled=lambda: False,
+                is_cancelled=lambda: yt_video_id in SUMMARY_CANCEL,
                 on_progress=on_summary_progress,
                 language=language,
                 parallel_workers=parallel_workers,
@@ -528,7 +530,7 @@ async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
                 user_prompt_template=stage.get("user_prompt_template"),
                 model=model,
                 ollama_url=ollama_url,
-                is_cancelled=lambda: False,
+                is_cancelled=lambda: yt_video_id in SUMMARY_CANCEL,
                 force_map_reduce=force_map_reduce,
                 extract_prompt=extract_stage.get("user_prompt_template"),
                 combine_prompt=combine_stage.get("user_prompt_template"),
@@ -537,12 +539,23 @@ async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
                 parallel_workers=parallel_workers,
             )
 
+        SUMMARY_PROGRESS.pop(yt_video_id, None)
+        if yt_video_id in SUMMARY_CANCEL:
+            # Stop pressed (NS-11 decision 1, as in the background copy): the status is reset, the previous summary and
+            # its details are kept, and no benchmark row is written
+            SUMMARY_CANCEL.discard(yt_video_id)
+            async with AsyncSessionLocal() as db:
+                await reset_summary_status(db, yt_video_id)
+            raise StageCancelled("Summary cancelled")
+
         async with AsyncSessionLocal() as db:
             await finish_summary(
                 db, yt_video_id, summary, mode=mode,
                 chunks_count=chunks_count, started_at=started_at,
                 error=llm_failure_reason() or (None if summary else "The model returned no summary"),
             )
+    except StageCancelled:
+        raise
     except Exception as exc:
         logger.exception("Queue summary: stage failed for %s", yt_video_id)
         # a StageFailure's own message first: the reason box of an earlier stage must not leak into it
@@ -550,6 +563,8 @@ async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
         async with AsyncSessionLocal() as db:
             await fail_summary_stage(db, yt_video_id, error=reason)
         raise
+    finally:
+        SUMMARY_PROGRESS.pop(yt_video_id, None)  # on every way out: the page must not show a finished run's counters
 
 
 async def _run_transcribe(url: str, language: str = "auto", item_id: int = 0) -> dict[str, Any]:
