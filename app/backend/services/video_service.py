@@ -500,11 +500,23 @@ async def finish_summary(
     error: str | None = None,
 ) -> None:
     """Store summarization result + both timestamps atomically, AND mirror
-    the run into benchmark_runs so it shows up on the Benchmark page."""
+    the run into benchmark_runs so it shows up on the Benchmark page.
+
+    A run that produced nothing (summary_text empty / None: Ollama unreachable, an empty answer) is only a failure: the
+    status becomes 'failed' with its error, and the summary saved by an earlier run - its text, mode, chunk count and
+    timestamps - stays untouched, exactly as when the stage raises (fail_summary_stage). No benchmark row is written for
+    it (NS-11 stage 3 review)."""
     fmt_id = await _get_fmt_id(db, video_id)
     if not fmt_id:
         return
-    status = "done" if summary_text else "failed"
+    if not summary_text:
+        await db.execute(
+            text("UPDATE subtitles_formatted SET summary_status = 'failed', summary_error = :error WHERE id = :id"),
+            {"error": error, "id": fmt_id},
+        )
+        await db.commit()
+        return
+    status = "done"
     finished_dt = datetime.utcnow()
     started_dt = started_at or finished_dt
     finished_ts = finished_dt.strftime("%Y-%m-%d %H:%M:%S.%f")
