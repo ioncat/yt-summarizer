@@ -8,6 +8,12 @@ import {
   queueBulkAddByIds,
   deleteQueueItem,
   errorText,
+  toggleFavorite,
+  deleteResult,
+  startSummary,
+  startCleanup,
+  startMindmap,
+  getStatus,
 } from '../api'
 
 function makeResponse(body: unknown, status = 200): Response {
@@ -160,5 +166,48 @@ describe('error messages from the server (NS-24a review)', () => {
     for (const body of [null, undefined, {}, { detail: [] }, { detail: [{}] }, { detail: {} }, { detail: 5 }]) {
       expect(errorText(body, 'fallback')).toBe('fallback')
     }
+  })
+})
+
+
+describe('ids from the address bar are encoded in the request path (NS-24a review)', () => {
+  const odd = 'https:/www.youtube.com/live/X?a=1#b'
+  const encoded = encodeURIComponent(odd)
+
+  beforeEach(() => { vi.resetAllMocks() })
+
+  it('getResult keeps a slash, a ? or a # inside the id instead of changing the path', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(makeResponse({ video_id: odd }))
+    vi.stubGlobal('fetch', fetchMock)
+    await getResult(odd)
+    expect(fetchMock.mock.calls[0][0]).toBe(`/api/result/${encoded}`)
+  })
+
+  it('the other result calls and the status call encode the id too', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(makeResponse({ is_favorite: true, status: 'pending' }))
+    vi.stubGlobal('fetch', fetchMock)
+    await toggleFavorite(odd)
+    await deleteResult(odd)
+    await startSummary(odd)
+    await startCleanup(odd)
+    await startMindmap(odd, true)
+    await getStatus(odd)
+    const urls = fetchMock.mock.calls.map(c => c[0] as string)
+    expect(urls).toEqual([
+      `/api/result/${encoded}/favorite`,
+      `/api/result/${encoded}`,
+      `/api/result/${encoded}/summary`,
+      `/api/result/${encoded}/cleanup`,
+      `/api/result/${encoded}/mindmap?force=true`,
+      `/api/status/${encoded}`,
+    ])
+  })
+
+  it('a normal id (YouTube or file-...) is unchanged', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(makeResponse({}))
+    vi.stubGlobal('fetch', fetchMock)
+    await getResult('dQw4w9WgXcQ')
+    await getResult('file-1a2b3c4d')
+    expect(fetchMock.mock.calls.map(c => c[0])).toEqual(['/api/result/dQw4w9WgXcQ', '/api/result/file-1a2b3c4d'])
   })
 })

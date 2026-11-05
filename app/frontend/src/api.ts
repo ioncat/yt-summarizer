@@ -119,13 +119,13 @@ export async function processVideo(
 }
 
 export async function getStatus(taskId: string): Promise<StatusResponse> {
-  const res = await fetch(`${BASE}/status/${taskId}`)
+  const res = await fetch(`${BASE}/status/${encodeURIComponent(taskId)}`)
   if (!res.ok) throw new Error('Status not found')
   return res.json()
 }
 
 export async function getResult(videoId: string): Promise<ResultResponse> {
-  const res = await fetch(`${BASE}/result/${videoId}`)
+  const res = await fetch(`${BASE}/result/${encodeURIComponent(videoId)}`)
   if (res.status === 404) throw new Error('Result not found')
   if (!res.ok) throw new Error('Failed to load result')
   return res.json()
@@ -141,13 +141,13 @@ export async function getHistory(page = 1, search?: string, favoritesOnly = fals
 }
 
 export async function toggleFavorite(videoId: string): Promise<{ is_favorite: boolean }> {
-  const res = await fetch(`${BASE}/result/${videoId}/favorite`, { method: 'POST' })
+  const res = await fetch(`${BASE}/result/${encodeURIComponent(videoId)}/favorite`, { method: 'POST' })
   if (!res.ok) throw new Error('Failed to toggle favorite')
   return res.json()
 }
 
 export async function deleteResult(videoId: string): Promise<void> {
-  const res = await fetch(`${BASE}/result/${videoId}`, { method: 'DELETE' })
+  const res = await fetch(`${BASE}/result/${encodeURIComponent(videoId)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete')
 }
 
@@ -162,11 +162,11 @@ export async function deleteResultsBulk(videoIds: string[]): Promise<{ deleted: 
 }
 
 export async function cancelCleanup(videoId: string): Promise<void> {
-  await fetch(`${BASE}/result/${videoId}/cleanup`, { method: 'DELETE' })
+  await fetch(`${BASE}/result/${encodeURIComponent(videoId)}/cleanup`, { method: 'DELETE' })
 }
 
 export async function startSummary(videoId: string): Promise<void> {
-  const res = await fetch(`${BASE}/result/${videoId}/summary`, { method: 'POST' })
+  const res = await fetch(`${BASE}/result/${encodeURIComponent(videoId)}/summary`, { method: 'POST' })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(errorText(body, 'Failed to start summarization'))
@@ -174,13 +174,13 @@ export async function startSummary(videoId: string): Promise<void> {
 }
 
 export async function cancelSummary(videoId: string): Promise<void> {
-  await fetch(`${BASE}/result/${videoId}/summary`, { method: 'DELETE' })
+  await fetch(`${BASE}/result/${encodeURIComponent(videoId)}/summary`, { method: 'DELETE' })
 }
 
 export async function startMindmap(videoId: string, force = false): Promise<void> {
   const url = force
-    ? `${BASE}/result/${videoId}/mindmap?force=true`
-    : `${BASE}/result/${videoId}/mindmap`
+    ? `${BASE}/result/${encodeURIComponent(videoId)}/mindmap?force=true`
+    : `${BASE}/result/${encodeURIComponent(videoId)}/mindmap`
   const res = await fetch(url, { method: 'POST' })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
@@ -189,11 +189,11 @@ export async function startMindmap(videoId: string, force = false): Promise<void
 }
 
 export async function cancelMindmap(videoId: string): Promise<void> {
-  await fetch(`${BASE}/result/${videoId}/mindmap`, { method: 'DELETE' })
+  await fetch(`${BASE}/result/${encodeURIComponent(videoId)}/mindmap`, { method: 'DELETE' })
 }
 
 export async function startCleanup(videoId: string): Promise<void> {
-  const res = await fetch(`${BASE}/result/${videoId}/cleanup`, { method: 'POST' })
+  const res = await fetch(`${BASE}/result/${encodeURIComponent(videoId)}/cleanup`, { method: 'POST' })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(errorText(body, 'Failed to start cleanup'))
@@ -204,7 +204,7 @@ export async function saveChatHistory(
   videoId: string,
   messages: Array<{ role: string; content: string }>
 ): Promise<void> {
-  await fetch(`${BASE}/result/${videoId}/chat`, {
+  await fetch(`${BASE}/result/${encodeURIComponent(videoId)}/chat`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ messages }),
@@ -212,7 +212,7 @@ export async function saveChatHistory(
 }
 
 export async function clearChatHistory(videoId: string): Promise<void> {
-  await fetch(`${BASE}/result/${videoId}/chat`, { method: 'DELETE' })
+  await fetch(`${BASE}/result/${encodeURIComponent(videoId)}/chat`, { method: 'DELETE' })
 }
 
 export async function processFile(
@@ -234,7 +234,7 @@ export async function processFile(
 }
 
 export async function reextractSubtitles(videoId: string, language: string = 'auto', model?: string): Promise<void> {
-  const res = await fetch(`${BASE}/result/${videoId}/reextract`, {
+  const res = await fetch(`${BASE}/result/${encodeURIComponent(videoId)}/reextract`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ language, ...(model ? { model } : {}) }),
@@ -274,7 +274,7 @@ export async function downloadVideo(
   quality: string = 'best',
 ): Promise<void> {
   const params = new URLSearchParams({ format, quality })
-  const res = await fetch(`${BASE}/result/${videoId}/download?${params}`)
+  const res = await fetch(`${BASE}/result/${encodeURIComponent(videoId)}/download?${params}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(errorText(body, 'Download failed'))
@@ -463,7 +463,7 @@ export async function startBenchmark(
 }
 
 export async function getBenchmarkRuns(video_id: string): Promise<BenchmarkRun[]> {
-  const res = await fetch(`${BASE}/benchmark/${video_id}`)
+  const res = await fetch(`${BASE}/benchmark/${encodeURIComponent(video_id)}`)
   if (!res.ok) throw new Error('Failed to load benchmark runs')
   const data = await res.json()
   return data.runs ?? []
