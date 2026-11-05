@@ -21,7 +21,7 @@ from services.subtitle_extractor import extract_subtitles, extract_video_id, val
 from services.stage_control import (
     CLEANUP_CANCEL, MINDMAP_CANCEL, SUMMARY_CANCEL,
 )
-from services.queue_by_id import ensure_stage_order
+from services.queue_by_id import already_running_message, ensure_stage_order, stage_will_run
 from services.video_service import (
     delete_video,
     get_app_setting,
@@ -111,6 +111,8 @@ async def trigger_cleanup(
     # queue first: if the database is busy nothing has changed (503); the status is set right after, and again by the
     # stage itself when it starts
     item_id = await retry_locked(lambda: enqueue_stage(db, video_id, "cleanup"), db, "cleanup: queue")
+    if item_id is None and not await stage_will_run(db, video_id, "cleanup"):
+        raise HTTPException(status_code=409, detail=already_running_message("cleanup"))  # nothing queued: no status to set
     await set_cleanup_processing(db, video_id, model=stage.get("model"), queue_item_id=item_id)
     return {"status": "processing"}
 
@@ -338,6 +340,8 @@ async def trigger_summary(
     # queue first: if the database is busy nothing has changed (503); the status is set right after, and again by the
     # stage itself when it starts
     item_id = await retry_locked(lambda: enqueue_stage(db, video_id, "summary"), db, "summary: queue")
+    if item_id is None and not await stage_will_run(db, video_id, "summary"):
+        raise HTTPException(status_code=409, detail=already_running_message("summary"))
     await set_summary_processing(db, video_id, model=stage.get("model"), queue_item_id=item_id)
     return {"status": "processing"}
 
@@ -388,6 +392,8 @@ async def trigger_mindmap(
     # queue first: if the database is busy nothing has changed; the status is set right after (and again by the stage
     # itself when it starts), so a queued item never has a stale "idle" status for more than a moment
     item_id = await retry_locked(lambda: enqueue_stage(db, video_id, "mindmap"), db, "mindmap: queue")
+    if item_id is None and not await stage_will_run(db, video_id, "mindmap"):
+        raise HTTPException(status_code=409, detail=already_running_message("mindmap"))
     model = (await get_stage_settings(db, "summarization")).get("model")      # the mind map uses the summary model
     await start_mindmap_generation(db, video_id, queue_item_id=item_id, model=model)
     return {"status": "processing"}

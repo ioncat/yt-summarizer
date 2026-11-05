@@ -47,6 +47,11 @@ _INSERT_RUN = (
 )
 
 
+async def has_open_run(db: AsyncSession, video_id: str, stage: str) -> bool:
+    """Does the stage have an open ('processing') run?"""
+    return await _open_row(db, video_id, stage) is not None
+
+
 async def _insert(db: AsyncSession, video_id: str, stage: str, status: str, **cols):
     """Add a run (the attempt number is computed in the same statement). Returns the new row's id, or None when the
     partial unique index refused a second OPEN row (a concurrent begin won)."""

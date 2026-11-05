@@ -179,3 +179,57 @@ async def test_a_button_whose_stage_is_already_queued_adds_nothing_and_is_not_re
     await add(client, ["cleanup", "summary"])
     r = await client.post(f"/api/result/{VIDEO_ID}/cleanup")
     assert r.status_code == 200 and len(await items()) == 1
+
+
+# --- a click that adds nothing sets no status (review of 4b) -----------------------------------------------------
+
+async def _running_item(stages):
+    async with AsyncSessionLocal() as db:
+        item = (await db.execute(
+            text("INSERT INTO processing_queue (url, video_id, status, pipeline_stages, added_at, sort_order, started_at) "
+                 f"VALUES ('https://www.youtube.com/watch?v={VIDEO_ID}', '{VIDEO_ID}', 'processing', :s, datetime('now'), 1, datetime('now'))"),
+            {"s": json.dumps(stages)})).lastrowid
+        await db.commit()
+    return item
+
+
+async def test_the_cleanup_button_while_a_running_item_has_passed_its_cleanup_changes_nothing(client, seeded_video):
+    await client.put("/api/settings/cleanup", json={"model": "m"})
+    await _running_item(["cleanup", "summary"])                      # the worker is past the cleanup: no open run, status idle
+    r = await client.post(f"/api/result/{VIDEO_ID}/cleanup")
+    assert r.status_code == 409 and "already part of the item that is running" in r.json()["detail"]
+    assert (await fmt_row())["cleanup_status"] is None               # not stuck on 'processing'
+    assert len(await items()) == 1 and await runs("cleanup") == []
+
+
+async def test_the_summary_and_mind_map_buttons_follow_the_same_rule(client, seeded_video):
+    await client.put("/api/settings/summarization", json={"model": "m"})
+    await _running_item(["summary", "mindmap"])
+    for stage in ("summary", "mindmap"):
+        r = await client.post(f"/api/result/{VIDEO_ID}/{stage}")
+        assert r.status_code == 409, stage
+    fmt = await fmt_row()
+    assert (fmt["summary_status"], fmt["mindmap_status"]) == (None, None)
+    assert len(await items()) == 1
+
+
+async def test_a_running_item_whose_cleanup_run_is_still_open_answers_200_and_keeps_one_run(client, seeded_video):
+    await client.put("/api/settings/cleanup", json={"model": "m"})
+    item = await _running_item(["cleanup", "summary"])
+    async with AsyncSessionLocal() as db:
+        from services import stage_runs
+        await stage_runs.begin(db, VIDEO_ID, "cleanup", "m", item)       # the cleanup is running right now
+        await db.commit()
+    r = await client.post(f"/api/result/{VIDEO_ID}/cleanup")
+    assert r.status_code == 200
+    assert [x["status"] for x in await runs("cleanup")] == ["processing"] and len(await items()) == 1
+
+
+async def test_a_pending_item_with_the_stage_still_to_run_answers_200_and_marks_it(client, seeded_video):
+    await client.put("/api/settings/cleanup", json={"model": "m"})
+    async with AsyncSessionLocal() as db:
+        await db.execute(text("INSERT INTO processing_queue (url, video_id, status, pipeline_stages, added_at, sort_order) "
+                              f"VALUES ('https://www.youtube.com/watch?v={VIDEO_ID}', '{VIDEO_ID}', 'pending', '[\"cleanup\"]', datetime('now'), 1)"))
+        await db.commit()
+    assert (await client.post(f"/api/result/{VIDEO_ID}/cleanup")).status_code == 200
+    assert (await fmt_row())["cleanup_status"] == "processing" and len(await items()) == 1

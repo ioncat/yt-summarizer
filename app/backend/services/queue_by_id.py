@@ -120,6 +120,21 @@ async def queued_stages_of(db: AsyncSession, video_id: str) -> set[str]:
     return stages
 
 
+async def stage_will_run(db: AsyncSession, video_id: str, stage: str) -> bool:
+    """Is `stage` of this video still to run? True when a PENDING item includes it, or its run row is open. A running item
+    that has already passed the stage (no open row) does not count: marking the stage 'processing' for it would stick."""
+    pending = (await db.execute(
+        text("SELECT 1 FROM processing_queue WHERE video_id = :v AND status = 'pending' AND pipeline_stages LIKE :has LIMIT 1"),
+        {"v": video_id, "has": f'%"{stage}"%'},
+    )).first()
+    return pending is not None or await stage_runs.has_open_run(db, video_id, stage)
+
+
+def already_running_message(stage: str) -> str:
+    return (f"The {_LABEL.get(stage, stage)} is already part of the item that is running: nothing was added. "
+            "Wait for it to finish, then run it again if you need to.")
+
+
 async def ensure_stage_order(db: AsyncSession, video_id: str, stage: str) -> None:
     """The single-stage buttons: refuse (409) when a stage that comes after `stage` is already queued for the video."""
     from fastapi import HTTPException
