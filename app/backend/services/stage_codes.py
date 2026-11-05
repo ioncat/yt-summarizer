@@ -18,6 +18,8 @@ ERROR_CODES = (
     "no_text",           # the video has no text for this stage
     "not_found",         # the video is not in History
     "upstream_failed",   # an earlier stage of the same queue item failed, so this one never ran
+    "no_speech",         # the transcription found no speech in the file
+    "file_missing",      # the uploaded file is no longer on disk
 )
 
 
@@ -32,10 +34,14 @@ def classify_error(error_text: str | None) -> str | None:
     t = error_text.lower()
     if "did not run: an earlier stage failed" in t:
         return "upstream_failed"
+    if "no speech" in t:
+        return "no_speech"
+    if "no longer on disk" in t or "task is gone" in t:
+        return "file_missing"
     if "cancelled" in t or "canceled" in t:
         return "cancelled"
     if ("needs an ollama url" in t or "no model" in t or "model configured" in t or "ollama url not configured" in t
-            or ("model" in t and "not found" in t) or "try pulling" in t):
+            or ("model" in t and "not found" in t) or "try pulling" in t or "is not installed" in t):
         return "model_missing"
     if ("returned no answer" in t or "returned nothing" in t or "was produced" in t or "thinking used" in t
             or "empty answer" in t):

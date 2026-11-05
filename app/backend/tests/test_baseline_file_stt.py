@@ -103,18 +103,17 @@ async def test_the_status_shows_the_live_segment_text_while_it_runs_and_none_aft
     await _forget(body["video_id"])
 
 
-async def test_an_empty_transcript_is_saved_as_a_result_today(client, uploads):
-    # BASELINE: known bug — a file with no speech gives success with no segments and is stored as an empty "transcript"
-    # (decision 5: this becomes an explicit failure "no speech found" and nothing is saved).
+async def test_an_empty_transcript_is_an_explicit_failure_and_nothing_is_saved(client, uploads):
+    # NS-11 stage 5 (decision 5): this used to store an empty "transcript" as a result (BASELINE: known bug).
     def silent(path, language, model, device, cache_path, on_progress):
         return TranscriptionResult(segments=[], detected_language="en", success=True, device_used="cpu")
 
     with patch("services.transcriber.transcribe", silent):
         body, item = await _upload_and_run(client)
     st = (await client.get(f"/api/status/{body['task_id']}")).json()
-    assert st["status"] == "completed"
-    row = await fmt_row(body["video_id"])
-    assert row is not None and not row["formatted_text"]
+    assert st["status"] == "failed" and st["error_message"] == "No speech was found in the file"
+    assert item["status"] == "failed" and item["error_message"] == "No speech was found in the file"
+    assert await fmt_row(body["video_id"]) is None
     await _forget(body["video_id"])
 
 

@@ -24,6 +24,8 @@ const REASON: Record<string, string> = {
   no_text: 'no text to work on',
   not_found: 'the video is not in History',
   upstream_failed: 'an earlier step failed',
+  no_speech: 'no speech was found in the file',
+  file_missing: 'the uploaded file is no longer on disk',
 }
 
 function seconds(run: StageRunDetail): number | null {

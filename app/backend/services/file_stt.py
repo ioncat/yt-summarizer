@@ -11,6 +11,7 @@ import os
 
 from sqlalchemy import text
 
+from services import stage_runs
 from services.video_service import complete_task, get_app_setting, update_task_failed
 
 LOCAL_PREFIX = "local://"
@@ -38,7 +39,8 @@ def find_upload(local_video_id: str) -> str | None:
 
 
 async def enqueue_local_file(db, local_video_id: str, db_video_id: str, original_filename: str, language: str) -> int:
-    """Queue the transcription of an uploaded file. Returns the queue item's id."""
+    """Queue the transcription of an uploaded file. Returns the queue item's id. The stage's run row opens at once (status
+    "processing" on the request, NS-11 decision 3), with the speech-to-text model that will be used."""
     res = await db.execute(
         text("INSERT INTO processing_queue (url, video_id, db_video_id, status, pipeline_stages, language, added_at, sort_order) "
              "VALUES (:url, :vid, :dbid, 'pending', :stages, :lang, datetime('now'), "
@@ -46,16 +48,50 @@ async def enqueue_local_file(db, local_video_id: str, db_video_id: str, original
         {"url": LOCAL_PREFIX + original_filename, "vid": local_video_id, "dbid": db_video_id,
          "stages": '["transcribe"]', "lang": language},
     )
+    await stage_runs.begin(db, local_video_id, "transcribe", await get_app_setting(db, "stt_model") or "base", res.lastrowid)
     await db.commit()
     return res.lastrowid
 
 
+async def _record(video_id: str, how: str, **kw) -> None:
+    """Write the end of the stage's run: how = "done" | "failed" | "cancelled". Never raises into the caller's error path."""
+    from models.database import AsyncSessionLocal
+    try:
+        async with AsyncSessionLocal() as db:
+            if how == "done":
+                await stage_runs.finish(db, video_id, "transcribe", model=kw.get("model"), started_at=kw.get("started_at"),
+                                        meta={"device": kw["device"]} if kw.get("device") else None)
+            elif how == "failed":
+                await stage_runs.fail(db, video_id, "transcribe", kw.get("error"), model=kw.get("model"))
+            else:
+                await stage_runs.cancel(db, video_id, "transcribe")
+            await db.commit()
+    except Exception:  # noqa: BLE001 - the run row is a record; it must not hide the real outcome
+        import logging
+        logging.getLogger("api").exception("could not record the %s of the transcription of %s", how, video_id)
+
+
 async def run_queued_file(item: dict) -> dict:
-    """Run one queued upload (called by the queue worker). Returns {"video_id", "db_video_id"}; raises FileTranscriptionFailed."""
+    """Run one queued upload (called by the queue worker). Returns {"video_id", "db_video_id"}; raises FileTranscriptionFailed.
+    The stage's run row is opened (a queue item that was reset or retried gets a new run), then closed done / failed."""
     from models.database import AsyncSessionLocal
 
     video_id, db_video_id = item["video_id"], item.get("db_video_id")
     original_filename = item["url"][len(LOCAL_PREFIX):]
+    async with AsyncSessionLocal() as db:
+        await stage_runs.begin(db, video_id, "transcribe", await get_app_setting(db, "stt_model") or "base", item["id"])
+        await db.commit()
+    try:
+        outcome = await _run_queued_file(item, video_id, db_video_id, original_filename)
+    except FileTranscriptionFailed as exc:
+        await _record(video_id, "failed", error=str(exc))
+        raise
+    await _record(video_id, "done", model=outcome["model"], device=outcome["device"], started_at=outcome["started_at"])
+    return {"video_id": video_id, "db_video_id": db_video_id}
+
+
+async def _run_queued_file(item: dict, video_id: str, db_video_id: str | None, original_filename: str) -> dict:
+    from models.database import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
         task_id = (await db.execute(
             text("SELECT id FROM processing_tasks WHERE video_id = :v ORDER BY started_at DESC LIMIT 1"), {"v": db_video_id},
@@ -68,8 +104,7 @@ async def run_queued_file(item: dict) -> dict:
         async with AsyncSessionLocal() as db:
             await update_task_failed(db, task_id, message)
         raise FileTranscriptionFailed(message)
-    await run_file_transcription(task_id, video_id, path, original_filename, item.get("language") or "auto")
-    return {"video_id": video_id, "db_video_id": db_video_id}
+    return await run_file_transcription(task_id, video_id, path, original_filename, item.get("language") or "auto")
 
 
 async def run_file_transcription(
@@ -78,9 +113,11 @@ async def run_file_transcription(
     audio_path: str,
     original_filename: str,
     language: str = "auto",
-) -> None:
+) -> dict:
     """Transcribe a locally uploaded audio / video file and store the result. A failure marks the task failed and raises
-    FileTranscriptionFailed (the queue item then ends failed with the same message)."""
+    FileTranscriptionFailed (the queue item then ends failed with the same message). Nothing is stored unless the
+    transcription worked and found speech, so a failed or empty run leaves any saved transcript as it was.
+    Returns {"model", "device", "started_at"} of the run."""
     from models.database import AsyncSessionLocal
     from services.transcriber import transcribe as _transcribe, DEFAULT_CACHE_PATH
     from services.text_formatter import format_subtitles
@@ -130,6 +167,12 @@ async def run_file_transcription(
             for s in segments
             if s.get("text", "").strip()
         ]
+        if not entries:
+            # decision 5: a silent skip becomes an explicit failure; no empty "transcript" is saved
+            message = "No speech was found in the file"
+            async with AsyncSessionLocal() as db:
+                await update_task_failed(db, task_id, message)
+            raise FileTranscriptionFailed(message)
         # Compute audio duration from last segment end time
         audio_duration = int(segments[-1]["end"]) if segments and segments[-1].get("end") else None
 
@@ -174,6 +217,7 @@ async def run_file_transcription(
                 os.remove(audio_path)
             except OSError:
                 pass
+        return {"model": stt_model, "device": actual_device, "started_at": transcription_started_at}
 
     except FileTranscriptionFailed:
         raise
