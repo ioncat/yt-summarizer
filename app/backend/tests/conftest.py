@@ -39,6 +39,45 @@ from models.database import init_db, get_db  # noqa: E402
 from httpx import AsyncClient, ASGITransport  # noqa: E402
 
 
+# Uploaded files: like the database, never the live folder (rule 19). Every place that names the upload folder is pointed at a temp
+# folder for the whole run; a test that wants its own folder still patches these (see the `uploads` fixture in
+# test_baseline_file_stt.py). LIVE_UPLOADS is only used by the guard below.
+TEST_UPLOADS = tempfile.mkdtemp(prefix="yt-summarizer-test-uploads-")
+LIVE_UPLOADS = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data/uploads"))
+
+import routers.process as _r_process  # noqa: E402
+import routers.result as _r_result  # noqa: E402
+import routers.settings as _r_settings  # noqa: E402
+import services.file_stt as _s_file_stt  # noqa: E402
+
+_s_file_stt.uploads_dir = lambda: TEST_UPLOADS
+_r_process.uploads_dir = lambda: TEST_UPLOADS
+_r_settings._uploads_dir = lambda: TEST_UPLOADS
+_r_result._uploads_dir = lambda: TEST_UPLOADS
+
+
+def _snapshot_uploads(path: str) -> list:
+    if not os.path.isdir(path):
+        return []
+    return sorted((e.name, e.stat().st_size, e.stat().st_mtime_ns) for e in os.scandir(path))
+
+
+def describe_uploads_change(before: list, after: list) -> str:
+    b, a = {n: (size, mtime) for n, size, mtime in before}, {n: (size, mtime) for n, size, mtime in after}
+    return "added %s, removed %s, changed %s" % (
+        sorted(set(a) - set(b)), sorted(set(b) - set(a)), sorted(n for n in set(a) & set(b) if a[n] != b[n]))
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _live_uploads_untouched():
+    """Guard: the run must leave the LIVE app/data/uploads exactly as it found it (names, sizes, times). If the live app took an
+    upload while the suite ran, this reports it too: run the suite again."""
+    before = _snapshot_uploads(LIVE_UPLOADS)
+    yield
+    after = _snapshot_uploads(LIVE_UPLOADS)
+    assert after == before, "the test run changed the live uploads folder %s: %s" % (LIVE_UPLOADS, describe_uploads_change(before, after))
+
+
 # Override get_db dependency to use test session factory
 async def _override_get_db():
     async with TEST_SESSION_FACTORY() as session:
