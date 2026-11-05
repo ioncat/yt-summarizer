@@ -11,6 +11,15 @@ BASE_URL = os.environ.get("YT_SUMMARIZER_URL", "http://localhost:9010").rstrip("
 POLL_INTERVAL = 3.0
 POLL_TIMEOUT = 300  # 5 minutes
 
+# Parts of a result an agent can ask for with get_result(parts=[...]): name -> field of /api/result/{id}
+TEXT_PARTS = {
+    "summary": "summary_text",
+    "transcript": "formatted_text",
+    "cleaned": "cleaned_text",
+    "mindmap": "mindmap_text",
+}
+DEFAULT_TEXT_LIMIT = 20_000  # chars of transcript / cleaned returned when the agent gives no limit
+
 mcp = FastMCP(
     "yt-summarizer",
     instructions="Extract and summarize YouTube video transcripts",
@@ -72,24 +81,61 @@ def _channel(item: dict) -> str:
     return item.get("author") or item.get("channel") or ""
 
 
-def _format_result(data: dict, include_text: bool = False) -> str:
-    lines: list[str] = []
+def _size(n: int) -> str:
+    return str(n) if n < 1000 else f"{n / 1000:.1f}k".replace(".0k", "k")
 
-    title = data.get("title") or data.get("video_id", "Unknown")
-    lines.append(f"# {title}")
 
+def _parts_hint(data: dict) -> str:
+    """One line: which parts exist for this video and how long they are (chars)."""
+    bits = []
+    for part in ("summary", "cleaned", "transcript", "mindmap"):
+        text = data.get(TEXT_PARTS[part])
+        bits.append(f"{part} {_size(len(text))}" if text else f"{part} none")
+    return "Parts (chars): " + " · ".join(bits)
+
+
+def _format_part(name: str, text: str | None, offset: int, limit: int | None) -> list[str]:
+    """One text part, cut to [offset, offset+limit) with the range, the total and the next offset."""
+    title = name.capitalize()
+    if not text:
+        return [f"## {title}", "(not available for this video)", ""]
+    total = len(text)
+    if limit is None and name in ("transcript", "cleaned"):
+        limit = DEFAULT_TEXT_LIMIT
+    if offset >= total:
+        return [f"## {title} (offset {offset} is past the end; total {total} chars)", ""]
+    chunk = text[offset:] if limit is None else text[offset:offset + limit]
+    end = offset + len(chunk)
+    nxt = "end" if end >= total else f"next: offset={end}"
+    return [f"## {title} (chars {offset}–{end} of {total}) · {nxt}", chunk, ""]
+
+
+def _format_parts(data: dict, parts: list[str], offset: int, limit: int | None) -> str:
+    lines: list[str] = _header_lines(data)
+    for name in dict.fromkeys(parts):  # in the order asked, each once
+        lines.extend(_format_part(name, data.get(TEXT_PARTS[name]), offset, limit))
+    lines.append(f"video_id: {data.get('video_id', '')}")
+    return "\n".join(lines)
+
+
+def _header_lines(data: dict) -> list[str]:
+    lines = [f"# {data.get('title') or data.get('video_id', 'Unknown')}"]
     meta: list[str] = []
-    channel = _channel(data)
-    if channel:
-        meta.append(f"Channel: {channel}")
+    if _channel(data):
+        meta.append(f"Channel: {_channel(data)}")
     if data.get("duration"):
-        mins = int(data["duration"]) // 60
-        meta.append(f"Duration: {mins} min")
+        meta.append(f"Duration: {int(data['duration']) // 60} min")
     if data.get("language"):
         meta.append(f"Language: {data['language']}")
     if meta:
         lines.append(" · ".join(meta))
+    lines.append(_parts_hint(data))
     lines.append("")
+    return lines
+
+
+def _format_result(data: dict, include_text: bool = False) -> str:
+    lines: list[str] = _header_lines(data)
 
     if data.get("summary_text"):
         lines.append("## Summary")
@@ -154,13 +200,33 @@ async def process_video(url: str, language: str = "auto") -> str:
 
 
 @mcp.tool()
-async def get_result(video_id: str, include_text: bool = False) -> str:
+async def get_result(
+    video_id: str,
+    parts: list[str] | None = None,
+    offset: int = 0,
+    limit: int | None = None,
+    include_text: bool = False,
+) -> str:
     """Get the result for an already-processed video.
+
+    With no `parts` you get the summary (or a note that there is none), as before.
+    Every answer has a line "Parts (chars): ..." showing what exists for the video and how long it is.
 
     Args:
         video_id: the video ID (11-char YouTube ID or 'file-...' for local files)
-        include_text: if True, include the full transcript (can be very long)
+        parts: what to return, any of: summary, transcript (raw), cleaned, mindmap
+        offset: first character to return of each text part (default 0)
+        limit: how many characters of each text part (default: 20000 for transcript and cleaned,
+            all of summary and mindmap). Every part shows "chars A–B of TOTAL" and "next: offset=B"
+            (or "end"), so a long transcript can be read in pieces.
+        include_text: old switch: with no summary, show the transcript (ignored when parts is given)
     """
+    if parts:
+        unknown = [p for p in parts if p not in TEXT_PARTS]
+        if unknown:
+            return f"ERROR: unknown part '{unknown[0]}'. Allowed: {', '.join(TEXT_PARTS)}"
+    if offset < 0 or (limit is not None and limit <= 0):
+        return "ERROR: offset must be >= 0 and limit must be > 0"
     async with _client() as client:
         try:
             r = await client.get(f"/api/result/{video_id}")
@@ -170,6 +236,8 @@ async def get_result(video_id: str, include_text: bool = False) -> str:
         if r.status_code == 404:
             return f"ERROR: video_id '{video_id}' not found in history"
 
+        if parts:
+            return _format_parts(r.json(), parts, offset, limit)
         return _format_result(r.json(), include_text=include_text)
 
 

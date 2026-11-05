@@ -264,3 +264,121 @@ async def test_search_history_uses_author_for_filter_and_listing():
         mock.get(f"{BASE}/api/history?page=1").mock(return_value=httpx.Response(200, json={"items": items}))
         result = await search_history(query="corey")
     assert "One — Corey Schafer" in result and "Two" not in result
+
+
+# ─── get_result: parts, paging, hint (NS-29) ───────────────────────────────────
+
+LONG = "".join(f"{i:05d} " for i in range(5000))  # 30,000 chars, every 6-char block is its own number
+FULL = {
+    "video_id": "vidP", "title": "Parts", "author": "Chan", "duration": 600, "language": "ru",
+    "summary_text": "Short summary.", "cleaned_text": "Cleaned text.", "formatted_text": LONG,
+    "mindmap_text": "# Root\n- leaf",
+}
+
+
+async def _get(data, **kw):
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(f"{BASE}/api/result/vidP").mock(return_value=httpx.Response(200, json=data))
+        return await get_result("vidP", **kw)
+
+
+@pytest.mark.asyncio
+async def test_default_answer_is_unchanged_except_for_the_parts_line():
+    result = await _get(FULL)
+    assert result == (
+        "# Parts\n"
+        "Channel: Chan · Duration: 10 min · Language: ru\n"
+        "Parts (chars): summary 14 · cleaned 13 · transcript 30k · mindmap 13\n"
+        "\n"
+        "## Summary\n"
+        "Short summary.\n"
+        "\n"
+        "video_id: vidP"
+    )
+    # no summary and no include_text: the old hint text is still there
+    no_summary = await _get({**FULL, "summary_text": None})
+    assert "(No summary yet. Use run_summary(video_id)" in no_summary and "summary none" in no_summary
+
+
+@pytest.mark.asyncio
+async def test_include_text_still_works_the_old_way():
+    result = await _get({**FULL, "summary_text": None}, include_text=True)
+    assert "[Transcript truncated — showing first 20000 of 30000 chars]" not in result  # cleaned text is preferred
+    assert "Cleaned text." in result
+    long_only = await _get({**FULL, "summary_text": None, "cleaned_text": None}, include_text=True)
+    assert "[Transcript truncated — showing first 20000 of 30000 chars]" in long_only
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("part,text,header", [
+    ("summary", "Short summary.", "## Summary (chars 0–14 of 14) · end"),
+    ("cleaned", "Cleaned text.", "## Cleaned (chars 0–13 of 13) · end"),
+    ("mindmap", "# Root\n- leaf", "## Mindmap (chars 0–13 of 13) · end"),
+])
+async def test_each_small_part_is_returned_whole(part, text, header):
+    result = await _get(FULL, parts=[part])
+    assert header in result and text in result
+    assert "Short summary." not in result or part == "summary"  # only what was asked for
+
+
+@pytest.mark.asyncio
+async def test_transcript_defaults_to_20000_chars_and_says_where_to_continue():
+    result = await _get(FULL, parts=["transcript"])
+    assert "## Transcript (chars 0–20000 of 30000) · next: offset=20000" in result
+    assert LONG[:20000] in result and LONG[20000:20010] not in result
+
+
+@pytest.mark.asyncio
+async def test_a_long_transcript_can_be_read_in_pieces_to_the_end_marker():
+    got, offset, calls = "", 0, 0
+    while True:
+        result = await _get(FULL, parts=["transcript"], offset=offset, limit=7000)
+        calls += 1
+        header = next(l for l in result.splitlines() if l.startswith("## Transcript"))
+        body = result.split(header + "\n", 1)[1].rsplit("\n\nvideo_id:", 1)[0]
+        got += body
+        if header.endswith("· end"):
+            break
+        assert f"next: offset={offset + 7000}" in header
+        offset += 7000
+    assert calls == 5 and got == LONG  # 7000 x4 + 2000: the pieces add up to the whole text
+    assert "chars 28000–30000 of 30000" in header
+
+
+@pytest.mark.asyncio
+async def test_offset_past_the_end_and_bad_numbers():
+    past = await _get(FULL, parts=["transcript"], offset=30000)
+    assert "past the end" in past and "total 30000" in past
+    assert (await _get(FULL, parts=["transcript"], offset=-1)).startswith("ERROR")
+    assert (await _get(FULL, parts=["transcript"], limit=0)).startswith("ERROR")
+
+
+@pytest.mark.asyncio
+async def test_unknown_part_is_an_error_that_lists_the_allowed_ones_and_makes_no_request():
+    with respx.mock(assert_all_called=False) as mock:
+        route = mock.get(f"{BASE}/api/result/vidP").mock(return_value=httpx.Response(200, json=FULL))
+        result = await get_result("vidP", parts=["summary", "bogus"])
+    assert result == "ERROR: unknown part 'bogus'. Allowed: summary, transcript, cleaned, mindmap"
+    assert not route.called
+
+
+@pytest.mark.asyncio
+async def test_parts_come_in_the_order_asked_each_once_and_a_missing_part_is_said_so():
+    result = await _get({**FULL, "mindmap_text": None}, parts=["cleaned", "mindmap", "summary", "cleaned"])
+    assert result.index("## Cleaned") < result.index("## Mindmap") < result.index("## Summary")
+    assert result.count("## Cleaned") == 1
+    assert "## Mindmap\n(not available for this video)" in result
+
+
+@pytest.mark.asyncio
+async def test_limit_applies_to_summary_too_and_no_limit_means_all_of_it():
+    big = {**FULL, "summary_text": "S" * 25_000}
+    assert "chars 0–25000 of 25000) · end" in await _get(big, parts=["summary"])  # not cut at 20000
+    cut = await _get(big, parts=["summary"], limit=100)
+    assert "chars 0–100 of 25000) · next: offset=100" in cut
+
+
+@pytest.mark.asyncio
+async def test_parts_line_shows_what_exists():
+    result = await _get({**FULL, "cleaned_text": None, "mindmap_text": None})
+    assert "Parts (chars): summary 14 · cleaned none · transcript 30k · mindmap none" in result
