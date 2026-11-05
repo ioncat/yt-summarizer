@@ -1,5 +1,21 @@
 const BASE = '/api'
 
+/** The message of an error response body. `detail` is a string, an object with `message`, or - for a request
+ *  the server refused to parse (422) - a list of problems; a list must never end up as "[object Object]". */
+export function errorText(body: unknown, fallback: string): string {
+  const detail = (body as { detail?: unknown } | null)?.detail
+  if (typeof detail === 'string' && detail) return detail
+  if (Array.isArray(detail)) {
+    const first = detail[0] as { type?: string; msg?: string; ctx?: { max_length?: number } } | undefined
+    if (first?.type === 'too_long' && first.ctx?.max_length) return `Too many items (max ${first.ctx.max_length} per request)`
+    if (first?.msg) return first.msg
+    return fallback
+  }
+  const message = (detail as { message?: unknown } | undefined)?.message
+  if (typeof message === 'string' && message) return message
+  return fallback
+}
+
 export interface ProcessResponse {
   task_id: string
   video_id: string
@@ -153,7 +169,7 @@ export async function startSummary(videoId: string): Promise<void> {
   const res = await fetch(`${BASE}/result/${videoId}/summary`, { method: 'POST' })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || 'Failed to start summarization')
+    throw new Error(errorText(body, 'Failed to start summarization'))
   }
 }
 
@@ -168,7 +184,7 @@ export async function startMindmap(videoId: string, force = false): Promise<void
   const res = await fetch(url, { method: 'POST' })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || 'Failed to start mindmap generation')
+    throw new Error(errorText(body, 'Failed to start mindmap generation'))
   }
 }
 
@@ -180,7 +196,7 @@ export async function startCleanup(videoId: string): Promise<void> {
   const res = await fetch(`${BASE}/result/${videoId}/cleanup`, { method: 'POST' })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || 'Failed to start cleanup')
+    throw new Error(errorText(body, 'Failed to start cleanup'))
   }
 }
 
@@ -212,7 +228,7 @@ export async function processFile(
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || 'Failed to upload file')
+    throw new Error(errorText(body, 'Failed to upload file'))
   }
   return res.json()
 }
@@ -225,7 +241,7 @@ export async function reextractSubtitles(videoId: string, language: string = 'au
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || 'Failed to start re-extract')
+    throw new Error(errorText(body, 'Failed to start re-extract'))
   }
 }
 
@@ -238,7 +254,7 @@ export async function downloadDirect(
   const res = await fetch(`${BASE}/download/direct?${params}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || 'Download failed')
+    throw new Error(errorText(body, 'Download failed'))
   }
   const blob = await res.blob()
   const disposition = res.headers.get('content-disposition') || ''
@@ -261,7 +277,7 @@ export async function downloadVideo(
   const res = await fetch(`${BASE}/result/${videoId}/download?${params}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || 'Download failed')
+    throw new Error(errorText(body, 'Download failed'))
   }
   const blob = await res.blob()
   const disposition = res.headers.get('content-disposition') || ''
@@ -403,7 +419,7 @@ export async function deleteSttModel(name: string): Promise<void> {
   const res = await fetch(`${BASE}/stt/models/${encodeURIComponent(name)}`, { method: 'DELETE' })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || 'Failed to delete model')
+    throw new Error(errorText(body, 'Failed to delete model'))
   }
 }
 
@@ -514,7 +530,7 @@ export async function queueBulkAdd(
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail?.message || body.detail || 'Failed to add to queue')
+    throw new Error(errorText(body, 'Failed to add to queue'))
   }
   return res.json()
 }
@@ -531,7 +547,7 @@ export async function queueBulkAddByIds(
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail?.message || body.detail || 'Failed to add to queue')
+    throw new Error(errorText(body, 'Failed to add to queue'))
   }
   return res.json()
 }
@@ -552,7 +568,7 @@ export async function deleteQueueItem(id: number): Promise<void> {
   const res = await fetch(`${BASE}/queue/${id}`, { method: 'DELETE' })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || 'Failed to delete')
+    throw new Error(errorText(body, 'Failed to delete'))
   }
 }
 
@@ -572,7 +588,7 @@ export async function retryQueueItem(id: number): Promise<void> {
   const res = await fetch(`${BASE}/queue/${id}/retry`, { method: 'POST' })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || 'Failed to retry item')
+    throw new Error(errorText(body, 'Failed to retry item'))
   }
 }
 

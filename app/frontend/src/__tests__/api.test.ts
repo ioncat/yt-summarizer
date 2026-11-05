@@ -4,6 +4,10 @@ import {
   getResult,
   getHistory,
   VideoAlreadyExistsError,
+  queueBulkAdd,
+  queueBulkAddByIds,
+  deleteQueueItem,
+  errorText,
 } from '../api'
 
 function makeResponse(body: unknown, status = 200): Response {
@@ -115,5 +119,46 @@ describe('api.ts', () => {
 
       await expect(getHistory()).rejects.toThrow('Failed to load history')
     })
+  })
+})
+
+
+describe('error messages from the server (NS-24a review)', () => {
+  const tooLong = {
+    detail: [{
+      type: 'too_long', loc: ['body', 'urls'], msg: 'List should have at most 500 items after validation, not 501',
+      input: [], ctx: { field_type: 'List', max_length: 500, actual_length: 501 },
+    }],
+  }
+
+  beforeEach(() => { vi.resetAllMocks() })
+
+  it('a 422 "too long" list says how many items are allowed, never [object Object]', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse(tooLong, 422)))
+    await expect(queueBulkAdd(['x'])).rejects.toThrow('Too many items (max 500 per request)')
+    await expect(queueBulkAddByIds(['file-1'], ['cleanup'])).rejects.toThrow('Too many items (max 500 per request)')
+  })
+
+  it('any other 422 shows the first problem message', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse(
+      { detail: [{ type: 'missing', loc: ['body', 'url'], msg: 'Field required' }] }, 422)))
+    await expect(queueBulkAdd(['x'])).rejects.toThrow('Field required')
+  })
+
+  it('string and {message} details still work, and an odd body falls back to the generic text', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({ detail: { message: 'No valid YouTube URLs' } }, 400)))
+    await expect(queueBulkAdd(['x'])).rejects.toThrow('No valid YouTube URLs')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({ detail: 'Cannot delete a processing item' }, 409)))
+    await expect(deleteQueueItem(1)).rejects.toThrow('Cannot delete a processing item')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({ detail: { weird: true } }, 500)))
+    await expect(queueBulkAdd(['x'])).rejects.toThrow('Failed to add to queue')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({}, 500)))
+    await expect(queueBulkAdd(['x'])).rejects.toThrow('Failed to add to queue')
+  })
+
+  it('errorText never returns an object text', () => {
+    for (const body of [null, undefined, {}, { detail: [] }, { detail: [{}] }, { detail: {} }, { detail: 5 }]) {
+      expect(errorText(body, 'fallback')).toBe('fallback')
+    }
   })
 })
