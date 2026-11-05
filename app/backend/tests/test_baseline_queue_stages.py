@@ -369,7 +369,7 @@ async def test_worker_failing_stage_marks_item_failed_and_continues_with_next_it
         calls.append("summary")
 
     first = await _add(["cleanup", "summary"])
-    second = await _add(["summary"], url="https://www.youtube.com/watch?v=otherVid0001")
+    second = await _add(["summary"])
     with patch.object(q, "_run_cleanup_stage", failing_cleanup), patch.object(q, "_run_summary_stage", ok_summary):
         await _run_worker([first, second])
     f = await _item(first)
@@ -390,7 +390,7 @@ async def test_worker_processes_one_item_at_a_time_in_sort_order(seeded_video):
         running["n"] -= 1
 
     a = await _add(["summary"])
-    b = await _add(["summary"], url="https://www.youtube.com/watch?v=otherVid0002")
+    b = await _add(["summary"])
     with patch.object(q, "_run_summary_stage", slow_summary):
         await _run_worker([a, b])
     assert order == [str(a), str(b)] and running["max"] == 1
@@ -555,7 +555,7 @@ async def test_url_form_of_a_local_file_id_is_queued_under_a_truncated_id(client
     # selected row, including file-* items; since NS-11 stage 1 it sends `video_ids` instead (see
     # test_queue_by_video_id.py). The URL form itself still behaves like this: the 11-char id parser
     # keeps 'file-8dd203', the item is accepted, and the worker later skips the unknown video
-    # silently (item ends 'done', nothing processed).
+    # silently (item ended 'done', nothing processed; since NS-11 stage 1 it ends 'failed').
     r = await client.post("/api/queue/bulk", json={
         "urls": ["https://www.youtube.com/watch?v=file-8dd2037a"], "pipeline_stages": ["cleanup"], "force": True})
     assert r.status_code == 200 and r.json()["added"] == 1
@@ -563,5 +563,5 @@ async def test_url_form_of_a_local_file_id_is_queued_under_a_truncated_id(client
     assert item["video_id"] == "file-8dd203"
     # correct: a file-* row is queued under its real id (or refused), and never ends 'done' doing nothing
     await _run_worker([item["id"]])
-    done = await _item(item["id"])
-    assert done["status"] == "done" and done["error_message"] is None  # silent no-op
+    failed = await _item(item["id"])
+    assert failed["status"] == "failed" and "not in History" in failed["error_message"]

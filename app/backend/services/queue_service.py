@@ -247,6 +247,15 @@ async def _pick_next() -> dict | None:
         }
 
 
+async def _video_exists(video_id: str) -> bool:
+    async with AsyncSessionLocal() as db:
+        row = await db.execute(
+            text("SELECT 1 FROM videos WHERE video_id = :v AND url NOT LIKE '__pending__%' LIMIT 1"),
+            {"v": video_id},
+        )
+        return row.first() is not None
+
+
 async def _set_processing(item_id: int) -> None:
     async with AsyncSessionLocal() as db:
         await db.execute(
@@ -644,6 +653,9 @@ async def queue_worker() -> None:
                 db_video_id = None
                 if not yt_video_id:
                     raise ValueError(f"Cannot extract video_id from URL: {url}")
+                if not await _video_exists(yt_video_id):
+                    # deleted after it was queued, or never extracted: not a silent "done"
+                    raise LookupError(f"Video {yt_video_id} is not in History (deleted, or never extracted)")
                 logger.info("Queue worker: skipping extract for item %d (stages-only mode)", item_id)
 
             # Stage 2: cleanup (optional)

@@ -94,13 +94,25 @@ async def test_worker_cleans_a_local_file_item_by_its_video_id(local_video):
     assert row["cleanup_status"] == "done" and row["cleaned_text"] == "Cleaned local text."
 
 
-async def test_worker_still_derives_the_id_from_the_url_for_items_without_a_video_id():
+async def test_worker_still_derives_the_id_from_the_url_for_items_without_a_video_id(seeded_video):
     """Items queued before the video_id column was used for this keep working."""
-    item_id = await _insert_item("https://www.youtube.com/watch?v=oldItem0001", None)
-    with patch("services.text_cleaner.clean_text", lambda *a, **k: None):
+    async def fake_clean(text_, **kw):
+        return "Cleaned."
+
+    item_id = await _insert_item("https://www.youtube.com/watch?v=dQw4w9WgXcQ", None)
+    with patch("services.text_cleaner.clean_text", fake_clean):
         item = await _run_worker(item_id)
-    assert item["video_id"] == "oldItem0001"  # set from the URL, not 'cannot extract video_id'
-    assert item["status"] in ("done", "failed")
+    assert item["status"] == "done" and item["video_id"] == "dQw4w9WgXcQ"
+    assert (await fmt_row("dQw4w9WgXcQ"))["cleaned_text"] == "Cleaned."
+
+
+async def test_item_for_a_video_that_is_not_in_history_fails_with_a_message_not_done():
+    """Deleted after it was queued, or never extracted: the old worker ended 'done' having done nothing."""
+    for url, vid in (("https://www.youtube.com/watch?v=neverSeen001", "neverSeen001"), (LOCAL_URL, "file-deleted0")):
+        item_id = await _insert_item(url, vid)
+        item = await _run_worker(item_id)
+        assert item["status"] == "failed", vid
+        assert vid in item["error_message"] and "not in History" in item["error_message"]
 
 
 # --- the endpoint: video_ids ---------------------------------------------------
