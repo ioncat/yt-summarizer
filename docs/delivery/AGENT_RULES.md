@@ -10,7 +10,7 @@
 | 4-5 Talking to the owner | Chat language: Russian. The first row of the question table carries the tracker id. No product-minded agent — product questions go to the owner directly; the owner gets only what is his by nature (pushes, live data writes, restarts, changes to team rules, the decisions marked as his) |
 | 6-7 Commits | The working tree is shared by all sessions. Use a temporary index (`GIT_INDEX_FILE`) when the shared index holds other people's staged changes |
 | 9 File ownership | See the table below |
-| 10 Database | The live DB is `app/data/db/yt_summarizer.sqlite`; backups go to `app/data/backups/`; a migration is an idempotent startup step; a live write waits for the owner's word |
+| 10 Database | The live DB is `app/data/db/yt_summarizer.sqlite`; the DB is in WAL mode since 2026-11-05, so a backup is made with `python tools/backup_db.py <label>` (SQLite backup API) into `app/data/backups/`, never by copying the `.sqlite` file while the app runs; a migration is an idempotent startup step; a live write waits for the owner's word |
 | 11 Services | Run through `make dev` (primary) or `start.vbs` on Windows; restarts follow `../team/WORK_MODES.md` |
 | 12 Personal data | The repository is public. Personal data: uploaded video/audio files in `app/data/uploads/`, YouTube cookie files in `app/data/`. Guard tests: none yet |
 | 14 Quality gates | Tests: backend: `cd app/backend && python -m pytest -q`; MCP: `cd app && python -m pytest -q tests`; frontend: `cd app/frontend && npm test`. Static analysis: none. Other gates: none |
