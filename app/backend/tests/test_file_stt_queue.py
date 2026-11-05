@@ -220,3 +220,74 @@ async def test_a_failed_or_empty_run_leaves_a_saved_transcript_as_it_was(client,
     async with AsyncSessionLocal() as db:
         await db.execute(text("DELETE FROM processing_tasks WHERE id = 'task-keep'"))
         await db.commit()
+
+
+# --- progress from the run row (NS-11 decision 2) --------------------------------------------------------------
+
+async def _status_text(client, body):
+    return (await client.get(f"/api/status/{body['task_id']}")).json()["progress_text"]
+
+
+async def test_a_queued_upload_says_it_waits_and_a_running_one_shows_live_segments_from_its_row(client, uploads):
+    import asyncio
+    import threading
+    release, started = threading.Event(), threading.Event()
+
+    def slow(path, language, model, device, cache_path, on_progress):
+        on_progress(7, 30.0, 120.0)
+        started.set()
+        release.wait(5)
+        return ok()(path, language, model, device, cache_path, on_progress)
+
+    with patch("services.transcriber.transcribe", slow):
+        body = (await _upload(client)).json()
+        assert await _status_text(client, body) == "waiting in the queue"
+        item = await _item(client, body["video_id"])
+        worker = asyncio.create_task(run_worker([item["id"]]))
+        await asyncio.get_running_loop().run_in_executor(None, started.wait, 5)
+        text_now = None
+        for _ in range(100):                                                # the first write is asynchronous
+            text_now = await _status_text(client, body)
+            if text_now and text_now.startswith("segment"):
+                break
+            await asyncio.sleep(0.02)
+        assert text_now == "segment 7 · 25%"
+        queue_row = await _item(client, body["video_id"])
+        assert queue_row["progress"] == "transcribe: segment 7 · 25%"       # the queue page reads the same row
+        release.set()
+        await worker
+    assert await _status_text(client, body) is None                         # over: no progress text
+    await _forget(body["video_id"])
+    await _forget_runs(body["video_id"])
+
+
+async def test_a_running_upload_without_counters_yet_says_transcribing(client, uploads):
+    body = (await _upload(client)).json()
+    item = await _item(client, body["video_id"])
+    await q_set_processing(item["id"])
+    assert await _status_text(client, body) == "transcribing…"
+    await _forget(body["video_id"])
+    await _forget_runs(body["video_id"])
+
+
+async def q_set_processing(item_id):
+    from services import queue_service as q
+    await q._set_processing(item_id)
+
+
+async def test_the_counters_stay_on_the_finished_run_and_no_memory_dict_is_left(client, uploads):
+    import services.file_stt as fs
+    import routers.process as proc
+
+    def progressing(path, language, model, device, cache_path, on_progress):
+        on_progress(2, 10.0, 20.0)
+        return ok()(path, language, model, device, cache_path, on_progress)
+
+    with patch("services.transcriber.transcribe", progressing):
+        body = (await _upload(client)).json()
+        await run_worker([(await _item(client, body["video_id"]))["id"]])
+    (run,) = await _runs(body["video_id"])
+    assert (run["status"], run["progress_done"], run["progress_total"]) == ("done", 10, 20)
+    assert not hasattr(fs, "_FILE_TASK_PROGRESS") and not hasattr(proc, "_FILE_TASK_PROGRESS")      # the background copy's dict is gone
+    await _forget(body["video_id"])
+    await _forget_runs(body["video_id"])

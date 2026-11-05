@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import get_db
-from services.file_stt import _FILE_TASK_PROGRESS, enqueue_local_file, uploads_dir
+from services.file_stt import enqueue_local_file, upload_progress_text, uploads_dir
 from services.subtitle_extractor import extract_subtitles, extract_video_id, validate_youtube_url
 from services.text_formatter import format_subtitles
 from services.video_service import (
@@ -156,7 +156,7 @@ async def get_status(task_id: str, db: Annotated[AsyncSession, Depends(get_db)])
         "task_id": task.id,
         "status": task.status,
         "progress": task.progress,
-        "progress_text": _FILE_TASK_PROGRESS.get(task.id),
+        "progress_text": await upload_progress_text(db, task.id),
         "error_message": error_message,
         "available_languages": available_languages,
     }

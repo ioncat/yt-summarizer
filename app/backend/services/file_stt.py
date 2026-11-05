@@ -13,12 +13,10 @@ from sqlalchemy import text
 
 from services import stage_runs
 from services.stage_control import TRANSCRIBE_CANCEL, StageCancelled
+from services.stage_progress import ProgressWriter
 from services.video_service import complete_task, get_app_setting, update_task_failed
 
 LOCAL_PREFIX = "local://"
-
-# Live STT progress for direct file-upload transcription tasks: {task_id: progress_text}
-_FILE_TASK_PROGRESS: dict[str, str] = {}
 
 
 class FileTranscriptionFailed(RuntimeError):
@@ -77,6 +75,39 @@ async def _record(video_id: str, how: str, **kw) -> None:
     except Exception:  # noqa: BLE001 - the run row is a record; it must not hide the real outcome
         import logging
         logging.getLogger("api").exception("could not record the %s of the transcription of %s", how, video_id)
+
+
+async def upload_progress_text(db, task_id: str) -> str | None:
+    """What /api/status/{task_id} says while an upload is in the queue: "waiting in the queue", or the live "segment 12 · 40%"
+    built from the run row's counters. None for a task that is not a queued upload, or whose item is over."""
+    import json
+    row = (await db.execute(
+        text("SELECT q.status, q.video_id FROM processing_queue q JOIN processing_tasks t ON t.video_id = q.db_video_id "
+             "WHERE t.id = :t AND q.url LIKE 'local://%' ORDER BY q.id DESC LIMIT 1"), {"t": task_id},
+    )).first()
+    if row is None:
+        return None
+    if row[0] == "pending":
+        return "waiting in the queue"
+    if row[0] != "processing":
+        return None
+    run = (await db.execute(
+        text("SELECT progress_done, progress_total, meta FROM processing_stages WHERE video_id = :v AND stage = 'transcribe' "
+             "AND status = 'processing' ORDER BY id DESC LIMIT 1"), {"v": row[1]},
+    )).first()
+    if run is None or not run[1]:
+        return "transcribing…"
+    try:
+        segments = (json.loads(run[2]) if run[2] else {}).get("segments")
+    except (TypeError, ValueError):
+        segments = None
+    return transcribe_text(run[0], run[1], segments)
+
+
+def transcribe_text(done: int, total: int, segments: int | None) -> str:
+    """"segment 12 · 40%" (seconds done / total of the audio, segments so far) - the page's and the queue's progress text."""
+    pct = f" · {int(done / total * 100)}%" if total and total > 0 else ""
+    return f"segment {segments}{pct}" if segments is not None else f"transcribing{pct}"
 
 
 async def release_upload(db, video_id: str, db_video_id: str | None, message: str) -> None:
@@ -177,6 +208,7 @@ async def run_file_transcription(
     from services.text_formatter import format_subtitles
     from services.subtitle_extractor import ExtractionResult, SubtitleEntry, VideoMetadata
 
+    writer: ProgressWriter | None = None
     try:
         if local_video_id in TRANSCRIBE_CANCEL:
             await _stop_now(task_id, local_video_id)         # Stop came before the work began
@@ -187,13 +219,12 @@ async def run_file_transcription(
             stt_cache_path = await get_app_setting(db, "stt_cache_path") or DEFAULT_CACHE_PATH
 
         transcription_started_at = _datetime.utcnow()
-        _FILE_TASK_PROGRESS[task_id] = "transcribing…"
+        writer = ProgressWriter(local_video_id, "transcribe", "s")   # seconds done / total, on the stage's run row
 
         def _on_stt_progress(n: int, cur_s: float = 0.0, tot_s: float = 0.0) -> None:
             if local_video_id in TRANSCRIBE_CANCEL:
                 raise TranscriptionStopped(STOPPED_MESSAGE)   # Stop: the engine ends the run after the segment in hand
-            pct = f" · {int(cur_s / tot_s * 100)}%" if tot_s > 0 else ""
-            _FILE_TASK_PROGRESS[task_id] = f"segment {n}{pct}"
+            writer.update(int(cur_s), int(tot_s), {"segments": n})
 
         transcription = await asyncio.to_thread(
             _transcribe, audio_path,
@@ -203,7 +234,7 @@ async def run_file_transcription(
             cache_path=stt_cache_path,
             on_progress=_on_stt_progress,
         )
-        _FILE_TASK_PROGRESS.pop(task_id, None)
+        await writer.close()                                         # the last counters are on the row before the run ends
 
         if local_video_id in TRANSCRIBE_CANCEL:
             await _stop_now(task_id, local_video_id)   # Stop pressed (decision 1): nothing is saved
@@ -286,3 +317,6 @@ async def run_file_transcription(
         async with AsyncSessionLocal() as db:
             await update_task_failed(db, task_id, str(e))
         raise FileTranscriptionFailed(str(e)) from e
+    finally:
+        if writer is not None:
+            await writer.close()                             # on every way out: no write after the run is over

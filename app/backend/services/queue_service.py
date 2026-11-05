@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.database import AsyncSessionLocal
 from services.ollama_options import begin_llm_run, llm_failure_reason
 from services import stage_runs
-from services.file_stt import LOCAL_PREFIX, release_upload, run_queued_file
+from services.file_stt import LOCAL_PREFIX, release_upload, run_queued_file, transcribe_text
 from services.stage_progress import ProgressWriter
 from services.queue_by_id import STAGE_COLUMNS, release_stage_status
 from services.stage_control import (
@@ -201,7 +201,14 @@ async def _live_progress(db: AsyncSession, item_ids: list[int]) -> dict[int, str
             unit = (json.loads(meta) if meta else {}).get("unit")
         except (TypeError, ValueError):
             unit = None
-        out[item_id] = f"{stage}: {unit + ' ' if unit else ''}{done}/{total}"
+        if stage == "transcribe":
+            try:
+                segments = (json.loads(meta) if meta else {}).get("segments")
+            except (TypeError, ValueError):
+                segments = None
+            out[item_id] = "transcribe: " + transcribe_text(done, total, segments)
+        else:
+            out[item_id] = f"{stage}: {unit + ' ' if unit else ''}{done}/{total}"
     return out
 
 
