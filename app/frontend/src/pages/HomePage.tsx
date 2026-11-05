@@ -1,5 +1,6 @@
 import { useState, useEffect, FormEvent, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { AUTO_PIPELINE_KEY, PIPELINE_PRESETS, autoPipelineStages, readAutoPipeline, resolveStages } from '../utils/pipeline'
 import { processVideo, processFile, getSettings, getHealth, AllSettings, queueBulkAdd, QueueAddResult, VideoAlreadyExistsError, downloadDirect } from '../api'
 
 type InputMode = 'url' | 'file'
@@ -10,19 +11,6 @@ const LANGUAGES = [
   { value: 'en', label: 'English' },
   { value: 'uk', label: 'Ukrainian' },
 ]
-
-const PIPELINE_PRESETS = [
-  { value: 'extract', label: 'Extract only', stages: ['extract'] },
-  { value: 'cleanup', label: 'Extract + Cleanup', stages: ['extract', 'cleanup'] },
-  { value: 'full', label: 'Full pipeline', stages: ['extract', 'cleanup', 'summary', 'mindmap'] },
-]
-
-function resolveStages(presetValue: string, useStt: boolean): string[] {
-  const preset = PIPELINE_PRESETS.find(p => p.value === presetValue)
-  const stages = preset?.stages ?? ['extract']
-  if (useStt) return stages.map(s => s === 'extract' ? 'transcribe' : s)
-  return stages
-}
 
 export default function HomePage() {
   const [inputMode, setInputMode] = useState<InputMode>('url')
@@ -36,9 +24,7 @@ export default function HomePage() {
     { kind: 'added' | 'in_queue' | 'invalid' } | { kind: 'processed'; videoId: string } | null>(null)
   const [missingConfig, setMissingConfig] = useState<string[]>([])
   const [allSettings, setAllSettings] = useState<AllSettings | null>(null)
-  const [autoPipeline, setAutoPipeline] = useState(
-    () => localStorage.getItem('yt_summarizer_auto_pipeline') === 'true'
-  )
+  const [autoPipeline, setAutoPipeline] = useState(readAutoPipeline)
   const [autoDownload, setAutoDownload] = useState(
     () => localStorage.getItem('yt_autoDownload_enabled') === 'true'
   )
@@ -157,9 +143,8 @@ export default function HomePage() {
       }
       setLoading(true)
       storeAutoDownloadIntent()
-      const firstStage = useStt ? 'transcribe' : 'extract'
       try {
-        const res = await queueBulkAdd([trimmedUrl], [firstStage, 'cleanup', 'summary', 'mindmap'], false, language || undefined)
+        const res = await queueBulkAdd([trimmedUrl], autoPipelineStages(useStt), false, language || undefined)
         afterQueueAdd(res)
       } catch (err) {
         console.error('[Home] queueBulkAdd failed:', err)
@@ -339,7 +324,7 @@ export default function HomePage() {
                 disabled={!ollamaOnline}
                 onChange={e => {
                   setAutoPipeline(e.target.checked)
-                  localStorage.setItem('yt_summarizer_auto_pipeline', String(e.target.checked))
+                  localStorage.setItem(AUTO_PIPELINE_KEY, String(e.target.checked))
                 }}
               />
               <label htmlFor="auto-pipeline" className={`text-label-md text-on-surface cursor-pointer ${!ollamaOnline ? 'opacity-50' : ''}`}>

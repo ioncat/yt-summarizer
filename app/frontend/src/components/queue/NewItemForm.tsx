@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { queueBulkAdd, QueueAddResult } from '../../api'
+import { defaultQueueStages } from '../../utils/pipeline'
 
 type Outcome =
   | { kind: 'added' }
@@ -28,8 +29,8 @@ export default function NewItemForm({ onAdded, onClose }: { onAdded: () => void;
     if (!link || busy) return
     setBusy(true)
     try {
-      // no stages: the server uses queue_default_pipeline from Settings
-      const res = await queueBulkAdd([link], undefined, false)
+      // the same choice as the Home page (its "full pipeline" checkbox, else extract only)
+      const res = await queueBulkAdd([link], defaultQueueStages(), false)
       const o = outcomeOf(res)
       setOutcome(o)
       if (o.kind === 'added') { setUrl(''); onAdded() }

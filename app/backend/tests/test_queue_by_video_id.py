@@ -232,3 +232,35 @@ async def test_video_ids_duplicates_are_listed_in_the_details_and_new_adds_have_
     assert (await client.post("/api/queue/bulk", json=body)).json()["duplicate_details"] == []
     again = (await client.post("/api/queue/bulk", json=body)).json()
     assert again["duplicate_details"] == [{"url": None, "video_id": LOCAL_ID, "reason": "in_queue"}]
+
+
+# --- queue_default_pipeline: what a request without stages gets -----------------------------
+
+async def _set_default_pipeline(value):
+    async with AsyncSessionLocal() as db:
+        if value is None:
+            await db.execute(text("DELETE FROM app_settings WHERE key = 'queue_default_pipeline'"))
+        else:
+            await db.execute(text("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('queue_default_pipeline', :v, datetime('now'))"),
+                             {"v": value})
+        await db.commit()
+
+
+async def test_a_request_without_stages_gets_extract_by_default_and_follows_queue_default_pipeline(client):
+    try:
+        await _set_default_pipeline('["extract"]')  # the value the database starts with
+        await client.post("/api/queue/bulk", json={"urls": ["https://www.youtube.com/watch?v=dfltPipe001"]})
+        await _set_default_pipeline(None)           # setting missing: still extract
+        await client.post("/api/queue/bulk", json={"urls": ["https://www.youtube.com/watch?v=dfltPipe002"]})
+        await _set_default_pipeline('["extract", "cleanup", "summary"]')
+        await client.post("/api/queue/bulk", json={"urls": ["https://www.youtube.com/watch?v=dfltPipe003"]})
+        explicit = await client.post("/api/queue/bulk", json={
+            "urls": ["https://www.youtube.com/watch?v=dfltPipe004"], "pipeline_stages": ["transcribe"]})
+        assert explicit.json()["added"] == 1
+    finally:
+        await _set_default_pipeline('["extract"]')
+    stages = {i["video_id"]: i["pipeline_stages"] for i in (await client.get("/api/queue")).json()["items"]}
+    assert stages["dfltPipe001"] == ["extract"]
+    assert stages["dfltPipe002"] == ["extract"]
+    assert stages["dfltPipe003"] == ["extract", "cleanup", "summary"]
+    assert stages["dfltPipe004"] == ["transcribe"]  # an explicit choice always wins

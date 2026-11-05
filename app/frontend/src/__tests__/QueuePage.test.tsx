@@ -48,12 +48,23 @@ describe('QueuePage "New" (NS-24a)', () => {
     renderQueue()
     await openAndSubmit('https://youtu.be/newVideo001')
     expect(await screen.findByText('Added to the queue.')).toBeTruthy()
-    // no stages given: the server applies queue_default_pipeline; not forced
-    expect(api.queueBulkAdd).toHaveBeenCalledWith(['https://youtu.be/newVideo001'], undefined, false)
+    // explicit stages, the Home page's default (extract only); not forced
+    expect(api.queueBulkAdd).toHaveBeenCalledWith(['https://youtu.be/newVideo001'], ['extract'], false)
     expect((screen.getByLabelText('New video link') as HTMLInputElement).value).toBe('')
     expect(screen.getByTestId('where').textContent).toBe('/queue')
     vi.mocked(api.getQueue).mockResolvedValue({ items: [item(9, 'https://youtu.be/newVideo001')], count: 1 })
     await waitFor(() => expect(vi.mocked(api.getQueue).mock.calls.length).toBeGreaterThan(1))  // reloaded after the add
+  })
+
+  it('uses the full pipeline when the Home page checkbox "Run full pipeline" is on', async () => {
+    localStorage.setItem('yt_summarizer_auto_pipeline', 'true')
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({ added: 1, ids: [1], invalid: [], duplicates: [] })
+    renderQueue()
+    await openAndSubmit('https://youtu.be/newVideo001')
+    await screen.findByText('Added to the queue.')
+    expect(api.queueBulkAdd).toHaveBeenCalledWith(
+      ['https://youtu.be/newVideo001'], ['extract', 'cleanup', 'summary', 'mindmap'], false)
+    localStorage.removeItem('yt_summarizer_auto_pipeline')
   })
 
   it('a second link can be added right after the first', async () => {
