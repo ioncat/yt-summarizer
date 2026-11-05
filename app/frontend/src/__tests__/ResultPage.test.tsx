@@ -127,13 +127,42 @@ describe('ResultPage', () => {
     expect(screen.getByText('Whisper transcript')).toBeTruthy()
   })
 
-  it('Cleaned tab: empty state and Clean with AI queues cleanup', async () => {
+  it('Cleaned tab: empty state and Clean with AI queues the cleanup through the endpoint (one path, NS-11 stage 4a)', async () => {
+    m.startCleanup.mockResolvedValue(undefined as never)
     await renderPage()
     fireEvent.click(btn('Cleaned'))
     expect(screen.getByText(/No cleaned version yet/)).toBeTruthy()
     fireEvent.click(btn(/Clean with AI/))
-    await waitFor(() => expect(m.queueBulkAdd).toHaveBeenCalledWith([base.url], ['cleanup'], true))
+    await waitFor(() => expect(m.startCleanup).toHaveBeenCalledWith(base.video_id))
+    expect(m.queueBulkAdd).not.toHaveBeenCalledWith(expect.anything(), ['cleanup'], expect.anything())  // not the URL queue path
     expect(await screen.findByText(/Added to queue/)).toBeTruthy()
+  })
+
+  it('Cleaned tab: a local file uses the same endpoint', async () => {
+    m.startCleanup.mockResolvedValue(undefined as never)
+    setResult({ video_id: 'file-1234', url: 'local://talk.mp3', subtitle_source: 'transcript', subtitles_type: null })
+    await renderPage()
+    fireEvent.click(btn('Cleaned'))
+    fireEvent.click(btn(/Clean with AI/))
+    await waitFor(() => expect(m.startCleanup).toHaveBeenCalledWith(base.video_id))    // the page's route id
+    expect(m.queueBulkAdd).not.toHaveBeenCalledWith(expect.anything(), ['cleanup'], expect.anything())
+  })
+
+  it('Cleaned tab: Re-run AI cleanup uses the endpoint too', async () => {
+    m.startCleanup.mockResolvedValue(undefined as never)
+    setResult({ cleanup_status: 'done', cleaned_text: 'old cleaned' })
+    await renderPage()
+    fireEvent.click(btn('Cleaned'))
+    fireEvent.click(btn(/Re-run AI cleanup/))
+    await waitFor(() => expect(m.startCleanup).toHaveBeenCalledWith(base.video_id))
+  })
+
+  it('Cleaned tab: the endpoint\'s refusal (no model configured) is shown with its reason', async () => {
+    m.startCleanup.mockRejectedValue(new Error('No model configured. Please select a model in Settings first.'))
+    await renderPage()
+    fireEvent.click(btn('Cleaned'))
+    fireEvent.click(btn(/Clean with AI/))
+    expect((await screen.findAllByText(/No model configured/)).length).toBeGreaterThan(0)
   })
 
   it('Cleaned tab: processing shows Stop which cancels cleanup', async () => {

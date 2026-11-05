@@ -171,11 +171,9 @@ export function useResultHandlers({
     requestNotifyPermission()
     try {
       setCleanupError('')
-      if (result.url?.startsWith('local://')) {
-        await startCleanup(videoId)
-      } else {
-        await queueBulkAdd([result.url], ['cleanup'], true)
-      }
+      // One path for every video, local files too: the endpoint checks the model and Ollama URL (400 with the reason),
+      // queues the work and sets the status at once (NS-11 stage 4a)
+      await startCleanup(videoId)
       setQueuedMsg('cleanup')
       stopPolling()
       pollRef.current = setInterval(() => loadResult(false), 3000)
