@@ -17,6 +17,7 @@ import {
   getQueue,
   ADD_TIMEOUT_MS,
   UncertainAddError,
+  InvalidLinkError,
 } from '../api'
 
 function makeResponse(body: unknown, status = 200): Response {
@@ -267,6 +268,25 @@ describe('add and poll calls give up instead of hanging (NS-28)', () => {
     const busy = await queueBulkAdd(['x']).catch(e => e)
     expect(busy).not.toBeInstanceOf(UncertainAddError)   // the server answered: the link was not added
     expect(busy.message).toBe('database busy, try again')
+  })
+
+  it('the real 400 for a link that is not a YouTube link is a typed InvalidLinkError (not a retryable failure)', async () => {
+    const body = { detail: { message: 'No valid YouTube URLs', invalid: ['https://example.com/x'] } }  // the server's shape
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse(body, 400)))
+    const err = await queueBulkAdd(['https://example.com/x']).catch(e => e)
+    expect(err).toBeInstanceOf(InvalidLinkError)
+    expect(err).not.toBeInstanceOf(UncertainAddError)
+    expect(err.message).toBe('No valid YouTube URLs')   // Home shows this text as before
+    expect(err.invalid).toEqual(['https://example.com/x'])
+  })
+
+  it('other 400s keep being plain errors with their text', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({ detail: 'No URLs provided' }, 400)))
+    const err = await queueBulkAdd([]).catch(e => e)
+    expect(err).not.toBeInstanceOf(InvalidLinkError)
+    expect(err.message).toBe('No URLs provided')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({ detail: { message: 'Something else' } }, 400)))
+    expect((await queueBulkAdd(['x']).catch(e => e)).message).toBe('Something else')
   })
 
   it('polling the queue with the server down still says "Cannot reach the server"', async () => {

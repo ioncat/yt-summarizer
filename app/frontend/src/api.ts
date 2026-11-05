@@ -8,6 +8,14 @@ export const POLL_TIMEOUT_MS = 10_000  // one poll of the queue list
 export const ADD_TIMEOUT_HINT = 'The link may have been added: check the queue before retrying.'
 const POLL_TIMEOUT_HINT = 'The server may be busy or not running.'
 
+/** The server refused every link of an add as not a YouTube link (400 "No valid YouTube URLs"). Not a failure to retry. */
+export class InvalidLinkError extends Error {
+  constructor(public readonly invalid: string[] = []) {
+    super('No valid YouTube URLs')
+    this.name = 'InvalidLinkError'
+  }
+}
+
 /** An add whose answer never arrived (timeout or a lost connection): the server may well have added the link. */
 export class UncertainAddError extends Error {}
 
@@ -566,6 +574,9 @@ export async function queueBulkAdd(
   }, ADD_TIMEOUT_MS, ADD_TIMEOUT_HINT, true)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
+    if (res.status === 400 && body?.detail?.message === 'No valid YouTube URLs') {
+      throw new InvalidLinkError(Array.isArray(body.detail.invalid) ? body.detail.invalid : [])
+    }
     throw new Error(errorText(body, 'Failed to add to queue'))
   }
   return res.json()

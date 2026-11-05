@@ -6,6 +6,9 @@ import * as api from '../api'
 
 vi.mock('../api', () => ({
   UncertainAddError: class UncertainAddError extends Error {},
+  InvalidLinkError: class InvalidLinkError extends Error {
+    constructor(public invalid: string[] = []) { super('No valid YouTube URLs') }
+  },
   getQueue: vi.fn(),
   queueBulkAdd: vi.fn(),
   deleteQueueItem: vi.fn(),

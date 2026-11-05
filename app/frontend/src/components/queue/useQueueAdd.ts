@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { queueBulkAdd, QueueAddResult, UncertainAddError } from '../../api'
+import { InvalidLinkError, queueBulkAdd, QueueAddResult, UncertainAddError } from '../../api'
 import { defaultQueueStages } from '../../utils/pipeline'
 
 export type AddOutcome =
@@ -57,6 +57,14 @@ export function useQueueAdd(onAdded: () => void) {
       if (outcome.kind === 'added') onAdded()
       return outcome
     } catch (err) {
+      if (err instanceof InvalidLinkError) {
+        // the server said "not a YouTube link" (400): nothing to retry, so no failed row; the line says so and
+        // the form puts the text back for editing
+        const outcome: AddOutcome = { kind: 'invalid' }
+        setRows(prev => prev.filter(r => r.id !== id))
+        setSettled({ seq: ++seq.current, url, outcome })
+        return outcome
+      }
       const message = err instanceof Error ? err.message : 'Failed to add to queue'
       patch(id, { state: 'failed', error: message, uncertain: err instanceof UncertainAddError })
       return { kind: 'error', message }
