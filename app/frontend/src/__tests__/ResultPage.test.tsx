@@ -242,7 +242,35 @@ describe('ResultPage', () => {
     await waitFor(() => expect(m.startMindmap).toHaveBeenCalledWith(base.video_id, true))
     expect(screen.getByTestId('mindmap-view').textContent).toBe('# Saved map')     // still there while the request is out
     answer({ status: 'processing' })
-    expect(await screen.findByText(/Generating mind map/)).toBeTruthy()            // accepted: now the page says generating
+    expect(await screen.findByText('Regenerating…')).toBeTruthy()                  // accepted: the label, and the map stays
+    expect(screen.getByTestId('mindmap-view').textContent).toBe('# Saved map')
+  })
+
+  it('Mind Map: while a regeneration runs the saved map stays on screen under a "Regenerating…" label, with Stop', async () => {
+    setResult({ mindmap_text: '# Saved map', mindmap_status: 'processing' })
+    await renderPage()                                                  // the page opens on the Mind Map tab when a map exists
+    expect((await screen.findByTestId('mindmap-view')).textContent).toBe('# Saved map')
+    expect(screen.getByText('Regenerating…')).toBeTruthy()
+    expect(btn(/Stop/)).toBeTruthy()
+    expect(screen.queryByText('Generating mind map…')).toBeNull()      // the bare spinner is for "no map yet" only
+  })
+
+  it('Mind Map: the first generation (no saved map yet) still shows the bare "Generating mind map…"', async () => {
+    setResult({ mindmap_text: null, mindmap_status: 'processing' })
+    await renderPage()
+    fireEvent.click(btn(/Mind Map/))                                    // its label has a "…" while processing
+    expect(await screen.findByText('Generating mind map…')).toBeTruthy()
+    expect(screen.queryByTestId('mindmap-view')).toBeNull()
+    expect(screen.queryByText('Regenerating…')).toBeNull()
+  })
+
+  it('Mind Map: the map is not lost on the way: Regenerate click -> request out -> accepted -> still the old map under the label', async () => {
+    m.startMindmap.mockResolvedValue({ status: 'processing' } as never)
+    setResult({ mindmap_text: '# Saved map', mindmap_status: 'done' })
+    await renderPage()
+    fireEvent.click(btn(/Regenerate mind map/))
+    expect(await screen.findByText('Regenerating…')).toBeTruthy()
+    expect(screen.getByTestId('mindmap-view').textContent).toBe('# Saved map')
   })
 
   it('Mind Map: a refused Regenerate (503) leaves the saved map in place with the reason', async () => {

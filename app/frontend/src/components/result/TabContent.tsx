@@ -50,17 +50,27 @@ export function TabContent({ result, activeTab, markdownEnabled, setMarkdownEnab
                 </>
               )
             ) : activeTab === 'mindmap' ? (
-              result.mindmap_status === 'processing' ? (
+              result.mindmap_status === 'processing' && !result.mindmap_text ? (
                 <div className="py-12 flex items-center justify-center gap-3 text-secondary text-body-md">
                   <span className="material-symbols-outlined pulse-dot">account_tree</span>
                   Generating mind map…
                 </div>
               ) : result.mindmap_text ? (
                 // The saved map is shown whatever the last run did: after a failed regeneration the error banner above
-                // (ErrorBanners) says why and the old map stays (NS-11 decision 4)
-                <Suspense fallback={<div className="py-8 text-center text-secondary text-body-md">Loading…</div>}>
-                  <MindmapView text={result.mindmap_text} title={result.title ?? undefined} onRegenerate={() => handleMindmap(true)} />
-                </Suspense>
+                // (ErrorBanners) says why and the old map stays (NS-11 decision 4); while a regeneration runs the old map
+                // stays too, under a small label (Stop is in the actions bar)
+                <>
+                  {result.mindmap_status === 'processing' && (
+                    <div role="status" className="mb-2 flex items-center gap-2 text-secondary text-body-sm">
+                      <span className="material-symbols-outlined pulse-dot text-[18px]">account_tree</span>
+                      Regenerating…
+                    </div>
+                  )}
+                  <Suspense fallback={<div className="py-8 text-center text-secondary text-body-md">Loading…</div>}>
+                    <MindmapView text={result.mindmap_text} title={result.title ?? undefined}
+                      onRegenerate={result.mindmap_status === 'processing' ? undefined : () => handleMindmap(true)} />
+                  </Suspense>
+                </>
               ) : result.mindmap_status === 'failed' || mindmapError ? (
                 <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3 text-on-error-container text-body-sm">
                   {mindmapError || result.mindmap_error || 'Mind map generation failed. Check Ollama and model settings.'}
