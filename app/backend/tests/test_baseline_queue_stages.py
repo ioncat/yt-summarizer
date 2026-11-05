@@ -86,17 +86,52 @@ async def test_queue_cleanup_cannot_be_cancelled_flag_is_ignored(seeded_video):
     assert (await fmt_row())["cleanup_status"] == "done"
 
 
-async def test_queue_cleanup_without_model_or_text_is_silently_skipped(seeded_video):
-    # BASELINE: known gap — returns normally, so the queue item would end 'done' with nothing done
-    # correct: the item ends 'failed' with a message (no model / no text / unknown video)
+async def test_queue_cleanup_without_model_or_text_ends_failed_with_a_message(seeded_video):
+    # was: BASELINE known gap — returned normally, so the queue item ended 'done' with nothing done.
+    # NS-11 owner decision 5: an explicit failure with a message (no model / no text / unknown video).
     await client_put_cleanup_model(None)
-    await q._run_cleanup_stage(VIDEO_ID, 1)
-    assert (await fmt_row())["cleanup_status"] is None
+    with pytest.raises(q.StageFailure):
+        await q._run_cleanup_stage(VIDEO_ID, 1)
+    row = await fmt_row()
+    assert row["cleanup_status"] == "failed"
+    assert row["cleanup_error"] == "Cleanup needs an Ollama URL and a cleanup model: set them in Settings"
     await client_put_cleanup_model("m-clean")
     await set_fmt(formatted_text=None)
-    await q._run_cleanup_stage(VIDEO_ID, 1)
-    assert (await fmt_row())["cleanup_status"] is None
-    await q._run_cleanup_stage("no-such-video", 1)  # unknown video: also silent
+    with pytest.raises(q.StageFailure):
+        await q._run_cleanup_stage(VIDEO_ID, 1)
+    row = await fmt_row()
+    assert row["cleanup_status"] == "failed" and row["cleanup_error"] == "Cleanup: the video has no text to clean"
+    with pytest.raises(q.StageFailure, match="not in History"):
+        await q._run_cleanup_stage("no-such-video", 1)  # unknown video: no longer silent
+
+
+async def test_queue_cleanup_without_ollama_url_ends_failed_with_a_message(seeded_video):
+    from httpx import AsyncClient, ASGITransport
+    from main import app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        await c.put("/api/settings/app", json={"ollama_url": None})
+    with pytest.raises(q.StageFailure):
+        await q._run_cleanup_stage(VIDEO_ID, 1)
+    assert "Ollama URL" in (await fmt_row())["cleanup_error"]
+
+
+async def test_queue_cleanup_stage_failure_message_is_not_replaced_by_an_earlier_llm_reason(seeded_video):
+    from services.ollama_options import begin_llm_run, record_failure_reason
+    begin_llm_run(None)
+    record_failure_reason("an older stage's reason")
+    await set_fmt(formatted_text=None)
+    with pytest.raises(q.StageFailure):
+        await q._run_cleanup_stage(VIDEO_ID, 1)
+    assert "no text" in (await fmt_row())["cleanup_error"]
+
+
+async def test_queue_cleanup_item_without_a_model_ends_failed_not_done(seeded_video):
+    from tests.baseline_helpers import add_item, get_item, run_worker
+    await client_put_cleanup_model(None)
+    item = await add_item(["cleanup"])
+    await run_worker([item])
+    row = await get_item(item)
+    assert row["status"] == "failed" and "cleanup model" in row["error_message"]
 
 
 async def client_put_cleanup_model(model):
@@ -111,7 +146,10 @@ async def test_queue_cleanup_empty_result_marks_failed_without_raising(seeded_vi
     gate.release.set()
     with patch("services.text_cleaner.clean_text", gate.llm()):
         await q._run_cleanup_stage(VIDEO_ID, 1)  # no exception -> the queue item would be 'done'
-    assert (await fmt_row())["cleanup_status"] == "failed"
+    row = await fmt_row()
+    assert row["cleanup_status"] == "failed"
+    # NS-11 stage 4: the stored reason says nothing was produced (and is neutral about whose fault it is)
+    assert row["cleanup_error"] == "No cleaned text was produced: Ollama may be unreachable, or the model returned nothing"
 
 
 async def test_queue_cleanup_exception_marks_failed_and_reraises(seeded_video):

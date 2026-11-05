@@ -440,18 +440,18 @@ async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
     try:
         async with AsyncSessionLocal() as db:
             fmt = await get_result(db, yt_video_id)
-            if not fmt or not fmt.get("formatted_text"):
-                logger.warning("Queue cleanup: no formatted_text for %s, skipping", yt_video_id)
-                return
+            if not fmt:
+                raise StageFailure(f"Cleanup: video {yt_video_id} is not in History")
+            if not fmt.get("formatted_text"):
+                raise StageFailure("Cleanup: the video has no text to clean")
             formatted_text = fmt["formatted_text"]
             stage = await get_stage_settings(db, "cleanup")
             ollama_url = await get_app_setting(db, "ollama_url")
             parallel_workers = int(await get_app_setting(db, "parallel_workers") or "1")
             begin_llm_run(await get_app_setting(db, "llm_max_num_ctx"))
             model = stage.get("model")
-            if not model:
-                logger.warning("Queue cleanup: no cleanup model configured, skipping cleanup for %s", yt_video_id)
-                return
+            if not model or not ollama_url:
+                raise StageFailure("Cleanup needs an Ollama URL and a cleanup model: set them in Settings")
             await set_cleanup_processing(db, yt_video_id, model=model)
 
         def on_cleanup_progress(done: int, total: int) -> None:
@@ -470,11 +470,17 @@ async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
         )
 
         async with AsyncSessionLocal() as db:
-            await finish_cleanup(db, yt_video_id, cleaned, started_at=started_at, error=llm_failure_reason())
+            await finish_cleanup(
+                db, yt_video_id, cleaned, started_at=started_at,
+                error=llm_failure_reason() or (
+                    None if cleaned else "No cleaned text was produced: Ollama may be unreachable, or the model returned nothing"),
+            )
     except Exception as exc:
         logger.exception("Queue cleanup: stage failed for %s", yt_video_id)
+        # a StageFailure's own message first: the reason box of an earlier stage must not leak into it
+        reason = str(exc)[:500] if isinstance(exc, StageFailure) else (llm_failure_reason() or str(exc)[:500])
         async with AsyncSessionLocal() as db:
-            await fail_cleanup_stage(db, yt_video_id, error=llm_failure_reason() or str(exc)[:500])
+            await fail_cleanup_stage(db, yt_video_id, error=reason)
         raise
 
 
