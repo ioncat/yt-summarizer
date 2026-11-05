@@ -514,29 +514,45 @@ async def _run_mindmap(video_id: str) -> None:
 @router.post("/result/{video_id}/mindmap")
 async def trigger_mindmap(
     video_id: str,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     force: bool = False,
 ):
-    """Trigger LLM mindmap generation. Returns cached result unless force=true."""
+    """Queue the mind map. Returns the saved map unless force=true (the page's "Regenerate").
+
+    The status is 'processing' at once (the page shows progress while the item waits its turn behind the queue); the
+    queue worker does the work. A second click while one is queued or running adds nothing (NS-11 stage 2).
+    """
+    from services.db_retry import retry_locked
+    from services.queue_by_id import enqueue_stage
+
     result = await get_result(db, video_id)
     if not result:
         raise HTTPException(404, "Video not found")
 
-    # Return cached result if available and not forced
+    # Return the saved map if there is one and the user did not ask to regenerate
     if not force and result.get("mindmap_text") and result.get("mindmap_status") == "done":
         return {"status": "done", "mindmap_text": result["mindmap_text"]}
 
-    await start_mindmap_generation(db, video_id)
     _MINDMAP_CANCEL_SET.discard(video_id)
-    background_tasks.add_task(_run_mindmap, video_id)
+    # queue first: if the database is busy nothing has changed; the status is set right after (and again by the stage
+    # itself when it starts), so a queued item never has a stale "idle" status for more than a moment
+    await retry_locked(lambda: enqueue_stage(db, video_id, "mindmap"), db, "mindmap: queue")
+    await start_mindmap_generation(db, video_id)
     return {"status": "processing"}
 
 
 @router.delete("/result/{video_id}/mindmap")
-async def cancel_mindmap(video_id: str):
-    """Signal a running mindmap generation to stop."""
-    _MINDMAP_CANCEL_SET.add(video_id)
+async def cancel_mindmap(video_id: str, db: AsyncSession = Depends(get_db)):
+    """Stop the mind map: a queued one is taken out of the queue, a running one is told to stop.
+
+    Either way the status goes back to "nothing running" and a saved map is kept (as in the background copy).
+    """
+    from services.queue_by_id import dequeue_pending_stage, has_processing_item
+
+    if await dequeue_pending_stage(db, video_id, "mindmap"):
+        await reset_mindmap_status(db, video_id)  # it never started: nothing else will reset the status
+    if await has_processing_item(db, video_id):
+        _MINDMAP_CANCEL_SET.add(video_id)      # the worker is on this video: its mind map stage polls the flag
     return {"status": "cancelling"}
 
 

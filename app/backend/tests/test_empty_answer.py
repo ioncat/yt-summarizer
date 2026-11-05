@@ -268,6 +268,8 @@ async def test_mindmap_run_stores_the_reason(client, seeded_video):
     respx.post(CHAT).mock(return_value=httpx.Response(
         200, content=(json.dumps({"message": {"content": ""}, "done": True}) + "\n").encode()))
     await client.post(f"/api/result/{VIDEO_ID}/mindmap")
+    from tests.baseline_helpers import run_queued_stage
+    await run_queued_stage(VIDEO_ID, "mindmap")  # the queue worker runs it (NS-11 stage 2)
     row = await fmt_row()
     assert row["mindmap_status"] == "failed" and row["mindmap_error"] == NOTHING_MSG
 

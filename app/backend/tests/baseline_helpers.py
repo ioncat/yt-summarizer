@@ -111,6 +111,16 @@ async def add_item(stages, url=None, video_id=VIDEO_ID, language=None) -> int:
         return (await q.add_items(db, [url or f"https://www.youtube.com/watch?v={video_id}"], stages, language=language))[0]
 
 
+async def run_queued_stage(video_id: str, stage: str) -> None:
+    """Run the worker over the queued item(s) that hold only `stage` for this video (what the endpoint queued)."""
+    from services import queue_service as q
+    async with AsyncSessionLocal() as db:
+        ids = [i["id"] for i in await q.get_queue(db)
+               if i["video_id"] == video_id and i["pipeline_stages"] == [stage] and i["status"] == "pending"]
+    if ids:
+        await run_worker(ids)
+
+
 async def get_item(item_id: int) -> dict:
     from services import queue_service as q
     async with AsyncSessionLocal() as db:
@@ -118,21 +128,39 @@ async def get_item(item_id: int) -> dict:
 
 
 async def run_worker(item_ids: list[int], timeout: float = 15.0) -> None:
-    """Run the queue worker until every given item is done / failed / skipped (or the timeout)."""
-    import time
+    """Run the queue worker until every given item is done / failed / skipped (or the timeout).
+
+    The wait is on the worker's own "item finished" calls, NOT on polling the database: the test database is one shared
+    connection, and a polling session that closes sends a ROLLBACK on that connection, which can undo the stage's
+    UPDATE that is in flight (a stage's status write then silently disappears).
+    """
     from services import queue_service as q
+    wanted = set(item_ids)
+    finished: set[int] = set()
+    all_done = asyncio.Event()
+    originals = {name: getattr(q, name) for name in ("_set_done", "_set_failed", "_set_skipped")}
+
+    def wrap(name):
+        async def inner(item_id, *args, **kwargs):
+            result = await originals[name](item_id, *args, **kwargs)
+            finished.add(item_id)
+            if wanted <= finished:
+                all_done.set()
+            return result
+        return inner
+
+    for name in originals:
+        setattr(q, name, wrap(name))
     task = asyncio.create_task(q.queue_worker())
     try:
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            async with AsyncSessionLocal() as db:
-                rows = (await db.execute(text("SELECT status FROM processing_queue WHERE id IN (%s)" %
-                                              ",".join(str(i) for i in item_ids)))).all()
-            if rows and all(r[0] in ("done", "failed", "skipped") for r in rows):
-                break
-            await asyncio.sleep(0.05)
+        try:
+            await asyncio.wait_for(all_done.wait(), timeout)
+        except asyncio.TimeoutError:
+            pass
     finally:
         q._WORKER_STOP = True
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         q._WORKER_STOP = False
+        for name, fn in originals.items():
+            setattr(q, name, fn)

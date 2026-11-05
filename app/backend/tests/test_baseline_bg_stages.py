@@ -293,14 +293,42 @@ async def test_summary_uses_full_extract_for_long_text_with_chapters(client, see
 
 
 # ---------------------------------------------------------------------------
-# Mind map  (POST/DELETE /api/result/{id}/mindmap -> _run_mindmap)
+# Mind map  (POST/DELETE /api/result/{id}/mindmap): since NS-11 stage 2 the endpoint queues the work and the
+# queue worker runs it. These were the background copy's baseline tests; each keeps its name and its meaning, only
+# the way the work is run changed (see the notes on the three tests that changed behaviour).
 # ---------------------------------------------------------------------------
+
+async def _mindmap_item():
+    """The queue item the POST created (stages ['mindmap']), or None."""
+    from models.database import AsyncSessionLocal
+    from services import queue_service as q
+    async with AsyncSessionLocal() as db:
+        items = [i for i in await q.get_queue(db) if i["video_id"] == VIDEO_ID and i["pipeline_stages"] == ["mindmap"]]
+    return items[-1] if items else None
+
+
+async def _post_mindmap_and_run(client, params=None):
+    from tests.baseline_helpers import run_worker
+    r = await client.post(f"{URL}/mindmap", params=params)
+    item = await _mindmap_item()
+    if item is not None:
+        await run_worker([item["id"]])
+    return r, item
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _clean_queue_for_mindmap(client):
+    from tests.baseline_helpers import reset_queue
+    await reset_queue()
+    yield
+    await reset_queue()
+
 
 async def test_mindmap_success_status_done_and_text_saved(client, seeded_video):
     gate = Gate(result="# Root\n## A")
     gate.release.set()
-    with patch("routers.result.generate_mindmap", gate.llm()):
-        r = await client.post(f"{URL}/mindmap")
+    with patch("services.text_mindmapper.generate_mindmap", gate.llm()):
+        r, item = await _post_mindmap_and_run(client)
     assert r.status_code == 200 and r.json() == {"status": "processing"}
     row = await fmt_row()
     assert row["mindmap_status"] == "done" and row["mindmap_text"] == "# Root\n## A"
@@ -312,10 +340,11 @@ async def test_mindmap_returns_cached_result_unless_forced(client, seeded_video)
     await set_fmt(mindmap_text="CACHED", mindmap_status="done")
     gate = Gate(result="FRESH")
     gate.release.set()
-    with patch("routers.result.generate_mindmap", gate.llm()):
+    with patch("services.text_mindmapper.generate_mindmap", gate.llm()):
         r = await client.post(f"{URL}/mindmap")
         assert r.json() == {"status": "done", "mindmap_text": "CACHED"} and gate.calls == []
-        r2 = await client.post(f"{URL}/mindmap", params={"force": "true"})
+        assert await _mindmap_item() is None                       # the saved map is returned, nothing is queued
+        r2, _ = await _post_mindmap_and_run(client, {"force": "true"})
     assert r2.json() == {"status": "processing"}
     assert (await fmt_row())["mindmap_text"] == "FRESH"
 
@@ -325,47 +354,50 @@ async def test_mindmap_unknown_video_404(client):
 
 
 async def test_mindmap_without_model_endpoint_says_processing_but_run_ends_failed(client, seeded_video):
-    # BASELINE: known bug — no model/Ollama check at the endpoint (cleanup/summary have one)
-    # correct: 400 up front like cleanup and summary, status stays untouched
+    # BASELINE: known gap — no model/Ollama check at the endpoint (cleanup/summary have one); NS-18 may add it.
+    # Changed by NS-11 stage 2 (decision 5): the run now ends 'failed' WITH a message, from the queue worker.
     await client.put("/api/settings/summarization", json={"model": None})
-    r = await client.post(f"{URL}/mindmap")
+    r, item = await _post_mindmap_and_run(client)
     assert r.status_code == 200 and r.json() == {"status": "processing"}
-    assert (await fmt_row())["mindmap_status"] == "failed"
+    row = await fmt_row()
+    assert row["mindmap_status"] == "failed" and "summarization model" in row["mindmap_error"]
 
 
 async def test_mindmap_empty_llm_result_ends_failed(client, seeded_video):
     gate = Gate(result=None)
     gate.release.set()
-    with patch("routers.result.generate_mindmap", gate.llm()):
-        await client.post(f"{URL}/mindmap")
+    with patch("services.text_mindmapper.generate_mindmap", gate.llm()):
+        await _post_mindmap_and_run(client)
     assert (await fmt_row())["mindmap_status"] == "failed"
 
 
 async def test_mindmap_cancel_resets_status_and_keeps_previous_text(client, seeded_video):
+    from tests.baseline_helpers import run_worker
     await set_fmt(mindmap_text="OLD MAP", mindmap_status="done")
     gate = Gate(result="NEW MAP")
-    with patch("routers.result.generate_mindmap", gate.llm()):
-        task = await _run_blocked(client, "post", f"{URL}/mindmap", gate, params={"force": "true"})
+    with patch("services.text_mindmapper.generate_mindmap", gate.llm()):
+        await client.post(f"{URL}/mindmap", params={"force": "true"})
+        item = await _mindmap_item()
+        worker = asyncio.create_task(run_worker([item["id"]]))
+        await gate.wait_started()
         assert (await fmt_row())["mindmap_status"] == "processing"
         assert (await client.delete(f"{URL}/mindmap")).json() == {"status": "cancelling"}
         gate.release.set()
-        await task
+        await worker
     row = await fmt_row()
     assert row["mindmap_status"] is None and row["mindmap_text"] == "OLD MAP"
 
 
-async def test_mindmap_exception_leaves_status_processing_forever(client, seeded_video):
-    # BASELINE: known bug — _run_mindmap has no try/except
-    # correct: the status ends 'failed' and the error is reported
+async def test_mindmap_exception_ends_failed_with_a_message(client, seeded_video):
+    # was: BASELINE known bug — the background copy had no try/except and left the status 'processing' forever.
+    # Fixed by the queue stage (NS-11 stage 2): 'failed' and the error is stored.
     async def boom(*a, **k):
         raise RuntimeError("llm exploded")
 
-    with patch("routers.result.generate_mindmap", boom):
-        try:
-            await client.post(f"{URL}/mindmap")
-        except RuntimeError:
-            pass
-    assert (await fmt_row())["mindmap_status"] == "processing"
+    with patch("services.text_mindmapper.generate_mindmap", boom):
+        r, item = await _post_mindmap_and_run(client)
+    row = await fmt_row()
+    assert row["mindmap_status"] == "failed" and row["mindmap_error"] == "llm exploded"
 
 
 # ---------------------------------------------------------------------------

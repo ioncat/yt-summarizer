@@ -9,6 +9,8 @@ import pytest
 import respx
 import httpx
 
+from tests.baseline_helpers import run_queued_stage
+
 
 OLLAMA_TAGS_URL = "http://localhost:11434/api/tags"
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
@@ -24,13 +26,12 @@ MOCK_STREAMING_RESPONSE = (
 @pytest.mark.asyncio
 async def test_trigger_mindmap_no_model(client, seeded_video):
     """Without a model configured the endpoint returns 200 (processing),
-    but the background task finds no model and marks status as 'failed'."""
+    but the queued stage finds no model and marks status as 'failed'."""
     await client.put("/api/settings/summarization", json={"model": None})
 
     r = await client.post(f"/api/result/{seeded_video['video_id']}/mindmap")
     assert r.status_code == 200
-    # Give the background task time to run
-    await asyncio.sleep(0.3)
+    await run_queued_stage(seeded_video["video_id"], "mindmap")  # the queue worker does the work (NS-11 stage 2)
 
     r2 = await client.get(f"/api/result/{seeded_video['video_id']}")
     assert r2.json()["mindmap_status"] == "failed"
@@ -45,7 +46,7 @@ async def test_trigger_mindmap_ollama_down(client, seeded_video):
         respx.get(OLLAMA_TAGS_URL).mock(side_effect=httpx.ConnectError("refused"))
         r = await client.post(f"/api/result/{seeded_video['video_id']}/mindmap")
         assert r.status_code == 200
-        await asyncio.sleep(0.3)
+        await run_queued_stage(seeded_video["video_id"], "mindmap")
 
     r2 = await client.get(f"/api/result/{seeded_video['video_id']}")
     assert r2.json()["mindmap_status"] == "failed"
@@ -65,7 +66,7 @@ async def test_trigger_mindmap_success(client, seeded_video):
         )
         r = await client.post(f"/api/result/{seeded_video['video_id']}/mindmap")
         assert r.status_code == 200
-        await asyncio.sleep(0.5)
+        await run_queued_stage(seeded_video["video_id"], "mindmap")
 
     r2 = await client.get(f"/api/result/{seeded_video['video_id']}")
     data = r2.json()
