@@ -99,6 +99,17 @@ def test_the_names_are_the_ones_of_the_plan():
     ("the answer was cut off (done_reason=length)", "context_too_small"),
     ("Cannot connect to Ollama: connection refused", "ollama_down"),
     ("llm exploded", "unexpected"),
+    # the real texts (httpx / Ollama) seen on failed runs
+    ("model 'qwen3:8b' not found", "model_missing"),
+    ('model "qwen3:8b" not found, try pulling it first', "model_missing"),
+    ("Client error '404 Not Found' for url 'http://localhost:11434/api/chat' - model 'x' not found", "model_missing"),
+    ("All connection attempts failed", "ollama_down"),
+    ("httpx.ConnectError: [WinError 10061] No connection could be made because the target machine actively refused it", "ollama_down"),
+    ("Ollama returned HTTP 500", "ollama_down"),
+    ("Server error '500 Internal Server Error' for url 'http://localhost:11434/api/chat'", "ollama_down"),
+    ("Client error '400 Bad Request' for url 'http://localhost:11434/api/chat'", "unexpected"),
+    ("Mind map: video abc is not in History", "not_found"),
+    ("input exceeds the context length of the model", "context_too_small"),
 ])
 def test_error_texts_get_a_reason_code(message, code):
     assert classify_error(message) == code
