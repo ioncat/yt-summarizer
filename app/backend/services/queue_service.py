@@ -231,7 +231,7 @@ async def _pick_next() -> dict | None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             text(
-                "SELECT id, url, pipeline_stages, language FROM processing_queue "
+                "SELECT id, url, pipeline_stages, language, video_id FROM processing_queue "
                 "WHERE status = 'pending' ORDER BY sort_order, added_at LIMIT 1"
             )
         )
@@ -243,6 +243,7 @@ async def _pick_next() -> dict | None:
             "url": row[1],
             "pipeline_stages": json.loads(row[2]) if row[2] else ["extract"],
             "language": row[3],
+            "video_id": row[4],
         }
 
 
@@ -636,9 +637,10 @@ async def queue_worker() -> None:
                 yt_video_id = extract_result["video_id"]
                 db_video_id = extract_result["db_video_id"]
             else:
-                # Stages-only mode: video already extracted, derive video_id from URL
+                # Stages-only mode: the video is already in History. The item names it by video_id
+                # (local files have no YouTube URL); items queued before that fall back to the URL.
                 from services.subtitle_extractor import extract_video_id as _extract_video_id
-                yt_video_id = _extract_video_id(url)
+                yt_video_id = item.get("video_id") or _extract_video_id(url)
                 db_video_id = None
                 if not yt_video_id:
                     raise ValueError(f"Cannot extract video_id from URL: {url}")
