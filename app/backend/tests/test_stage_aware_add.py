@@ -94,3 +94,36 @@ async def test_when_cleanup_cannot_run_the_summary_of_the_chain_says_an_earlier_
     assert fmt["summary_status"] == "failed" and "an earlier stage failed" in fmt["summary_error"]
     (r,) = await runs("summary")
     assert (r["status"], r["error_code"]) == ("failed", "upstream_failed")
+
+
+# --- the order the user asked for is never reversed ------------------------------------------------------------
+
+async def test_a_queued_summary_blocks_cleanup_then_summarize_instead_of_running_it_on_the_raw_text(client, seeded_video):
+    await add(client, ["summary"])
+    again = await add(client, ["cleanup", "summary"])
+    assert again["added"] == 0 and again["duplicates"] == [VIDEO_ID]
+    assert again["duplicate_details"] == [{"url": None, "video_id": VIDEO_ID, "reason": "order", "stages": ["summary"]}]
+    assert [stages for _, stages in await items()] == [["summary"]]              # nothing was queued behind it
+    fmt = await fmt_row()
+    assert fmt["cleanup_status"] is None                                          # and no stage was marked
+
+
+async def test_a_queued_mind_map_blocks_summarize_then_map_the_same_way(client, seeded_video):
+    await add(client, ["mindmap"])
+    again = await add(client, ["summary", "mindmap"])
+    assert again["added"] == 0
+    assert again["duplicate_details"][0]["reason"] == "order" and again["duplicate_details"][0]["stages"] == ["mindmap"]
+
+
+async def test_a_queued_stage_does_not_block_when_what_must_come_before_it_is_not_asked_for(client, seeded_video):
+    await add(client, ["summary"])
+    again = await add(client, ["summary", "mindmap"])                 # summary is queued; mindmap after it is in order
+    assert again["added"] == 1 and again["duplicates"] == []
+    assert [stages for _, stages in await items()] == [["summary"], ["mindmap"]]
+
+
+async def test_a_queued_cleanup_never_blocks_anything_after_it(client, seeded_video):
+    await add(client, ["cleanup"])
+    again = await add(client, ["cleanup", "summary", "mindmap"])
+    assert again["added"] == 1
+    assert [stages for _, stages in await items()] == [["cleanup"], ["summary", "mindmap"]]

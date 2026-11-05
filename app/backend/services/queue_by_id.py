@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services import stage_runs
 
 # Stages that work on a result that is already extracted / transcribed
-RESULT_STAGES = ("cleanup", "summary", "mindmap")
+RESULT_STAGES = ("cleanup", "summary", "mindmap")   # also the order they must run in: each works on the result of the one before
 
 
 async def add_by_video_ids(db: AsyncSession, video_ids: list[str], stages: list[str]) -> dict:
@@ -22,13 +22,16 @@ async def add_by_video_ids(db: AsyncSession, video_ids: list[str], stages: list[
     Stage-aware (NS-25): a stage that a pending / processing item of the video already includes is "covered" and is not
     queued again, but the OTHER requested stages still are (a queued mind map no longer blocks "cleanup then summarize").
     duplicates: every requested stage is covered, nothing was added; missing: no such result in History;
-    covered: {video_id: [the requested stages that were already queued]}, for duplicates and partly covered videos.
+    covered: {video_id: [the requested stages that were already queued]}, for duplicates and partly covered videos;
+    blocked: {video_id: [stages]} - nothing is added for these: a requested stage is already queued but a stage that must
+    run BEFORE it is not (a summary is queued, "cleanup then summarize" is asked): queuing the cleanup behind it would
+    run the summary on the raw text first and never redo it on the cleaned text. They are also listed in duplicates.
     The stages of a new item are marked 'processing' at once, so a stage that never gets to run (an earlier one failed)
     ends with a reason instead of an idle status. Order of the given ids is kept; an id listed twice is queued once.
     """
     wanted = list(dict.fromkeys(v.strip() for v in video_ids if v and v.strip()))
     if not wanted:
-        return {"ids": [], "duplicates": [], "missing": [], "covered": {}}
+        return {"ids": [], "duplicates": [], "missing": [], "covered": {}, "blocked": {}}
 
     marks = ", ".join(f":v{i}" for i in range(len(wanted)))
     params = {f"v{i}": v for i, v in enumerate(wanted)}
@@ -50,6 +53,7 @@ async def add_by_video_ids(db: AsyncSession, video_ids: list[str], stages: list[
     missing = [v for v in wanted if v not in found]
     duplicates: list[str] = []
     covered: dict[str, list[str]] = {}
+    blocked: dict[str, list[str]] = {}
     ids: list[int] = []
     for vid in (v for v in wanted if v in found):
         already = [s for s in stages if s in queued_stages.get(vid, ())]
@@ -57,6 +61,11 @@ async def add_by_video_ids(db: AsyncSession, video_ids: list[str], stages: list[
         if already:
             covered[vid] = already
         if not todo:
+            duplicates.append(vid)
+            continue
+        out_of_order = [s for s in already if any(p in todo for p in _before(s))]
+        if out_of_order:
+            blocked[vid] = out_of_order
             duplicates.append(vid)
             continue
         url, db_id = found[vid]
@@ -77,7 +86,12 @@ async def add_by_video_ids(db: AsyncSession, video_ids: list[str], stages: list[
         else:
             duplicates.append(vid)
     await db.commit()
-    return {"ids": ids, "duplicates": duplicates, "missing": missing, "covered": covered}
+    return {"ids": ids, "duplicates": duplicates, "missing": missing, "covered": covered, "blocked": blocked}
+
+
+def _before(stage: str) -> tuple[str, ...]:
+    """The stages that must run before `stage` (the ones that come earlier in RESULT_STAGES)."""
+    return RESULT_STAGES[:RESULT_STAGES.index(stage)] if stage in RESULT_STAGES else ()
 
 
 async def _mark_queued(db: AsyncSession, video_id: str, stages: list[str], item_id: int) -> None:

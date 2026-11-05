@@ -197,9 +197,12 @@ export function useResultHandlers({
         const res = await queueBulkAddByIds([videoId], ['cleanup', 'summary'])
         if (res.added === 0) {
           const queued = (res.duplicate_details ?? []).flatMap(d => d.stages ?? [])
+          const wrongOrder = (res.duplicate_details ?? []).some(d => d.reason === 'order')
           setSummaryError(res.missing.length
             ? 'This video was not found in History.'
-            : `${queued.length ? `${[...new Set(queued)].join(' and ')} ${queued.length > 1 ? 'are' : 'is'} already in the queue` : 'This video already has an item in the queue'}: wait for it or remove it on the Queue page.`)
+            : wrongOrder
+              ? `A ${[...new Set(queued)].join(' and ')} is already queued and would run before the cleanup: wait for it or remove it on the Queue page, then try again.`
+              : `${queued.length ? `${[...new Set(queued)].join(' and ')} ${queued.length > 1 ? 'are' : 'is'} already in the queue` : 'This video already has an item in the queue'}: wait for it or remove it on the Queue page.`)
           return
         }
         setQueuedMsg('cleanup+summary')

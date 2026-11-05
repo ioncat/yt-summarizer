@@ -430,8 +430,11 @@ async def queue_bulk_add(
             lambda: add_by_video_ids(db, body.video_ids, body.pipeline_stages), db, "queue add: insert by id")
         ids += by_id["ids"]
         duplicates += by_id["duplicates"]
-        duplicate_details += [{"url": None, "video_id": v, "reason": "in_queue", "stages": by_id["covered"].get(v, [])}
-                              for v in by_id["duplicates"]]
+        duplicate_details += [
+            {"url": None, "video_id": v,
+             "reason": "order" if v in by_id["blocked"] else "in_queue",     # "order": a later stage is queued, its prerequisite is not
+             "stages": by_id["blocked"].get(v) or by_id["covered"].get(v, [])}
+            for v in by_id["duplicates"]]
         missing = by_id["missing"]
 
     return {"added": len(ids), "ids": ids, "invalid": invalid, "duplicates": duplicates,
