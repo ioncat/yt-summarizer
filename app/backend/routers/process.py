@@ -341,6 +341,11 @@ async def queue_bulk_add(
 
     `video_ids` queues results that are already in History by id (the only way to queue a local file);
     they can only run the LLM stages (cleanup, summary, mindmap).
+
+    `force` applies to `urls` only: it skips the "already processed / already in the queue" check so a
+    video can be re-run. `video_ids` ignore it: an id that is already pending or processing is always
+    reported as a duplicate (two runs of the same stage on one video would overwrite each other).
+    At most 500 urls and 500 video_ids per request.
     """
     from services.queue_service import add_items, get_duplicate_video_ids
     from services.queue_by_id import RESULT_STAGES, add_by_video_ids

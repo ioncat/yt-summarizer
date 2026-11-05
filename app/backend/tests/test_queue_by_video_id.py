@@ -185,3 +185,10 @@ async def test_bulk_add_refuses_501_video_ids(client):
     assert r.status_code == 422
     ok = await client.post("/api/queue/bulk", json={"video_ids": ids[:500], "pipeline_stages": ["cleanup"]})
     assert ok.status_code == 200 and ok.json()["added"] == 0 and len(ok.json()["missing"]) == 500
+
+
+async def test_force_does_not_apply_to_video_ids(client, local_video):
+    body = {"video_ids": [LOCAL_ID], "pipeline_stages": ["cleanup"], "force": True}
+    assert (await client.post("/api/queue/bulk", json=body)).json()["added"] == 1
+    again = (await client.post("/api/queue/bulk", json=body)).json()
+    assert again["added"] == 0 and again["duplicates"] == [LOCAL_ID]  # as the docstring says
