@@ -182,7 +182,7 @@ export default function QueuePage() {
         )}
 
         {newOpen && (
-          <NewItemForm add={adds.add} rows={adds.rows} onRetry={adds.retry} onDismiss={adds.dismiss}
+          <NewItemForm add={adds.add} rows={adds.rows} isAdding={adds.isAdding} onRetry={adds.retry} onDismiss={adds.dismiss}
             onClose={() => setNewOpen(false)} />
         )}
 

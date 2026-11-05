@@ -7,9 +7,10 @@ function shortLink(url: string) {
 }
 
 /** One link, the default pipeline (the Home page's choice), Enter adds it; the page stays where it is. */
-export default function NewItemForm({ add, rows, onRetry, onDismiss, onClose }: {
-  add: (url: string) => Promise<AddOutcome>
+export default function NewItemForm({ add, rows, isAdding, onRetry, onDismiss, onClose }: {
+  add: (url: string) => Promise<AddOutcome | null>
   rows: AddRow[]
+  isAdding: (url: string) => boolean
   onRetry: (id: number) => void
   onDismiss: (id: number) => void
   onClose: () => void
@@ -17,13 +18,15 @@ export default function NewItemForm({ add, rows, onRetry, onDismiss, onClose }: 
   const [url, setUrl] = useState('')
   const [outcome, setOutcome] = useState<AddOutcome | null>(null)
   const busy = rows.some(r => r.state === 'adding')
+  const sameLinkBusy = isAdding(url.trim())  // this very link has an "Adding..." row: Add and Enter do nothing
 
   async function submit(e: FormEvent) {
     e.preventDefault()
     const link = url.trim()
-    if (!link) return
+    if (!link || isAdding(link)) return
     setOutcome(null)
     const result = await add(link)
+    if (result === null) return  // already being sent (a second Enter before the first row was drawn)
     setOutcome(result.kind === 'error' ? null : result)  // an error stays visible in its own row, with Retry
     if (result.kind === 'added') setUrl('')
   }
@@ -40,7 +43,7 @@ export default function NewItemForm({ add, rows, onRetry, onDismiss, onClose }: 
           aria-label="New video link"
           className="flex-1 px-4 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
         />
-        <button type="submit" disabled={!url.trim()}
+        <button type="submit" disabled={!url.trim() || sameLinkBusy}
           className="px-4 py-2 bg-primary text-on-primary rounded-lg text-label-md font-semibold disabled:opacity-50">
           {busy ? 'Adding…' : 'Add'}
         </button>

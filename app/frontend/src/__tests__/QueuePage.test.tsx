@@ -135,6 +135,45 @@ describe('QueuePage "New" (NS-24a)', () => {
     expect(vi.mocked(api.queueBulkAdd).mock.calls[1][0]).toEqual(['https://youtu.be/retryMe0001'])
   })
 
+  it('pressing Enter twice for the same link sends one request, and the button is off while it runs', async () => {
+    let answer!: (v: api.QueueAddResult) => void
+    vi.mocked(api.queueBulkAdd).mockReturnValue(new Promise(res => { answer = res }))
+    renderQueue()
+    await openAndSubmit('https://youtu.be/doubleEnter1')
+    const form = screen.getByLabelText('New video link').closest('form')!
+    fireEvent.submit(form)                                    // a second Enter at once
+    fireEvent.submit(form)                                    // and a third
+    expect(api.queueBulkAdd).toHaveBeenCalledTimes(1)
+    expect(screen.getAllByTestId('adding-row')).toHaveLength(1)
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Adding…' }) as HTMLButtonElement).disabled).toBe(true))
+    answer({ added: 1, ids: [1], invalid: [], duplicates: [] })
+    await waitFor(() => expect(screen.queryByTestId('adding-row')).toBeNull())
+    expect(api.queueBulkAdd).toHaveBeenCalledTimes(1)
+  })
+
+  it('another link can be added while the first is still being sent', async () => {
+    vi.mocked(api.queueBulkAdd).mockReturnValue(new Promise(() => {}))   // never answers
+    renderQueue()
+    await openAndSubmit('https://youtu.be/firstLink001')
+    fireEvent.change(screen.getByLabelText('New video link'), { target: { value: 'https://youtu.be/secondLink01' } })
+    expect((screen.getByRole('button', { name: 'Adding…' }) as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.submit(screen.getByLabelText('New video link').closest('form')!)
+    expect(api.queueBulkAdd).toHaveBeenCalledTimes(2)
+    expect(screen.getAllByTestId('adding-row')).toHaveLength(2)
+  })
+
+  it('clicking Retry twice sends the link once', async () => {
+    vi.mocked(api.queueBulkAdd).mockRejectedValueOnce(new Error('boom'))
+    renderQueue()
+    await openAndSubmit('https://youtu.be/retryTwice01')
+    await screen.findByText('Not added: boom')
+    vi.mocked(api.queueBulkAdd).mockReturnValueOnce(new Promise(() => {}))
+    const retry = screen.getByRole('button', { name: 'Retry' })
+    fireEvent.click(retry)
+    fireEvent.click(retry)
+    expect(api.queueBulkAdd).toHaveBeenCalledTimes(2)         // the first try + ONE retry
+  })
+
   it('Dismiss removes a failed row without sending anything', async () => {
     vi.mocked(api.queueBulkAdd).mockRejectedValue(new Error('boom'))
     renderQueue()

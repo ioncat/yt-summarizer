@@ -28,12 +28,16 @@ export function outcomeOf(res: QueueAddResult): AddOutcome {
 export function useQueueAdd(onAdded: () => void) {
   const [rows, setRows] = useState<AddRow[]>([])
   const nextId = useRef(1)
+  // links with a request on its way: a second Enter / click for the same link must not send a second request
+  const sending = useRef(new Set<string>())
 
   function patch(id: number, change: Partial<AddRow>) {
     setRows(prev => prev.map(r => (r.id === id ? { ...r, ...change } : r)))
   }
 
-  async function run(id: number, url: string): Promise<AddOutcome> {
+  async function run(id: number, url: string): Promise<AddOutcome | null> {
+    if (sending.current.has(url)) return null
+    sending.current.add(url)
     patch(id, { state: 'adding', error: undefined })
     try {
       const res = await queueBulkAdd([url], defaultQueueStages(), false)
@@ -45,10 +49,14 @@ export function useQueueAdd(onAdded: () => void) {
       const message = err instanceof Error ? err.message : 'Failed to add to queue'
       patch(id, { state: 'failed', error: message })
       return { kind: 'error', message }
+    } finally {
+      sending.current.delete(url)
     }
   }
 
-  function add(url: string): Promise<AddOutcome> {
+  /** null: this link is already being sent, nothing was done. */
+  function add(url: string): Promise<AddOutcome | null> {
+    if (sending.current.has(url)) return Promise.resolve(null)
     const id = nextId.current++
     setRows(prev => [...prev, { id, url, state: 'adding' }])
     return run(id, url)
@@ -63,5 +71,7 @@ export function useQueueAdd(onAdded: () => void) {
     setRows(prev => prev.filter(r => r.id !== id))
   }
 
-  return { rows, add, retry, dismiss }
+  const isAdding = (url: string) => rows.some(r => r.state === 'adding' && r.url === url)
+
+  return { rows, add, retry, dismiss, isAdding }
 }
