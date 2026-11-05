@@ -18,7 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import AsyncSessionLocal
-from services.ollama_options import apply_max_num_ctx
+from services.ollama_options import begin_llm_run, llm_failure_reason
 
 logger = logging.getLogger("queue_service")
 
@@ -343,7 +343,7 @@ async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
             stage = await get_stage_settings(db, "cleanup")
             ollama_url = await get_app_setting(db, "ollama_url")
             parallel_workers = int(await get_app_setting(db, "parallel_workers") or "1")
-            apply_max_num_ctx(await get_app_setting(db, "llm_max_num_ctx"))
+            begin_llm_run(await get_app_setting(db, "llm_max_num_ctx"))
             model = stage.get("model")
             if not model:
                 logger.warning("Queue cleanup: no cleanup model configured, skipping cleanup for %s", yt_video_id)
@@ -367,10 +367,10 @@ async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
 
         async with AsyncSessionLocal() as db:
             await finish_cleanup(db, yt_video_id, cleaned, started_at=started_at)
-    except Exception:
+    except Exception as exc:
         logger.exception("Queue cleanup: stage failed for %s", yt_video_id)
         async with AsyncSessionLocal() as db:
-            await fail_cleanup_stage(db, yt_video_id)
+            await fail_cleanup_stage(db, yt_video_id, error=str(exc)[:500])
         raise
 
 
@@ -399,7 +399,7 @@ async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
             ollama_url = await get_app_setting(db, "ollama_url")
             force_map_reduce = (await get_app_setting(db, "force_map_reduce") or "false") == "true"
             parallel_workers = int(await get_app_setting(db, "parallel_workers") or "1")
-            apply_max_num_ctx(await get_app_setting(db, "llm_max_num_ctx"))
+            begin_llm_run(await get_app_setting(db, "llm_max_num_ctx"))
             model = stage.get("model")
             if not model:
                 logger.warning("Queue summary: no summary model configured, skipping for %s", yt_video_id)
@@ -447,11 +447,12 @@ async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
             await finish_summary(
                 db, yt_video_id, summary, mode=mode,
                 chunks_count=chunks_count, started_at=started_at,
+                error=llm_failure_reason(),
             )
-    except Exception:
+    except Exception as exc:
         logger.exception("Queue summary: stage failed for %s", yt_video_id)
         async with AsyncSessionLocal() as db:
-            await fail_summary_stage(db, yt_video_id)
+            await fail_summary_stage(db, yt_video_id, error=llm_failure_reason() or str(exc)[:500])
         raise
 
 
@@ -570,7 +571,7 @@ async def _run_mindmap_stage(yt_video_id: str, item_id: int) -> None:
             stage = await get_stage_settings(db, "summarization")
             ollama_url = await get_app_setting(db, "ollama_url")
             model = stage.get("model") if stage else None
-            apply_max_num_ctx(await get_app_setting(db, "llm_max_num_ctx"))
+            begin_llm_run(await get_app_setting(db, "llm_max_num_ctx"))
             if not ollama_url or not model:
                 logger.warning("Queue mindmap: missing ollama_url or model, skipping for %s", yt_video_id)
                 return
@@ -590,11 +591,11 @@ async def _run_mindmap_stage(yt_video_id: str, item_id: int) -> None:
         )
 
         async with AsyncSessionLocal() as db:
-            await finish_mindmap(db, yt_video_id, mindmap_md)
-    except Exception:
+            await finish_mindmap(db, yt_video_id, mindmap_md, error=llm_failure_reason())
+    except Exception as exc:
         logger.exception("Queue mindmap: stage failed for %s", yt_video_id)
         async with AsyncSessionLocal() as db:
-            await fail_mindmap_stage(db, yt_video_id)
+            await fail_mindmap_stage(db, yt_video_id, error=llm_failure_reason() or str(exc)[:500])
         raise
 
 

@@ -8,7 +8,7 @@ import logging
 
 import httpx
 
-from .ollama_options import build_options
+from .ollama_options import build_options, empty_answer_message, record_failure_reason
 
 logger = logging.getLogger("mindmapper")
 
@@ -80,6 +80,7 @@ async def generate_mindmap(
             logger.info("[mindmapper] starting stream request, model=%s", payload["model"])
             chunks: list[str] = []
             token_count = 0
+            saw_thinking = False
             async with client.stream("POST", f"{ollama_url}/api/chat", json=payload) as resp:
                 resp.raise_for_status()
                 logger.info("[mindmapper] stream connected, reading tokens...")
@@ -93,6 +94,8 @@ async def generate_mindmap(
                         data = json.loads(line)
                     except Exception:
                         continue
+                    if data.get("message", {}).get("thinking"):
+                        saw_thinking = True
                     token = data.get("message", {}).get("content", "")
                     if token:
                         chunks.append(token)
@@ -103,7 +106,12 @@ async def generate_mindmap(
 
             content = "".join(chunks).strip()
             logger.info("[mindmapper] result: %d chars", len(content))
-            return content if content else None
+            if not content:
+                reason = empty_answer_message(saw_thinking)
+                logger.warning("[mindmapper] %s", reason)
+                record_failure_reason(reason)
+                return None
+            return content
     except Exception as e:
         logger.error("[mindmapper] exception: %s", e, exc_info=True)
         return None

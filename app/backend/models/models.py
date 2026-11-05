@@ -78,6 +78,10 @@ class SubtitleFormatted(Base):
     text_length: Mapped[int | None] = mapped_column(Integer)
     mindmap_text: Mapped[str | None] = mapped_column(Text)    # LLM-generated compact mindmap markdown
     mindmap_status: Mapped[str | None] = mapped_column(String(20))  # null | processing | done | failed
+    # Why the last run of a stage failed (null when it did not); a temporary home until NS-25's per-stage table
+    cleanup_error: Mapped[str | None] = mapped_column(Text)
+    summary_error: Mapped[str | None] = mapped_column(Text)
+    mindmap_error: Mapped[str | None] = mapped_column(Text)
     chat_history: Mapped[list | None] = mapped_column(JSON)  # [{role, content}, ...]
     subtitle_source: Mapped[str | None] = mapped_column(String(20))  # captions | transcript
     transcription_started_at: Mapped[datetime | None] = mapped_column(DateTime)

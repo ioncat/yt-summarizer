@@ -41,7 +41,7 @@ from services.video_service import (
     toggle_favorite,
 )
 from routers.download import _mp4_format_spec
-from services.ollama_options import apply_max_num_ctx
+from services.ollama_options import begin_llm_run, llm_failure_reason
 from routers.settings import _uploads_dir
 
 logger = logging.getLogger("api")
@@ -109,7 +109,7 @@ async def _run_cleanup(video_id: str) -> None:
         stage = await get_stage_settings(db, "cleanup")
         ollama_url = await get_app_setting(db, "ollama_url")
         parallel_workers = int(await get_app_setting(db, "parallel_workers") or "1")
-        apply_max_num_ctx(await get_app_setting(db, "llm_max_num_ctx"))
+        begin_llm_run(await get_app_setting(db, "llm_max_num_ctx"))
 
     def _on_cleanup_progress(done: int, total: int) -> None:
         _CLEANUP_PROGRESS[video_id] = {"done": done, "total": total}
@@ -369,7 +369,7 @@ async def _run_summary(video_id: str) -> None:
         ollama_url = await get_app_setting(db, "ollama_url")
         force_map_reduce = (await get_app_setting(db, "force_map_reduce") or "false") == "true"
         parallel_workers = int(await get_app_setting(db, "parallel_workers") or "1")
-        apply_max_num_ctx(await get_app_setting(db, "llm_max_num_ctx"))
+        begin_llm_run(await get_app_setting(db, "llm_max_num_ctx"))
 
     def _on_chunk_progress(done: int, total: int) -> None:
         _SUMMARY_PROGRESS[video_id] = {"done": done, "total": total}
@@ -416,7 +416,8 @@ async def _run_summary(video_id: str) -> None:
             _SUMMARY_CANCEL_SET.discard(video_id)
             await reset_summary_status(db, video_id)
         else:
-            await finish_summary(db, video_id, summary, mode=mode, chunks_count=chunks_count, started_at=started_at)
+            await finish_summary(db, video_id, summary, mode=mode, chunks_count=chunks_count, started_at=started_at,
+                                 error=llm_failure_reason())
 
 
 @router.post("/result/{video_id}/summary")
@@ -475,7 +476,7 @@ async def _run_mindmap(video_id: str) -> None:
         stage = await get_stage_settings(db, "summarization")
         ollama_url = await get_app_setting(db, "ollama_url")
         model = stage.get("model") if stage else None
-        apply_max_num_ctx(await get_app_setting(db, "llm_max_num_ctx"))
+        begin_llm_run(await get_app_setting(db, "llm_max_num_ctx"))
         logger.info("[mindmap] ollama_url=%s model=%s text_len=%d", ollama_url, model, len(text))
 
         if not ollama_url or not model:
@@ -505,7 +506,7 @@ async def _run_mindmap(video_id: str) -> None:
             await reset_mindmap_status(db, video_id)
             return
 
-        await finish_mindmap(db, video_id, mindmap_md)
+        await finish_mindmap(db, video_id, mindmap_md, error=llm_failure_reason())
         logger.info("[mindmap] finish_mindmap done for video_id=%s", video_id)
 
 

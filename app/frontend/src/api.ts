@@ -46,6 +46,9 @@ export interface ResultResponse {
   chat_history: Array<{ role: string; content: string }> | null
   mindmap_text: string | null
   mindmap_status: 'processing' | 'done' | 'failed' | null
+  cleanup_error?: string | null
+  summary_error?: string | null
+  mindmap_error?: string | null
   is_favorite: boolean
   subtitle_source?: 'captions' | 'transcript' | null
   subtitles_type?: string | null

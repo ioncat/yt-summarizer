@@ -208,6 +208,29 @@ describe('ResultPage', () => {
     expect(await screen.findByPlaceholderText('Ask about the video…')).toBeTruthy()
   })
 
+  it('failed stages show the stored reason; without one the generic text stays', async () => {
+    setResult({ summary_status: 'failed', summary_error: 'model returned no answer (thinking used the whole context)' })
+    await renderPage()
+    fireEvent.click(btn('Summary'))
+    expect(screen.getByText('model returned no answer (thinking used the whole context)')).toBeTruthy()
+    expect(screen.queryByText(/Possible causes: Ollama not running/)).toBeNull()
+  })
+
+  it('failed summary without a stored reason keeps the generic text', async () => {
+    setResult({ summary_status: 'failed', summary_error: null })
+    await renderPage()
+    fireEvent.click(btn('Summary'))
+    expect(screen.getByText(/Possible causes: Ollama not running/)).toBeTruthy()
+  })
+
+  it('failed mind map shows the stored reason (banner and tab body)', async () => {
+    setResult({ mindmap_status: 'failed', mindmap_error: 'model returned nothing' })
+    await renderPage()
+    fireEvent.click(btn('Mind Map'))
+    expect(screen.getAllByText('model returned nothing').length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Check Ollama and model settings/)).toBeNull()
+  })
+
   it('Delete asks for confirmation and calls deleteResult', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     await renderPage()

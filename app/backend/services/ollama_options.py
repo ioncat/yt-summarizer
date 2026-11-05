@@ -28,6 +28,7 @@ DEFAULT_RESERVE_TOKENS = 4096
 _BUCKETS = (4096, 8192, 16384, 32768, 65536)
 
 _max_num_ctx: ContextVar[int] = ContextVar("llm_max_num_ctx", default=DEFAULT_MAX_NUM_CTX)
+_failure_reason: ContextVar[list | None] = ContextVar("llm_failure_reason", default=None)
 
 
 def parse_max_num_ctx(value: str | int | None) -> int:
@@ -52,6 +53,30 @@ def llm_scope(max_num_ctx: str | int | None = None):
 def apply_max_num_ctx(value: str | int | None) -> None:
     """Set the cap for the rest of the current task (a stage runner reads the setting once)."""
     _max_num_ctx.set(parse_max_num_ctx(value))
+
+
+def begin_llm_run(max_num_ctx: str | int | None = None) -> None:
+    """Start of a stage run: set the cap and open a fresh box for the reason of a failed call."""
+    apply_max_num_ctx(max_num_ctx)
+    _failure_reason.set([])
+
+
+def record_failure_reason(message: str) -> None:
+    """Called by an LLM call that got no usable answer; the first reason of a run is kept."""
+    box = _failure_reason.get()
+    if box is not None and not box:
+        box.append(message)
+
+
+def llm_failure_reason() -> str | None:
+    box = _failure_reason.get()
+    return box[0] if box else None
+
+
+def empty_answer_message(has_thinking: bool) -> str:
+    if has_thinking:
+        return "model returned no answer (thinking used the whole context)"
+    return "model returned nothing"
 
 
 def estimate_tokens(*texts: str) -> int:

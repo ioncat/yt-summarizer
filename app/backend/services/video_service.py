@@ -246,6 +246,9 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
         ),
         "mindmap_text": fmt.mindmap_text if fmt else None,
         "mindmap_status": fmt.mindmap_status if fmt else None,
+        "cleanup_error": fmt.cleanup_error if fmt else None,
+        "summary_error": fmt.summary_error if fmt else None,
+        "mindmap_error": fmt.mindmap_error if fmt else None,
         "is_favorite": bool(video.is_favorite),
         "subtitle_source": fmt.subtitle_source if fmt else None,
         "subtitles_type": video.subtitles_type,
@@ -356,6 +359,7 @@ async def set_cleanup_processing(db: AsyncSession, video_id: str, model: str | N
         text("""
             UPDATE subtitles_formatted
             SET cleanup_status = 'processing',
+                cleanup_error = NULL,
                 cleanup_model = :model
             WHERE id = :id
         """),
@@ -366,7 +370,8 @@ async def set_cleanup_processing(db: AsyncSession, video_id: str, model: str | N
 
 
 async def finish_cleanup(
-    db: AsyncSession, video_id: str, cleaned_text: str | None, started_at: datetime | None = None
+    db: AsyncSession, video_id: str, cleaned_text: str | None, started_at: datetime | None = None,
+    error: str | None = None,
 ) -> None:
     """Store cleanup result + both timestamps atomically, AND mirror the
     run into benchmark_runs so it shows up on the Benchmark (cleanup) page."""
@@ -384,6 +389,7 @@ async def finish_cleanup(
         text("""
             UPDATE subtitles_formatted
             SET cleanup_status = :status,
+                cleanup_error = :error,
                 cleaned_text = :cleaned,
                 cleanup_started_at = :started,
                 cleanup_finished_at = :finished
@@ -391,6 +397,7 @@ async def finish_cleanup(
         """),
         {
             "status": status,
+            "error": None if status == "done" else error,
             "cleaned": cleaned_text,
             "started": started_ts,
             "finished": finished_ts,
@@ -464,6 +471,7 @@ async def set_summary_processing(db: AsyncSession, video_id: str, model: str | N
         text("""
             UPDATE subtitles_formatted
             SET summary_status = 'processing',
+                summary_error = NULL,
                 summary_model = :model
             WHERE id = :id
         """),
@@ -480,6 +488,7 @@ async def finish_summary(
     mode: str = "single",
     chunks_count: int = 1,
     started_at: datetime | None = None,
+    error: str | None = None,
 ) -> None:
     """Store summarization result + both timestamps atomically, AND mirror
     the run into benchmark_runs so it shows up on the Benchmark page."""
@@ -498,6 +507,7 @@ async def finish_summary(
         text("""
             UPDATE subtitles_formatted
             SET summary_status = :status,
+                summary_error = :error,
                 summary_text = :summary,
                 summary_mode = :mode,
                 summary_chunks_count = :chunks,
@@ -507,6 +517,7 @@ async def finish_summary(
         """),
         {
             "status": status,
+            "error": None if status == "done" else error,
             "summary": summary_text,
             "mode": mode,
             "chunks": chunks_count,
@@ -654,6 +665,9 @@ async def replace_subtitles_after_reextract(
                     cleanup_started_at = NULL,
                     cleanup_finished_at = NULL,
                     cleanup_model = NULL,
+                    cleanup_error = NULL,
+                    summary_error = NULL,
+                    mindmap_error = NULL,
                     summary_text = NULL,
                     summary_status = NULL,
                     summary_started_at = NULL,
@@ -692,13 +706,13 @@ async def start_mindmap_generation(db: AsyncSession, video_id: str) -> None:
     if not fmt_id:
         return
     await db.execute(
-        text("UPDATE subtitles_formatted SET mindmap_status = 'processing' WHERE id = :id"),
+        text("UPDATE subtitles_formatted SET mindmap_status = 'processing', mindmap_error = NULL WHERE id = :id"),
         {"id": fmt_id},
     )
     await db.commit()
 
 
-async def finish_mindmap(db: AsyncSession, video_id: str, mindmap_text: str | None) -> None:
+async def finish_mindmap(db: AsyncSession, video_id: str, mindmap_text: str | None, error: str | None = None) -> None:
     """Save mindmap result."""
     fmt_id = await _get_fmt_id(db, video_id)
     if not fmt_id:
@@ -707,10 +721,10 @@ async def finish_mindmap(db: AsyncSession, video_id: str, mindmap_text: str | No
     await db.execute(
         text("""
             UPDATE subtitles_formatted
-            SET mindmap_status = :status, mindmap_text = :mindmap
+            SET mindmap_status = :status, mindmap_text = :mindmap, mindmap_error = :error
             WHERE id = :id
         """),
-        {"status": status, "mindmap": mindmap_text, "id": fmt_id},
+        {"status": status, "mindmap": mindmap_text, "error": None if status == "done" else error, "id": fmt_id},
     )
     await db.commit()
 
@@ -727,32 +741,32 @@ async def reset_mindmap_status(db: AsyncSession, video_id: str) -> None:
     await db.commit()
 
 
-async def fail_cleanup_stage(db: AsyncSession, video_id: str) -> None:
+async def fail_cleanup_stage(db: AsyncSession, video_id: str, error: str | None = None) -> None:
     fmt_id = await _get_fmt_id(db, video_id)
     if fmt_id:
         await db.execute(
-            text("UPDATE subtitles_formatted SET cleanup_status = 'failed' WHERE id = :id"),
-            {"id": fmt_id},
+            text("UPDATE subtitles_formatted SET cleanup_status = 'failed', cleanup_error = :error WHERE id = :id"),
+            {"id": fmt_id, "error": error},
         )
         await db.commit()
 
 
-async def fail_summary_stage(db: AsyncSession, video_id: str) -> None:
+async def fail_summary_stage(db: AsyncSession, video_id: str, error: str | None = None) -> None:
     fmt_id = await _get_fmt_id(db, video_id)
     if fmt_id:
         await db.execute(
-            text("UPDATE subtitles_formatted SET summary_status = 'failed' WHERE id = :id"),
-            {"id": fmt_id},
+            text("UPDATE subtitles_formatted SET summary_status = 'failed', summary_error = :error WHERE id = :id"),
+            {"id": fmt_id, "error": error},
         )
         await db.commit()
 
 
-async def fail_mindmap_stage(db: AsyncSession, video_id: str) -> None:
+async def fail_mindmap_stage(db: AsyncSession, video_id: str, error: str | None = None) -> None:
     fmt_id = await _get_fmt_id(db, video_id)
     if fmt_id:
         await db.execute(
-            text("UPDATE subtitles_formatted SET mindmap_status = 'failed' WHERE id = :id"),
-            {"id": fmt_id},
+            text("UPDATE subtitles_formatted SET mindmap_status = 'failed', mindmap_error = :error WHERE id = :id"),
+            {"id": fmt_id, "error": error},
         )
         await db.commit()
 

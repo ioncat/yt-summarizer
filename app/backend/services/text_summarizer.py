@@ -6,7 +6,7 @@ from typing import Callable, Optional
 
 import httpx
 
-from .ollama_options import build_options
+from .ollama_options import build_options, empty_answer_message, record_failure_reason
 from .text_utils import normalize_chapter_headings
 
 logger = logging.getLogger(__name__)
@@ -187,8 +187,14 @@ async def _call_ollama(
             timeout=timeout,
         )
         response.raise_for_status()
-        content = response.json()["message"]["content"].strip()
-        return content if content else None
+        message = response.json()["message"]
+        content = (message.get("content") or "").strip()
+        if not content:
+            reason = empty_answer_message(bool((message.get("thinking") or "").strip()))
+            logger.warning("_call_ollama: %s (model=%s)", reason, model)
+            record_failure_reason(reason)
+            return None
+        return content
     except Exception as exc:
         logger.warning("_call_ollama failed: [%s] %s", type(exc).__name__, exc)
         return None

@@ -7,7 +7,7 @@ from typing import Callable, Optional
 
 import httpx
 
-from .ollama_options import build_options
+from .ollama_options import build_options, empty_answer_message
 
 logger = logging.getLogger(__name__)
 
@@ -105,8 +105,11 @@ async def _clean_paragraph(
             },
         )
         response.raise_for_status()
-        cleaned = response.json()["message"]["content"].strip()
+        message = response.json()["message"]
+        cleaned = (message.get("content") or "").strip()
         if not cleaned:
+            logger.warning("Ollama gave no cleanup text for a paragraph: %s — keeping the original",
+                           empty_answer_message(bool((message.get("thinking") or "").strip())))
             return text
         # Normalize whitespace: collapse any internal newlines (single \n,
         # multiple \n) to a single space, then collapse runs of spaces.

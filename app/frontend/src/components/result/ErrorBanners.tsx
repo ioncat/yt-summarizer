@@ -43,21 +43,21 @@ export function ErrorBanners({ result, activeTab, downloadError, setDownloadErro
             {activeTab === 'cleaned' && (result.cleanup_status === 'failed' || cleanupError) && (
               <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3">
                 <p className="text-body-sm text-on-error-container">
-                  {cleanupError || 'Cleanup failed. Possible causes: Ollama not running, no model selected, or model timed out on large paragraphs. Check backend log.'}
+                  {cleanupError || result.cleanup_error || 'Cleanup failed. Possible causes: Ollama not running, no model selected, or model timed out on large paragraphs. Check backend log.'}
                 </p>
               </div>
             )}
             {activeTab === 'summary' && (result.summary_status === 'failed' || summaryError) && (
               <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3">
                 <p className="text-body-sm text-on-error-container">
-                  {summaryError || 'Summarization failed. Possible causes: Ollama not running, no model selected, or a stage timed out. For very long texts try a stronger model or wait for hierarchical map-reduce.'}
+                  {summaryError || result.summary_error || 'Summarization failed. Possible causes: Ollama not running, no model selected, or a stage timed out. For very long texts try a stronger model or wait for hierarchical map-reduce.'}
                 </p>
               </div>
             )}
             {activeTab === 'mindmap' && (result.mindmap_status === 'failed' || mindmapError) && (
               <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3">
                 <p className="text-body-sm text-on-error-container">
-                  {mindmapError || 'Mind map generation failed. Check Ollama and model settings.'}
+                  {mindmapError || result.mindmap_error || 'Mind map generation failed. Check Ollama and model settings.'}
                 </p>
               </div>
             )}

@@ -57,7 +57,7 @@ export function TabContent({ result, activeTab, markdownEnabled, setMarkdownEnab
                 </div>
               ) : result.mindmap_status === 'failed' || mindmapError ? (
                 <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3 text-on-error-container text-body-sm">
-                  {mindmapError || 'Mind map generation failed. Check Ollama and model settings.'}
+                  {mindmapError || result.mindmap_error || 'Mind map generation failed. Check Ollama and model settings.'}
                 </div>
               ) : result.mindmap_text ? (
                 <Suspense fallback={<div className="py-8 text-center text-secondary text-body-md">Loading…</div>}>
