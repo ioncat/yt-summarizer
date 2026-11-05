@@ -486,12 +486,26 @@ export interface QueueItem {
   progress: string | null
 }
 
+export interface QueueDuplicate {
+  url: string | null
+  video_id: string
+  reason: 'processed' | 'in_queue'
+}
+
+export interface QueueAddResult {
+  added: number
+  ids: number[]
+  invalid: string[]
+  duplicates: string[]
+  duplicate_details?: QueueDuplicate[]  // video id and reason per duplicate, from the server's own parser
+}
+
 export async function queueBulkAdd(
   urls: string[],
   pipeline_stages?: string[],
   force = false,
   language?: string,
-): Promise<{ added: number; ids: number[]; invalid: string[]; duplicates: string[] }> {
+): Promise<QueueAddResult> {
   const res = await fetch(`${BASE}/queue/bulk`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

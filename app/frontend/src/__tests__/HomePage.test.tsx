@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import HomePage from '../pages/HomePage'
+import * as api from '../api'
 
 // Mock the entire api module so no actual fetch calls are made
 vi.mock('../api', () => ({
@@ -66,5 +67,56 @@ describe('HomePage', () => {
     // There are multiple buttons; at least one should match common submit labels
     const buttons = screen.getAllByRole('button')
     expect(buttons.length).toBeGreaterThan(0)
+  })
+})
+
+
+function Where() {
+  return <div data-testid="where">{useLocation().pathname}</div>
+}
+
+async function submitUrl(url: string) {
+  render(
+    <MemoryRouter>
+      <Routes>
+        <Route path="*" element={<><HomePage /><Where /></>} />
+      </Routes>
+    </MemoryRouter>
+  )
+  fireEvent.change(screen.getByPlaceholderText(/youtube\.com\/watch/i), { target: { value: url } })
+  fireEvent.change(screen.getByLabelText('Pipeline'), { target: { value: 'cleanup' } })  // 2 stages: through the queue
+  fireEvent.submit(screen.getByPlaceholderText(/youtube\.com\/watch/i).closest('form')!)
+}
+
+describe('HomePage: a link that is already known (NS-24a)', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it.each([
+    ['https://www.youtube.com/live/Ifr9JgTm2TE', 'Ifr9JgTm2TE'],
+    ['https://youtu.be/Ifr9JgTm2TE', 'Ifr9JgTm2TE'],
+    ['https://www.youtube.com/shorts/Ifr9JgTm2TE', 'Ifr9JgTm2TE'],
+  ])('opens /result/<video id> for %s, never /result/<the whole url>', async (url, id) => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({
+      added: 0, ids: [], invalid: [], duplicates: [url],
+      duplicate_details: [{ url, video_id: id, reason: 'processed' }],
+    })
+    await submitUrl(url)
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe(`/result/${id}`))
+  })
+
+  it('goes to the queue when the link is already waiting there', async () => {
+    const url = 'https://youtu.be/Ifr9JgTm2TE'
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({
+      added: 0, ids: [], invalid: [], duplicates: [url],
+      duplicate_details: [{ url, video_id: 'Ifr9JgTm2TE', reason: 'in_queue' }],
+    })
+    await submitUrl(url)
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/queue'))
+  })
+
+  it('goes to the queue after a normal add', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({ added: 1, ids: [5], invalid: [], duplicates: [], duplicate_details: [] })
+    await submitUrl('https://youtu.be/newVideo001')
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/queue'))
   })
 })

@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { processVideo, processFile, getSettings, getHealth, AllSettings, queueBulkAdd, VideoAlreadyExistsError, downloadDirect } from '../api'
+import { processVideo, processFile, getSettings, getHealth, AllSettings, queueBulkAdd, QueueAddResult, VideoAlreadyExistsError, downloadDirect } from '../api'
 
 type InputMode = 'url' | 'file'
 
@@ -63,6 +63,12 @@ export default function HomePage() {
   const [bulkError, setBulkError] = useState('')
 
   const navigate = useNavigate()
+
+  // A duplicate carries its video id from the server (links like /live/, youtu.be/ and /shorts/ have no ?v=)
+  function afterQueueAdd(res: QueueAddResult) {
+    const dup = res.duplicate_details?.[0]
+    navigate(dup?.reason === 'processed' ? `/result/${dup.video_id}` : '/queue')
+  }
 
   function extractUrlFromLine(line: string): string {
     const match = line.match(/https?:\/\/[^\s|"'<>]+/)
@@ -147,12 +153,7 @@ export default function HomePage() {
       const firstStage = useStt ? 'transcribe' : 'extract'
       try {
         const res = await queueBulkAdd([trimmedUrl], [firstStage, 'cleanup', 'summary', 'mindmap'], false, language || undefined)
-        if (res.duplicates?.length) {
-          const vid = res.duplicates[0].replace(/.*[?&]v=/, '').replace(/[&?].*/, '')
-          navigate(`/result/${vid}`)
-          return
-        }
-        navigate('/queue')
+        afterQueueAdd(res)
       } catch (err) {
         console.error('[Home] queueBulkAdd failed:', err)
         setError(err instanceof Error ? err.message : 'Failed to add to queue')
@@ -168,12 +169,7 @@ export default function HomePage() {
         storeAutoDownloadIntent()
         try {
           const res = await queueBulkAdd([trimmedUrl], stages, false, language || undefined)
-          if (res.duplicates?.length) {
-            const vid = res.duplicates[0].replace(/.*[?&]v=/, '').replace(/[&?].*/, '')
-            navigate(`/result/${vid}`)
-            return
-          }
-          navigate('/queue')
+          afterQueueAdd(res)
         } catch (err) {
           console.error('[Home] queueBulkAdd failed:', err)
           setError(err instanceof Error ? err.message : 'Failed to add to queue')
