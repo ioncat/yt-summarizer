@@ -101,7 +101,9 @@ async def seeded_video(db_session):
 
     yield {"video_id": "dQw4w9WgXcQ", "db_id": video.id, "fmt_id": fmt.id}
 
-    # Cleanup — delete in reverse FK order
+    # Cleanup — delete in reverse FK order (and the per-stage runs the test left for this video id)
+    from sqlalchemy import text
+    await db_session.execute(text("DELETE FROM processing_stages WHERE video_id = 'dQw4w9WgXcQ'"))
     await db_session.delete(fmt)
     await db_session.delete(video)
     await db_session.commit()

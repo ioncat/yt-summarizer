@@ -35,8 +35,14 @@ async def fmt_count(video_id: str = VIDEO_ID) -> int:
 
 
 async def set_fmt(video_id: str = VIDEO_ID, **cols) -> None:
+    """Set old per-stage columns of the newest row. The result API reads the stage table first (NS-25), so the runs of
+    every stage whose columns are set here are dropped: the columns this test just wrote are then what the API says."""
     sets = ", ".join(f"{k} = :{k}" for k in cols)
     async with AsyncSessionLocal() as db:
+        for stage in ("cleanup", "summary", "mindmap"):
+            if any(k.startswith(stage + "_") for k in cols):
+                await db.execute(text("DELETE FROM processing_stages WHERE video_id = :v AND stage = :s"),
+                                 {"v": video_id, "s": stage})
         await db.execute(
             text(
                 f"UPDATE subtitles_formatted SET {sets} WHERE video_id IN "

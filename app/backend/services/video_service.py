@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.models import Video, SubtitleRaw, SubtitleFormatted, ProcessingTask, PipelineSettings, AppSetting
 from models.models import generate_id
 from services import stage_runs
+from services.stage_view import legacy_fields, load_runs, stages_view
 from services.text_cleaner import DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE
 from services.text_summarizer import (
     DEFAULT_SYSTEM_PROMPT as DEFAULT_SUMMARY_SYSTEM_PROMPT,
@@ -166,6 +167,7 @@ async def complete_task(
     task.progress = 100
     task.completed_at = datetime.utcnow()
 
+    await stage_runs.forget_results(db, m.video_id)  # a new text row starts with no cleanup / summary / mind map
     await db.commit()
 
 
@@ -208,7 +210,8 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
             return int((finished - started).total_seconds())
         return None
 
-    return {
+    runs = await load_runs(db, video.video_id)
+    result = {
         "video_id": video.video_id,
         "url": video.url,
         "title": video.title,
@@ -257,6 +260,10 @@ async def get_result(db: AsyncSession, video_id: str) -> dict | None:
         "transcription_device": fmt.transcription_device if fmt else None,
         "transcription_finished_at": fmt.transcription_finished_at.isoformat() if fmt and fmt.transcription_finished_at else None,
     }
+    # NS-25: the per-stage table is read first; a stage with no run keeps what the old columns say
+    result.update(legacy_fields(runs))
+    result["stages"] = stages_view(runs)
+    return result
 
 
 async def get_history(
@@ -741,6 +748,7 @@ async def replace_subtitles_after_reextract(
             processing_status="success",
         ))
 
+    await stage_runs.forget_results(db, video_id)  # the derived results above are gone: so are their runs
     await db.commit()
 
 
@@ -833,6 +841,7 @@ async def delete_video(db: AsyncSession, video_id: str) -> bool:
     await db.execute(delete(SubtitleRaw).where(SubtitleRaw.video_id == video.id))
     await db.execute(delete(SubtitleFormatted).where(SubtitleFormatted.video_id == video.id))
     await db.execute(delete(ProcessingTask).where(ProcessingTask.video_id == video.id))
+    await stage_runs.forget_video(db, video.video_id)
     await db.delete(video)
     await db.commit()
     return True

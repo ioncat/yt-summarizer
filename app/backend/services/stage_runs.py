@@ -120,6 +120,22 @@ async def cancel(db: AsyncSession, video_id: str, stage: str) -> bool:
     return True
 
 
+async def forget_results(db: AsyncSession, video_id: str) -> int:
+    """The video's text was replaced (re-extract): the cleanup / summary / mind map runs belonged to the old text and are
+    dropped, as the old columns are cleared. Extract / transcribe runs stay. Returns how many rows were removed."""
+    res = await db.execute(
+        text("DELETE FROM processing_stages WHERE video_id = :v AND stage IN ('cleanup', 'summary', 'mindmap')"),
+        {"v": video_id},
+    )
+    return res.rowcount
+
+
+async def forget_video(db: AsyncSession, video_id: str) -> int:
+    """The video is deleted: all its runs go with it."""
+    res = await db.execute(text("DELETE FROM processing_stages WHERE video_id = :v"), {"v": video_id})
+    return res.rowcount
+
+
 async def recorded(stage: str, url: str, item_id: int, run):
     """Run the extract / transcribe step of a queue item (`run` is a coroutine function) and record it as a stage run.
 
