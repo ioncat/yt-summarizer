@@ -23,9 +23,10 @@ async def add_by_video_ids(db: AsyncSession, video_ids: list[str], stages: list[
     queued again, but the OTHER requested stages still are (a queued mind map no longer blocks "cleanup then summarize").
     duplicates: every requested stage is covered, nothing was added; missing: no such result in History;
     covered: {video_id: [the requested stages that were already queued]}, for duplicates and partly covered videos;
-    blocked: {video_id: [stages]} - nothing is added for these: a requested stage is already queued but a stage that must
-    run BEFORE it is not (a summary is queued, "cleanup then summarize" is asked): queuing the cleanup behind it would
-    run the summary on the raw text first and never redo it on the cleaned text. They are also listed in duplicates.
+    blocked: {video_id: [queued stages]} - nothing is added for these: a stage that would be added must run BEFORE a stage
+    that is already queued for the video, asked for or not (a summary or a mind map is queued, "cleanup then summarize" is
+    asked): queued behind it, the cleanup would run after them and they would never be redone on its result. They are also
+    listed in duplicates.
     The stages of a new item are marked 'processing' at once, so a stage that never gets to run (an earlier one failed)
     ends with a reason instead of an idle status. Order of the given ids is kept; an id listed twice is queued once.
     """
@@ -63,9 +64,9 @@ async def add_by_video_ids(db: AsyncSession, video_ids: list[str], stages: list[
         if not todo:
             duplicates.append(vid)
             continue
-        out_of_order = [s for s in already if any(p in todo for p in _before(s))]
-        if out_of_order:
-            blocked[vid] = out_of_order
+        in_the_way = later_stages_queued(queued_stages.get(vid, set()), todo)
+        if in_the_way:
+            blocked[vid] = in_the_way
             duplicates.append(vid)
             continue
         url, db_id = found[vid]
@@ -89,9 +90,45 @@ async def add_by_video_ids(db: AsyncSession, video_ids: list[str], stages: list[
     return {"ids": ids, "duplicates": duplicates, "missing": missing, "covered": covered, "blocked": blocked}
 
 
-def _before(stage: str) -> tuple[str, ...]:
-    """The stages that must run before `stage` (the ones that come earlier in RESULT_STAGES)."""
-    return RESULT_STAGES[:RESULT_STAGES.index(stage)] if stage in RESULT_STAGES else ()
+_LABEL = {"cleanup": "cleanup", "summary": "summary", "mindmap": "mind map"}
+
+
+def later_stages_queued(queued: set[str], to_add: list[str]) -> list[str]:
+    """The queued stages that come AFTER a stage that is about to be added (they would run first, on the old result)."""
+    first = min((RESULT_STAGES.index(s) for s in to_add if s in RESULT_STAGES), default=None)
+    if first is None:
+        return []
+    return [q for q in RESULT_STAGES[first + 1:] if q in queued]
+
+
+def order_message(blockers: list[str], to_add: list[str]) -> str:
+    """What to tell the user when `blockers` are queued and `to_add` would have to run before them."""
+    names = " and ".join(_LABEL.get(s, s) for s in blockers)
+    before = " and ".join(_LABEL.get(s, s) for s in to_add)
+    return (f"A {names} is already queued and would run before the {before}: "
+            "wait for it or remove it on the Queue page, then try again.")
+
+
+async def queued_stages_of(db: AsyncSession, video_id: str) -> set[str]:
+    """Every stage that a pending / processing item of the video includes."""
+    stages: set[str] = set()
+    for (item_stages,) in (await db.execute(
+        text("SELECT pipeline_stages FROM processing_queue WHERE video_id = :v AND status IN ('pending', 'processing')"),
+        {"v": video_id},
+    )).fetchall():
+        stages.update(json.loads(item_stages) if item_stages else ["extract"])
+    return stages
+
+
+async def ensure_stage_order(db: AsyncSession, video_id: str, stage: str) -> None:
+    """The single-stage buttons: refuse (409) when a stage that comes after `stage` is already queued for the video."""
+    from fastapi import HTTPException
+    queued = await queued_stages_of(db, video_id)
+    if stage in queued:
+        return                  # an item already has this stage: the click adds nothing, so nothing can run out of order
+    blockers = later_stages_queued(queued, [stage])
+    if blockers:
+        raise HTTPException(status_code=409, detail=order_message(blockers, [stage]))
 
 
 async def _mark_queued(db: AsyncSession, video_id: str, stages: list[str], item_id: int) -> None:

@@ -39,12 +39,14 @@ async def runs(stage):
             {"v": VIDEO_ID, "s": stage})).mappings().all()]
 
 
-async def test_a_queued_mind_map_does_not_block_cleanup_then_summarize(client, seeded_video):
-    first = await add(client, ["mindmap"])
-    assert first["added"] == 1
+async def test_a_queued_extract_does_not_block_cleanup_then_summarize(client, seeded_video):
+    async with AsyncSessionLocal() as db:
+        await db.execute(text("INSERT INTO processing_queue (url, video_id, status, pipeline_stages, added_at, sort_order) "
+                              f"VALUES ('https://www.youtube.com/watch?v={VIDEO_ID}', '{VIDEO_ID}', 'pending', '[\"extract\"]', datetime('now'), 1)"))
+        await db.commit()
     second = await add(client, ["cleanup", "summary"])
     assert second["added"] == 1 and second["duplicates"] == []
-    assert [stages for _, stages in await items()] == [["mindmap"], ["cleanup", "summary"]]
+    assert [stages for _, stages in await items()] == [["extract"], ["cleanup", "summary"]]
 
 
 async def test_only_the_stages_not_yet_queued_are_added_and_the_response_names_the_covered_ones(client, seeded_video):
@@ -102,7 +104,10 @@ async def test_a_queued_summary_blocks_cleanup_then_summarize_instead_of_running
     await add(client, ["summary"])
     again = await add(client, ["cleanup", "summary"])
     assert again["added"] == 0 and again["duplicates"] == [VIDEO_ID]
-    assert again["duplicate_details"] == [{"url": None, "video_id": VIDEO_ID, "reason": "order", "stages": ["summary"]}]
+    (detail,) = again["duplicate_details"]
+    assert (detail["reason"], detail["stages"]) == ("order", ["summary"])
+    assert detail["message"] == ("A summary is already queued and would run before the cleanup and summary: "
+                                 "wait for it or remove it on the Queue page, then try again.")
     assert [stages for _, stages in await items()] == [["summary"]]              # nothing was queued behind it
     fmt = await fmt_row()
     assert fmt["cleanup_status"] is None                                          # and no stage was marked
@@ -127,3 +132,50 @@ async def test_a_queued_cleanup_never_blocks_anything_after_it(client, seeded_vi
     again = await add(client, ["cleanup", "summary", "mindmap"])
     assert again["added"] == 1
     assert [stages for _, stages in await items()] == [["cleanup"], ["summary", "mindmap"]]
+
+
+async def test_a_queued_mind_map_blocks_cleanup_then_summarize_even_though_it_was_not_asked_for(client, seeded_video):
+    await add(client, ["mindmap"])
+    again = await add(client, ["cleanup", "summary"])
+    assert again["added"] == 0 and again["duplicates"] == [VIDEO_ID]
+    (detail,) = again["duplicate_details"]
+    assert (detail["reason"], detail["stages"]) == ("order", ["mindmap"])
+    assert "mind map is already queued and would run before the cleanup and summary" in detail["message"]
+    assert [stages for _, stages in await items()] == [["mindmap"]]
+
+
+async def test_a_queued_summary_blocks_a_new_cleanup_but_a_queued_cleanup_does_not_block_a_new_summary(client, seeded_video):
+    await add(client, ["summary"])
+    blocked = await add(client, ["cleanup"])
+    assert blocked["added"] == 0 and blocked["duplicate_details"][0]["reason"] == "order"
+    await reset_queue()
+    await add(client, ["cleanup"])
+    assert (await add(client, ["summary", "mindmap"]))["added"] == 1
+
+
+# --- the single-stage buttons follow the same rule -----------------------------------------------------------
+
+async def test_the_cleanup_button_is_refused_while_a_summary_or_mind_map_is_queued(client, seeded_video):
+    await client.put("/api/settings/cleanup", json={"model": "m"})
+    await add(client, ["summary"])
+    r = await client.post(f"/api/result/{VIDEO_ID}/cleanup")
+    assert r.status_code == 409 and "summary is already queued and would run before the cleanup" in r.json()["detail"]
+    assert [stages for _, stages in await items()] == [["summary"]]
+    assert (await fmt_row())["cleanup_status"] is None
+
+
+async def test_the_summary_button_is_refused_while_a_mind_map_is_queued_but_not_while_a_cleanup_is(client, seeded_video):
+    await client.put("/api/settings/summarization", json={"model": "m"})
+    await add(client, ["mindmap"])
+    r = await client.post(f"/api/result/{VIDEO_ID}/summary")
+    assert r.status_code == 409 and "mind map is already queued and would run before the summary" in r.json()["detail"]
+    await reset_queue()
+    await add(client, ["cleanup"])
+    assert (await client.post(f"/api/result/{VIDEO_ID}/summary")).status_code == 200
+
+
+async def test_a_button_whose_stage_is_already_queued_adds_nothing_and_is_not_refused(client, seeded_video):
+    await client.put("/api/settings/cleanup", json={"model": "m"})
+    await add(client, ["cleanup", "summary"])
+    r = await client.post(f"/api/result/{VIDEO_ID}/cleanup")
+    assert r.status_code == 200 and len(await items()) == 1

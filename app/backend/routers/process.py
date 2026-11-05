@@ -350,7 +350,7 @@ async def queue_bulk_add(
     At most 500 urls and 500 video_ids per request.
     """
     from services.queue_service import add_items, add_items_unique, get_duplicate_reasons
-    from services.queue_by_id import RESULT_STAGES, add_by_video_ids
+    from services.queue_by_id import RESULT_STAGES, add_by_video_ids, order_message
     from services.db_retry import retry_locked
     import json as _json
 
@@ -433,7 +433,8 @@ async def queue_bulk_add(
         duplicate_details += [
             {"url": None, "video_id": v,
              "reason": "order" if v in by_id["blocked"] else "in_queue",     # "order": a later stage is queued, its prerequisite is not
-             "stages": by_id["blocked"].get(v) or by_id["covered"].get(v, [])}
+             "stages": by_id["blocked"].get(v) or by_id["covered"].get(v, []),
+             **({"message": order_message(by_id["blocked"][v], body.pipeline_stages)} if v in by_id["blocked"] else {})}
             for v in by_id["duplicates"]]
         missing = by_id["missing"]
 

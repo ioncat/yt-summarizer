@@ -612,7 +612,7 @@ export async function queueBulkAddByIds(
   video_ids: string[],
   pipeline_stages: string[],
 ): Promise<{ added: number; ids: number[]; invalid: string[]; duplicates: string[]; missing: string[]
-  duplicate_details?: Array<{ url: string | null; video_id: string | null; reason: string; stages?: string[] }> }> {
+  duplicate_details?: Array<{ url: string | null; video_id: string | null; reason: string; stages?: string[]; message?: string }> }> {
   const res = await fetchWithTimeout(`${BASE}/queue/bulk`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

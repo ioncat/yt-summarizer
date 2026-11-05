@@ -21,6 +21,7 @@ from services.subtitle_extractor import extract_subtitles, extract_video_id, val
 from services.stage_control import (
     CLEANUP_CANCEL, CLEANUP_PROGRESS, MINDMAP_CANCEL, SUMMARY_CANCEL, SUMMARY_PROGRESS,
 )
+from services.queue_by_id import ensure_stage_order
 from services.video_service import (
     delete_video,
     get_app_setting,
@@ -118,6 +119,7 @@ async def trigger_cleanup(
     if not await get_result(db, video_id):
         raise HTTPException(status_code=404, detail="Result not found")
     _CANCEL_SET.discard(video_id)  # clear any stale cancel flag before starting
+    await ensure_stage_order(db, video_id, "cleanup")  # 409 when a summary / mind map is queued: it would run on the old text
     # queue first: if the database is busy nothing has changed (503); the status is set right after, and again by the
     # stage itself when it starts
     item_id = await retry_locked(lambda: enqueue_stage(db, video_id, "cleanup"), db, "cleanup: queue")
@@ -344,6 +346,7 @@ async def trigger_summary(
     if not await get_result(db, video_id):
         raise HTTPException(status_code=404, detail="Result not found")
     _SUMMARY_CANCEL_SET.discard(video_id)
+    await ensure_stage_order(db, video_id, "summary")  # 409 when a mind map is queued: it would be built from the old summary
     # queue first: if the database is busy nothing has changed (503); the status is set right after, and again by the
     # stage itself when it starts
     item_id = await retry_locked(lambda: enqueue_stage(db, video_id, "summary"), db, "summary: queue")

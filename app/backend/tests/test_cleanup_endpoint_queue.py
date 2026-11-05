@@ -75,9 +75,13 @@ async def test_clicks_at_the_same_moment_queue_one_item(client, seeded_video):
 
 
 async def test_an_item_for_other_stages_does_not_stand_in_for_the_cleanup(client, seeded_video):
-    await add_item(["summary"])
-    await client.post(f"{URL}/cleanup")
-    assert sorted(i["pipeline_stages"] for i in await _items()) == [["cleanup"], ["summary"]]
+    await add_item(["extract", "mindmap"])                  # a queued mind map would run before the new cleanup
+    r = await client.post(f"{URL}/cleanup")
+    assert r.status_code == 409                             # NS-25: it would run before the cleanup (see the order tests)
+    await reset_queue()
+    await add_item(["extract"])                             # an item that has no LLM stage after the cleanup does not block it
+    assert (await client.post(f"{URL}/cleanup")).status_code == 200
+    assert sorted(i["pipeline_stages"] for i in await _items()) == [["cleanup"], ["extract"]]
 
 
 async def test_an_item_that_already_includes_the_cleanup_stage_stands_in_for_it(client, seeded_video):
