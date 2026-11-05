@@ -7,7 +7,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import get_db
@@ -321,9 +321,12 @@ async def delete_stt_model(
 # Queue endpoints (Epic 34)
 # ---------------------------------------------------------------------------
 
+MAX_BULK_ITEMS = 500  # per request, for urls and for video_ids each
+
+
 class BulkQueueRequest(BaseModel):
-    urls: list[str] = []
-    video_ids: list[str] = []  # results already in History (also local files), queued by id; LLM stages only
+    urls: list[str] = Field(default_factory=list, max_length=MAX_BULK_ITEMS)
+    video_ids: list[str] = Field(default_factory=list, max_length=MAX_BULK_ITEMS)  # results already in History (also local files), queued by id; LLM stages only
     pipeline_stages: list[str] | None = None  # defaults to app_settings queue_default_pipeline
     force: bool = False  # skip dedup check (e.g. re-run stages on already-processed videos)
     language: str | None = None  # subtitle language; None → "auto" (auto-detect)

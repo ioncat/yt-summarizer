@@ -167,3 +167,21 @@ async def test_a_local_file_queued_through_the_endpoint_is_processed_end_to_end(
         item = await _run_worker(item_id)
     assert item["status"] == "done" and item["video_id"] == LOCAL_ID
     assert (await fmt_row(LOCAL_ID))["cleaned_text"] == "Cleaned local text."
+
+
+# --- a request is capped at 500 urls and 500 video_ids ---------------------------------
+
+async def test_bulk_add_takes_500_urls_but_refuses_501(client):
+    urls = [f"https://www.youtube.com/watch?v=cap{i:08d}" for i in range(501)]
+    assert (await client.post("/api/queue/bulk", json={"urls": urls})).status_code == 422
+    assert (await client.get("/api/queue")).json()["items"] == []  # nothing half-added
+    ok = await client.post("/api/queue/bulk", json={"urls": urls[:500]})
+    assert ok.status_code == 200 and ok.json()["added"] == 500
+
+
+async def test_bulk_add_refuses_501_video_ids(client):
+    ids = [f"file-{i:08d}" for i in range(501)]
+    r = await client.post("/api/queue/bulk", json={"video_ids": ids, "pipeline_stages": ["cleanup"]})
+    assert r.status_code == 422
+    ok = await client.post("/api/queue/bulk", json={"video_ids": ids[:500], "pipeline_stages": ["cleanup"]})
+    assert ok.status_code == 200 and ok.json()["added"] == 0 and len(ok.json()["missing"]) == 500
