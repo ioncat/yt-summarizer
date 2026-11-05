@@ -7,7 +7,7 @@ from typing import Callable, Optional
 import httpx
 from services.http_client import http_client
 
-from .ollama_options import build_options, empty_answer_message, record_failure_reason
+from .ollama_options import build_options, empty_answer_message, record_failure_reason, record_llm_exception
 from .text_utils import normalize_chapter_headings
 
 logger = logging.getLogger(__name__)
@@ -202,6 +202,7 @@ async def _call_ollama(
         return content
     except Exception as exc:
         logger.warning("_call_ollama failed: [%s] %s", type(exc).__name__, exc)
+        record_llm_exception(exc, model)
         return None
 
 

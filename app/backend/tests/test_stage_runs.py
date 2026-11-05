@@ -270,3 +270,44 @@ async def test_a_failed_mind_map_run_and_a_mind_map_queued_by_id_keep_the_model_
     await run_queued_stage(VIDEO_ID, "mindmap")
     (r,) = await rows("mindmap")
     assert (r["status"], r["model"]) == ("failed", "map-model")
+
+
+# --- a model that Ollama does not have says so (NS-25 QA) -------------------------------------------------------
+
+MODEL_GONE = httpx.Response(404, json={"error": "model 'ghost:1b' not found"})
+
+
+@respx.mock
+async def test_a_summary_with_a_model_ollama_does_not_have_says_so_and_is_model_missing(client, seeded_video):
+    respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
+    respx.post(OLLAMA_CHAT).mock(return_value=MODEL_GONE)
+    await client.put("/api/settings/summarization", json={"model": "ghost:1b"})
+    await client.post(f"/api/result/{VIDEO_ID}/summary")
+    await run_queued_stage(VIDEO_ID, "summary")
+    (r,) = await rows("summary")
+    assert (r["status"], r["error_text"], r["error_code"]) == ("failed", "Model 'ghost:1b' not found in Ollama", "model_missing")
+    got = (await client.get(f"/api/result/{VIDEO_ID}")).json()
+    assert got["summary_error"] == "Model 'ghost:1b' not found in Ollama"
+    assert (await fmt_row())["summary_error"] == "Model 'ghost:1b' not found in Ollama"
+
+
+@respx.mock
+async def test_a_mind_map_with_a_model_ollama_does_not_have_says_so_too(client, seeded_video):
+    respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
+    respx.post(OLLAMA_CHAT).mock(return_value=MODEL_GONE)
+    await client.put("/api/settings/summarization", json={"model": "ghost:1b"})
+    await client.post(f"/api/result/{VIDEO_ID}/mindmap")
+    await run_queued_stage(VIDEO_ID, "mindmap")
+    (r,) = await rows("mindmap")
+    assert (r["status"], r["error_text"], r["error_code"]) == ("failed", "Model 'ghost:1b' not found in Ollama", "model_missing")
+
+
+@respx.mock
+async def test_an_unreachable_ollama_keeps_the_old_generic_reason(client, seeded_video):
+    respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
+    respx.post(OLLAMA_CHAT).mock(side_effect=httpx.ConnectError("refused"))
+    await client.put("/api/settings/summarization", json={"model": "m"})
+    await client.post(f"/api/result/{VIDEO_ID}/summary")
+    await run_queued_stage(VIDEO_ID, "summary")
+    (r,) = await rows("summary")
+    assert "not found" not in r["error_text"] and "unreachable" in r["error_text"]

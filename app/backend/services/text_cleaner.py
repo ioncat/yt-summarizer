@@ -8,7 +8,7 @@ from typing import Callable, Optional
 import httpx
 from services.http_client import http_client
 
-from .ollama_options import build_options, empty_answer_message, record_failure_reason
+from .ollama_options import build_options, empty_answer_message, record_failure_reason, record_llm_exception
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +131,7 @@ async def _clean_paragraph(
         return cleaned if cleaned else text
     except Exception as exc:
         logger.warning("Ollama failed on paragraph: %s", exc)
+        record_llm_exception(exc, model)
         return text
 
 

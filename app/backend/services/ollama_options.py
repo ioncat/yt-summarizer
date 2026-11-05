@@ -73,6 +73,16 @@ def record_failure_reason(message: str) -> None:
         box.append(message)
 
 
+def record_llm_exception(exc: Exception, model: str | None) -> None:
+    """An LLM call raised: record a reason the user can act on, where the exception says what is wrong.
+
+    Ollama answers HTTP 404 on /api/chat when the model is not installed: "Model 'x' not found in Ollama" (instead of the
+    generic "may be unreachable, or the model returned nothing"). Other exceptions record nothing here."""
+    response = getattr(exc, "response", None)
+    if getattr(response, "status_code", None) == 404:
+        record_failure_reason(f"Model '{model}' not found in Ollama")
+
+
 def llm_failure_reason() -> str | None:
     box = _failure_reason.get()
     return box[0] if box else None
