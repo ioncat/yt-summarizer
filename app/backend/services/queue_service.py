@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import AsyncSessionLocal
 from services.ollama_options import begin_llm_run, llm_failure_reason
-from services.queue_by_id import release_mindmap_status
+from services.queue_by_id import STAGE_COLUMNS, release_stage_status
 from services.stage_control import MINDMAP_CANCEL, SUMMARY_CANCEL, SUMMARY_PROGRESS, StageCancelled
 
 logger = logging.getLogger("queue_service")
@@ -195,26 +195,28 @@ async def delete_item(db: AsyncSession, item_id: int) -> str:
         text("DELETE FROM processing_queue WHERE id = :id"), {"id": item_id}
     )
     await db.commit()
-    if row[1] and '"mindmap"' in (row[2] or ""):
-        await release_mindmap_status(db, row[1])  # it was to run the mind map: the status must not stay 'processing'
+    if row[1]:
+        for stage in STAGE_COLUMNS:
+            if f'"{stage}"' in (row[2] or ""):
+                await release_stage_status(db, row[1], stage)  # it was to run this stage: no status stuck 'processing'
     return "deleted"
 
 
 async def clear_pending(db: AsyncSession) -> int:
     """Delete all pending items. Returns deleted count."""
-    mind_map_videos = {
-        r[0] for r in (await db.execute(
-            text("SELECT video_id FROM processing_queue WHERE status = 'pending' "
-                 "AND pipeline_stages LIKE :has AND video_id IS NOT NULL"),
-            {"has": '%"mindmap"%'},
+    removed = [
+        (r[0], r[1] or "") for r in (await db.execute(
+            text("SELECT video_id, pipeline_stages FROM processing_queue WHERE status = 'pending' "
+                 "AND video_id IS NOT NULL"),
         )).fetchall()
-    }
+    ]
     result = await db.execute(
         text("DELETE FROM processing_queue WHERE status = 'pending'")
     )
     await db.commit()
-    for video_id in mind_map_videos:
-        await release_mindmap_status(db, video_id)  # their mind maps will never run: no stuck 'processing'
+    for stage in STAGE_COLUMNS:
+        for video_id in {v for v, stages in removed if f'"{stage}"' in stages}:
+            await release_stage_status(db, video_id, stage)  # that stage will never run: no stuck 'processing'
     return result.rowcount
 
 
@@ -337,20 +339,26 @@ async def _set_done(item_id: int, video_id: str | None, db_video_id: str | None)
         await db.commit()
 
 
-async def _release_unrun_mindmap(video_id: str | None, url: str, stages: list[str], reason: str) -> None:
-    if "mindmap" not in stages:
+_STAGE_LABELS = {"summary": "Summary", "mindmap": "Mind map"}
+
+
+async def _release_unrun_stages(video_id: str | None, url: str, stages: list[str], reason: str) -> None:
+    wanted = [s for s in STAGE_COLUMNS if s in stages]
+    if not wanted:
         return
     if not video_id:
         from services.subtitle_extractor import extract_video_id
         video_id = extract_video_id(url)
     if not video_id:
         return
-    try:
-        async with AsyncSessionLocal() as db:
-            await release_mindmap_status(
-                db, video_id, status="failed", error=f"Mind map did not run: an earlier stage failed ({reason[:300]})")
-    except Exception:  # noqa: BLE001 - the item is already marked failed; this is only tidying
-        logger.exception("Queue worker: could not release the mind map status of %s", video_id)
+    for stage in wanted:
+        try:
+            async with AsyncSessionLocal() as db:
+                await release_stage_status(
+                    db, video_id, stage, status="failed",
+                    error=f"{_STAGE_LABELS[stage]} did not run: an earlier stage failed ({reason[:300]})")
+        except Exception:  # noqa: BLE001 - the item is already marked failed; this is only tidying
+            logger.exception("Queue worker: could not release the %s status of %s", stage, video_id)
 
 
 async def _set_skipped(item_id: int, message: str) -> None:
@@ -800,10 +808,10 @@ async def queue_worker() -> None:
         except Exception as e:
             logger.error("Queue worker: item %d failed: %s", item_id, e, exc_info=True)
             await _set_failed(item_id, str(e))
-            # A mind map that was queued (status 'processing') inside this multi-stage item and never got to run because
-            # an earlier stage failed: say so instead of leaving 'processing' without an owner. A failure of the mind map
+            # A summary / mind map that was queued (status 'processing') inside this multi-stage item and never got to run
+            # because an earlier stage failed: say so instead of leaving 'processing' without an owner. A failure of the
             # stage itself already set 'failed', so nothing changes then.
-            await _release_unrun_mindmap(item.get("video_id"), url, pipeline_stages, str(e))
+            await _release_unrun_stages(item.get("video_id"), url, pipeline_stages, str(e))
 
         # Brief pause between items to avoid hammering Ollama immediately
         await asyncio.sleep(1)
