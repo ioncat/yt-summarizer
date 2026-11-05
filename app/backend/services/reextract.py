@@ -12,11 +12,13 @@ import logging
 import os
 
 from services import file_stt
+from services.stage_control import TRANSCRIBE_CANCEL, StageCancelled
 from services.subtitle_extractor import extract_subtitles
 from sqlalchemy import text
 
 from services.video_service import get_app_setting, get_result, replace_subtitles_after_reextract
 
+STOPPED_MESSAGE = "Re-extract stopped"
 FILE_GONE = "The uploaded file is no longer on disk (deleted by the auto-delete setting?): upload it again to re-transcribe"
 REEXTRACT_STAGE = "reextract"       # the name inside a queue item's pipeline_stages
 
@@ -54,6 +56,26 @@ async def reextract_queued(db, video_id: str) -> bool:
     )).first() is not None
 
 
+async def stop_reextract(db, video_id: str) -> str:
+    """Stop button: "stopped" (a queued re-extract was removed), "stopping" (a running one was told to stop) or "none". Either way
+    nothing is replaced: the saved subtitles and what was made from them stay."""
+    from services.queue_service import delete_item
+    row = (await db.execute(
+        text("SELECT id, status, url FROM processing_queue WHERE video_id = :v AND status IN ('pending', 'processing') "
+             "AND pipeline_stages LIKE '%\"reextract\"%' ORDER BY id DESC LIMIT 1"), {"v": video_id},
+    )).first()
+    if row is None:
+        return "none"
+    if row[1] == "processing":
+        TRANSCRIBE_CANCEL.add(video_id)
+        return "stopping"
+    if await delete_item(db, row[0]) == "deleted":
+        await _record(video_id, run_stage_of(row[2]), "cancelled")      # its run, opened on the request, ends with it
+        return "stopped"
+    TRANSCRIBE_CANCEL.add(video_id)          # it started in the meantime: tell the running one
+    return "stopping"
+
+
 async def run_queued_reextract(item: dict) -> dict:
     """Run one queued re-extract (called by the queue worker). Returns {"video_id", "db_video_id"}; raises ReextractFailed."""
     from models.database import AsyncSessionLocal
@@ -73,9 +95,14 @@ async def run_queued_reextract(item: dict) -> dict:
         await db.commit()
     try:
         outcome = await run_reextract(video_id, item.get("language") or "auto", model)
+    except StageCancelled:
+        await _record(video_id, stage, "cancelled")
+        raise
     except ReextractFailed as exc:
         await _record(video_id, stage, "failed", error=str(exc), model=model)
         raise
+    finally:
+        TRANSCRIBE_CANCEL.discard(video_id)      # a Stop that came too late must not stop the next run
     await _record(video_id, stage, "done", model=outcome.get("model"), device=outcome.get("device"), started_at=outcome.get("started_at"))
     return {"video_id": video_id, "db_video_id": item.get("db_video_id")}
 
@@ -114,6 +141,9 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
 
     _REEXTRACT_SET.add(video_id)
     try:
+        if video_id in TRANSCRIBE_CANCEL:
+            TRANSCRIBE_CANCEL.discard(video_id)
+            raise StageCancelled(STOPPED_MESSAGE)        # Stop came before the work began
         async with AsyncSessionLocal() as db:
             fmt = await get_result(db, video_id)
             if not fmt:
@@ -154,6 +184,8 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
             _RETRANSCRIBE_PROGRESS[video_id] = "starting…"
 
             def _on_retranscribe_progress(n: int, cur_s: float = 0.0, tot_s: float = 0.0) -> None:
+                if video_id in TRANSCRIBE_CANCEL:
+                    raise file_stt.TranscriptionStopped(STOPPED_MESSAGE)   # Stop: the engine ends after the segment in hand
                 pct = f" · {int(cur_s / tot_s * 100)}%" if tot_s > 0 else ""
                 _RETRANSCRIBE_PROGRESS[video_id] = f"segment {n}{pct}"
 
@@ -166,6 +198,9 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
                 on_progress=_on_retranscribe_progress,
             )
             _RETRANSCRIBE_PROGRESS.pop(video_id, None)
+            if video_id in TRANSCRIBE_CANCEL:
+                TRANSCRIBE_CANCEL.discard(video_id)
+                raise StageCancelled(STOPPED_MESSAGE)        # Stop pressed (decision 1): nothing is replaced
             if not transcription.success:
                 _reextract_logger.warning(
                     "retranscribe: failed video_id=%s model=%s language=%s device=%s error=%s",
@@ -228,6 +263,9 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
         extraction = await asyncio.to_thread(
             extract_subtitles, url, language, cookies_path, ytdlp_path
         )
+        if video_id in TRANSCRIBE_CANCEL:
+            TRANSCRIBE_CANCEL.discard(video_id)
+            raise StageCancelled(STOPPED_MESSAGE)            # Stop pressed while yt-dlp ran: its result is thrown away
         if not extraction.success:
             _reextract_logger.warning(
                 "reextract: extraction failed video_id=%s error_type=%s message=%s available=%s",
@@ -245,7 +283,7 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
         async with AsyncSessionLocal() as db:
             await replace_subtitles_after_reextract(db, video_id, extraction, formatted)
         return {}
-    except ReextractFailed:
+    except (ReextractFailed, StageCancelled):
         raise
     except Exception as exc:
         _reextract_logger.exception("reextract: unexpected error video_id=%s", video_id)

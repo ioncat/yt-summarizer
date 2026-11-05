@@ -42,7 +42,7 @@ from routers.download import _mp4_format_spec
 from routers.settings import _uploads_dir
 from services import reextract as reextract_service
 from services.queue_by_id import RESULT_STAGES, queued_stages_of
-from services.reextract import enqueue_reextract, reextract_queued
+from services.reextract import enqueue_reextract, reextract_queued, stop_reextract
 
 logger = logging.getLogger("api")
 
@@ -176,6 +176,16 @@ async def trigger_reextract(
             )
     await enqueue_reextract(db, video_id, await _db_id(db, video_id), url, body.language, body.model)
     return {"status": "reextracting"}
+
+
+@router.delete("/result/{video_id}/reextract")
+async def stop_reextract_endpoint(video_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Stop a re-extract / re-transcribe: a queued one leaves the queue, a running one ends after the segment in hand. Either way
+    nothing is replaced: the saved subtitles and what was made from them stay (NS-11 decision 1)."""
+    outcome = await stop_reextract(db, video_id)
+    if outcome == "none":
+        raise HTTPException(status_code=404, detail="No re-extract is queued or running for this video")
+    return {"status": outcome}
 
 
 @router.post("/result/{video_id}/summary")
