@@ -1,7 +1,7 @@
-"""NS-11 stage 6, commit 1 (tests only): what re-extract / re-transcribe (POST /api/result/{id}/reextract) does TODAY.
+"""NS-11 stage 6: re-extract / re-transcribe (POST /api/result/{id}/reextract).
 
-It runs as a BackgroundTask (the POST returns when it is over); the user is told nothing when it fails. Cases the owner decisions
-change are marked `# BASELINE: known bug`; they are rewritten in the commit that changes the behaviour.
+Written as a baseline of the BackgroundTask version (the POST returned when it was over; a failure was only a log line); the cases the
+owner decisions changed are marked in their comments and now describe the queue behaviour.
 """
 import asyncio
 import os
@@ -16,7 +16,7 @@ from models.database import AsyncSessionLocal
 from services.subtitle_extractor import ExtractionResult, ExtractionErrorType, SubtitleEntry, VideoMetadata
 from services.transcriber import TranscriptionResult
 from tests import conftest as ct
-from tests.baseline_helpers import VIDEO_ID, fmt_count, fmt_row, set_fmt
+from tests.baseline_helpers import VIDEO_ID, fmt_count, fmt_row, run_reextract_items, set_fmt
 
 LOCAL_ID = "file-abcd1234"
 
@@ -83,6 +83,7 @@ async def test_retranscribe_replaces_the_text_in_place_and_clears_what_was_made_
     await client.put("/api/settings/app", json={"stt_model": "base", "stt_device": "cpu"})
     with patch("services.transcriber.transcribe", stt()):
         r = await client.post(f"/api/result/{LOCAL_ID}/reextract", json={"language": "auto", "model": "small"})
+        await run_reextract_items(LOCAL_ID)             # NS-11 stage 6: a queue item, the worker does it
     assert r.status_code == 200 and r.json() == {"status": "reextracting"}
     row = await fmt_row(LOCAL_ID)
     assert "NEW TRANSCRIPT" in row["formatted_text"] and row["subtitle_source"] == "transcript" and row["language"] == "en"
@@ -95,28 +96,32 @@ async def test_retranscribe_uses_the_setting_when_the_request_names_no_model(cli
     await client.put("/api/settings/app", json={"stt_model": "base", "stt_device": "cpu"})
     with patch("services.transcriber.transcribe", stt()):
         await client.post(f"/api/result/{LOCAL_ID}/reextract", json={})
+        await run_reextract_items(LOCAL_ID)
     assert (await fmt_row(LOCAL_ID))["transcription_model"] == "base"
 
 
-async def test_a_failed_retranscription_keeps_everything_and_tells_nobody(client, local_video):
-    # BASELINE: known bug - the POST says 200 "reextracting", the failure is only logged, the page just stops showing progress
-    # (decision 5: becomes an explicit failure with the reason).
+async def test_a_failed_retranscription_keeps_everything_and_the_item_says_why(client, local_video):
+    # NS-11 stage 6 (decision 5): this used to be only a log line (BASELINE: known bug)
     with patch("services.transcriber.transcribe", stt(segments=[], ok=False, error="model files are missing")):
         r = await client.post(f"/api/result/{LOCAL_ID}/reextract", json={})
+        (item,) = await run_reextract_items(LOCAL_ID)
     assert r.status_code == 200
+    assert item["status"] == "failed" and item["error_message"] == "model files are missing"
     row = await fmt_row(LOCAL_ID)
     assert (row["formatted_text"], row["cleaned_text"], row["summary_text"]) == ("OLD TRANSCRIPT", "OLD CLEAN", "OLD SUMMARY")
-    got = (await client.get(f"/api/result/{LOCAL_ID}")).json()
-    assert not got.get("reextract_in_progress") and "model files are missing" not in str(got)
+    assert not (await client.get(f"/api/result/{LOCAL_ID}")).json().get("reextract_in_progress")
 
 
-async def test_a_silent_file_wipes_the_transcript_today(client, local_video):
-    # BASELINE: known bug - no speech found (success, no segments) replaces the transcript with an empty one and clears the cleaned
-    # text, the summary and the map (decision 5/failed run keeps the old transcript: becomes a failure, nothing replaced).
+async def test_a_silent_file_fails_the_item_and_replaces_nothing(client, local_video):
+    # NS-11 stage 6: no speech found (success, no segments) used to replace the transcript with an empty one and clear the cleaned
+    # text, the summary and the map (BASELINE: known bug); now it is a failure and the old data stays.
     with patch("services.transcriber.transcribe", stt(segments=[])):
         await client.post(f"/api/result/{LOCAL_ID}/reextract", json={})
+        (item,) = await run_reextract_items(LOCAL_ID)
+    assert item["status"] == "failed" and item["error_message"] == "No speech was found in the file"
     row = await fmt_row(LOCAL_ID)
-    assert not row["formatted_text"] and row["cleaned_text"] is None and row["summary_text"] is None
+    assert (row["formatted_text"], row["cleaned_text"], row["summary_text"], row["mindmap_text"]) == (
+        "OLD TRANSCRIPT", "OLD CLEAN", "OLD SUMMARY", "OLD MAP")
 
 
 async def test_the_page_sees_a_running_retranscription_and_its_segments(client, local_video):
@@ -129,7 +134,8 @@ async def test_the_page_sees_a_running_retranscription_and_its_segments(client, 
         return stt()(path, language, model, device, cache_path, on_progress)
 
     with patch("services.transcriber.transcribe", slow):
-        post = asyncio.create_task(client.post(f"/api/result/{LOCAL_ID}/reextract", json={}))
+        await client.post(f"/api/result/{LOCAL_ID}/reextract", json={})
+        post = asyncio.create_task(run_reextract_items(LOCAL_ID))
         await asyncio.get_running_loop().run_in_executor(None, started.wait, 5)
         got = (await client.get(f"/api/result/{LOCAL_ID}")).json()
         assert got["reextract_in_progress"] is True and got["retranscribe_progress"] == "segment 4 · 50%"
@@ -140,9 +146,9 @@ async def test_the_page_sees_a_running_retranscription_and_its_segments(client, 
     assert not (await client.get(f"/api/result/{LOCAL_ID}")).json().get("reextract_in_progress")
 
 
-async def test_a_file_that_vanished_after_the_check_is_a_silent_no_op(client, local_video):
-    # BASELINE: known bug - the endpoint found the file (200), but by the time the task runs it is gone: only a warning is logged and
-    # the old transcript stays; nobody is told (the review's "silent no-op").
+async def test_a_file_that_vanished_after_the_check_fails_the_item_with_a_clear_message(client, local_video):
+    # NS-11 stage 6: the endpoint found the file (200), but by the time the worker runs it is gone. This used to be only a logged
+    # warning, nobody was told (the review's "silent no-op", BASELINE: known bug); now the item fails and says why.
     real_glob = __import__("glob").glob
 
     calls = {"n": 0}
@@ -153,7 +159,9 @@ async def test_a_file_that_vanished_after_the_check_is_a_silent_no_op(client, lo
 
     with patch("glob.glob", vanishing), patch("services.transcriber.transcribe", stt()):
         r = await client.post(f"/api/result/{LOCAL_ID}/reextract", json={})
+        (item,) = await run_reextract_items(LOCAL_ID)
     assert r.status_code == 200 and (await fmt_row(LOCAL_ID))["formatted_text"] == "OLD TRANSCRIPT"
+    assert item["status"] == "failed" and "no longer on disk" in item["error_message"]
 
 
 # --- the conflicts the endpoint refuses ------------------------------------------------------------------------
@@ -172,18 +180,21 @@ async def test_reextract_of_a_youtube_video_replaces_the_text_in_place_and_clear
     await set_fmt(VIDEO_ID, cleaned_text="OLD CLEAN", cleanup_status="done", summary_text="OLD SUMMARY", summary_status="done")
     with patch("services.reextract.extract_subtitles", return_value=yt()):
         r = await client.post(f"/api/result/{VIDEO_ID}/reextract", json={"language": "auto"})
+        await run_reextract_items(VIDEO_ID)
     assert r.status_code == 200
     row = await fmt_row(VIDEO_ID)
     assert "NEW YT TEXT" in row["formatted_text"] and row["cleaned_text"] is None and row["summary_text"] is None
     assert row["id"] == youtube_video["fmt_id"] and await fmt_count(VIDEO_ID) == 1
 
 
-async def test_a_failed_youtube_reextract_keeps_everything_and_tells_nobody(client, youtube_video):
-    # BASELINE: known bug - same silence as for a file (decision 5).
+async def test_a_failed_youtube_reextract_keeps_everything_and_the_item_says_why(client, youtube_video):
+    # NS-11 stage 6: the same silence as for a file used to be here (BASELINE: known bug).
     await set_fmt(VIDEO_ID, cleaned_text="OLD CLEAN", cleanup_status="done")
     before = (await fmt_row(VIDEO_ID))["formatted_text"]
     with patch("services.reextract.extract_subtitles", return_value=yt(ok=False, error="This video has no subtitles available.")):
         r = await client.post(f"/api/result/{VIDEO_ID}/reextract", json={})
+        (item,) = await run_reextract_items(VIDEO_ID)
     assert r.status_code == 200
+    assert item["status"] == "failed" and item["error_message"] == "This video has no subtitles available."
     row = await fmt_row(VIDEO_ID)
     assert (row["formatted_text"], row["cleaned_text"]) == (before, "OLD CLEAN")

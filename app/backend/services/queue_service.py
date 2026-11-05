@@ -22,6 +22,7 @@ from models.database import AsyncSessionLocal
 from services.ollama_options import begin_llm_run, llm_failure_reason
 from services import stage_runs
 from services.file_stt import LOCAL_PREFIX, release_upload, run_queued_file, transcribe_text
+from services.reextract import run_queued_reextract
 from services.stage_progress import ProgressWriter
 from services.queue_by_id import STAGE_COLUMNS, release_stage_status
 from services.stage_control import (
@@ -908,7 +909,13 @@ async def queue_worker() -> None:
 
         try:
             # Stage 1: transcribe OR extract (mutually exclusive) — skip for already-processed videos
-            if "transcribe" in pipeline_stages and url.startswith(LOCAL_PREFIX):
+            if "reextract" in pipeline_stages:
+                # a re-extract / re-transcribe of a video that is in History (NS-11 stage 6): replaces its text in place
+                _QUEUE_PROGRESS[item_id] = "re-extracting…"
+                reextract_result = await run_queued_reextract(item)
+                yt_video_id = reextract_result["video_id"]
+                db_video_id = reextract_result["db_video_id"]
+            elif "transcribe" in pipeline_stages and url.startswith(LOCAL_PREFIX):
                 # an uploaded file (NS-11 stage 5): the audio is on disk, the item names it by video_id
                 _QUEUE_PROGRESS[item_id] = "transcribing…"
                 file_result = await run_queued_file(item)

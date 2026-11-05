@@ -14,7 +14,7 @@ import pytest
 import pytest_asyncio
 
 from tests.baseline_helpers import (
-    VIDEO_ID, Gate, benchmark_rows, clear_router_state, fmt_count, fmt_row, reset_benchmarks, set_fmt,
+    VIDEO_ID, Gate, benchmark_rows, clear_router_state, fmt_count, fmt_row, reset_benchmarks, run_reextract_items, set_fmt,
 )
 
 URL = f"/api/result/{VIDEO_ID}"
@@ -489,6 +489,7 @@ async def test_reextract_replaces_text_and_clears_all_derived_data(client, video
                   mindmap_text="M", mindmap_status="done")
     with patch("services.reextract.extract_subtitles", return_value=_extraction()):
         r = await client.post(f"{URL}/reextract", json={"language": "en"})
+        await run_reextract_items(VIDEO_ID)      # NS-11 stage 6: a queue item; the worker does it
     assert r.status_code == 200 and r.json() == {"status": "reextracting"}
     row = await fmt_row()
     assert "Fresh subtitle line." in row["formatted_text"] and row["language"] == "en"
@@ -505,15 +506,16 @@ async def test_reextract_refused_409_while_cleanup_or_summary_processing(client,
     assert (await client.post(f"{URL}/reextract", json={})).status_code == 409
 
 
-async def test_reextract_failed_extraction_changes_nothing_and_reports_nothing(client, video_with_raw_cleanup):
-    # BASELINE: known bug — failure is only a log line; the caller got 200 and the old text stays
-    # correct: the failure is visible to the caller (status/error), the old text may stay (NS-16)
+async def test_reextract_failed_extraction_changes_nothing_and_the_queue_item_says_why(client, video_with_raw_cleanup):
+    # NS-11 stage 6 (decision 5): this used to be only a log line (BASELINE: known bug); now the item fails with the message
     failed = SimpleNamespace(success=False, error_type="x", error_message="boom",
                              available_languages=[], language=None, subtitles=[], metadata=None)
     before = (await fmt_row())["formatted_text"]
     with patch("services.reextract.extract_subtitles", return_value=failed):
         r = await client.post(f"{URL}/reextract", json={})
+        (item,) = await run_reextract_items(VIDEO_ID)
     assert r.status_code == 200
+    assert item["status"] == "failed" and item["error_message"] == "boom"
     assert (await fmt_row())["formatted_text"] == before
     assert "reextract_in_progress" not in (await client.get(URL)).json()
 
@@ -530,13 +532,15 @@ async def test_reextract_second_request_while_running_is_409_and_flag_visible(cl
         return _extraction()
 
     with patch("services.reextract.extract_subtitles", slow_extract):
-        t1 = asyncio.create_task(client.post(f"{URL}/reextract", json={}))
+        assert (await client.post(f"{URL}/reextract", json={})).status_code == 200     # queued: answers at once
+        assert (await client.get(URL)).json()["reextract_in_progress"] is True          # visible while it waits ...
+        assert (await client.post(f"{URL}/reextract", json={})).status_code == 409      # ... and a second one is refused
+        worker = asyncio.create_task(run_reextract_items(VIDEO_ID))
         await asyncio.wait_for(started.wait(), 5)
-        data = (await client.get(URL)).json()
-        assert data["reextract_in_progress"] is True
+        assert (await client.get(URL)).json()["reextract_in_progress"] is True          # ... and while it runs
         assert (await client.post(f"{URL}/reextract", json={})).status_code == 409
         release.set()
-        assert (await t1).status_code == 200
+        await worker
     assert "reextract_in_progress" not in (await client.get(URL)).json()
 
 

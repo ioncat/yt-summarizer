@@ -13,6 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTask
 
@@ -40,7 +41,8 @@ from services.video_service import (
 from routers.download import _mp4_format_spec
 from routers.settings import _uploads_dir
 from services import reextract as reextract_service
-from services.reextract import run_reextract
+from services.queue_by_id import RESULT_STAGES, queued_stages_of
+from services.reextract import enqueue_reextract, reextract_queued
 
 logger = logging.getLogger("api")
 
@@ -63,7 +65,7 @@ async def get_video_result(video_id: str, db: Annotated[AsyncSession, Depends(ge
         raise HTTPException(status_code=404, detail="Result not found")
     # (the live cleanup / summary counters come with the result: get_result reads them from the stage's run row)
     # Flag if a re-extract / re-transcription is currently running
-    if video_id in _REEXTRACT_SET:
+    if video_id in _REEXTRACT_SET or await reextract_queued(db, video_id):
         result["reextract_in_progress"] = True
         retranscribe_progress = _RETRANSCRIBE_PROGRESS.get(video_id)
         if retranscribe_progress:
@@ -134,14 +136,19 @@ class ReextractRequest(BaseModel):
     model: str | None = None
 
 
+async def _db_id(db: AsyncSession, video_id: str) -> str | None:
+    return (await db.execute(
+        text("SELECT id FROM videos WHERE video_id = :v AND url NOT LIKE '__pending__%'"), {"v": video_id})).scalar()
+
+
 @router.post("/result/{video_id}/reextract")
 async def trigger_reextract(
     video_id: str,
     body: ReextractRequest,
-    background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Re-fetch subtitles for an existing video. Invalidates cleanup/summary."""
+    """Re-fetch subtitles (YouTube) or re-transcribe (uploaded file) for an existing video; invalidates what was made from the old
+    text. The work is a queue item (NS-11 stage 6): the answer comes at once, the queue worker does it in its turn."""
     fmt = await get_result(db, video_id)
     if not fmt:
         raise HTTPException(status_code=404, detail="Video not found")
@@ -149,8 +156,13 @@ async def trigger_reextract(
         raise HTTPException(status_code=409, detail="Cleanup is in progress — cancel first")
     if fmt.get("summary_status") == "processing":
         raise HTTPException(status_code=409, detail="Summarization is in progress — cancel first")
-    if video_id in _REEXTRACT_SET:
+    if video_id in _REEXTRACT_SET or await reextract_queued(db, video_id):
         raise HTTPException(status_code=409, detail="Re-extract already in progress")
+    queued = await queued_stages_of(db, video_id)
+    if queued & set(RESULT_STAGES):
+        names = " and ".join(sorted(queued & set(RESULT_STAGES)))
+        raise HTTPException(status_code=409, detail=f"A {names} is already queued for this video and would work on the old text: "
+                                                    "wait for it or remove it on the Queue page, then try again.")
     # For local files: verify the original upload still exists before queuing
     url = fmt.get("url", "") or ""
     if url.startswith("local://") and video_id.startswith("file-"):
@@ -162,7 +174,7 @@ async def trigger_reextract(
                 status_code=422,
                 detail="Original file not found — it was deleted after transcription. Upload the file again to re-transcribe.",
             )
-    background_tasks.add_task(run_reextract, video_id, body.language, body.model)
+    await enqueue_reextract(db, video_id, await _db_id(db, video_id), url, body.language, body.model)
     return {"status": "reextracting"}
 
 

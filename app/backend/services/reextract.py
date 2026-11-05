@@ -1,6 +1,9 @@
 """Re-extract subtitles (YouTube) or re-transcribe (uploaded file) of a video that is already in History (NS-11 stage 6).
 
-Moved here from routers/result.py (it was a BackgroundTask there); later stage-6 commits turn it into a queue stage.
+A re-extract is a queue item (stages ["reextract"], url = the video's url, video_id and db_video_id = the video in History, the
+language in the item, the speech-to-text model asked for in the stage's run row); the queue worker runs it with run_queued_reextract().
+The data is replaced IN PLACE (decision 7), and only by a run that worked; every failure is explicit (ReextractFailed with the
+message the queue item shows) and leaves the saved subtitles, the cleaned text, the summary and the map as they were.
 """
 from __future__ import annotations
 
@@ -10,7 +13,60 @@ import os
 
 from services import file_stt
 from services.subtitle_extractor import extract_subtitles
+from sqlalchemy import text
+
 from services.video_service import get_app_setting, get_result, replace_subtitles_after_reextract
+
+FILE_GONE = "The uploaded file is no longer on disk (deleted by the auto-delete setting?): upload it again to re-transcribe"
+REEXTRACT_STAGE = "reextract"       # the name inside a queue item's pipeline_stages
+
+
+class ReextractFailed(RuntimeError):
+    """The re-extract could not be done; the message is what the queue item shows. Nothing was replaced."""
+
+
+def run_stage_of(url: str | None) -> str:
+    """The stage a re-extract of this video records its run under: an uploaded file is re-transcribed, a YouTube video re-extracted."""
+    return "transcribe" if (url or "").startswith(file_stt.LOCAL_PREFIX) else "extract"
+
+
+async def enqueue_reextract(db, video_id: str, db_video_id: str, url: str, language: str, model: str | None) -> int:
+    """Queue the re-extract of a video that is in History. Returns the queue item's id. The stage's run opens at once (status
+    "processing" on the request, decision 3); it carries the speech-to-text model that was asked for."""
+    from services import stage_runs
+    res = await db.execute(
+        text("INSERT INTO processing_queue (url, video_id, db_video_id, status, pipeline_stages, language, added_at, sort_order) "
+             "VALUES (:url, :vid, :dbid, 'pending', :stages, :lang, datetime('now'), "
+             "(SELECT COALESCE(MAX(sort_order), 0) + 1 FROM processing_queue))"),
+        {"url": url, "vid": video_id, "dbid": db_video_id, "stages": '["reextract"]', "lang": language},
+    )
+    run_model = model or (await get_app_setting(db, "stt_model") or "base" if run_stage_of(url) == "transcribe" else None)
+    await stage_runs.begin(db, video_id, run_stage_of(url), run_model, res.lastrowid)
+    await db.commit()
+    return res.lastrowid
+
+
+async def reextract_queued(db, video_id: str) -> bool:
+    """Is a re-extract of this video waiting in the queue or running?"""
+    return (await db.execute(
+        text("SELECT 1 FROM processing_queue WHERE video_id = :v AND status IN ('pending', 'processing') "
+             "AND pipeline_stages LIKE '%\"reextract\"%' LIMIT 1"), {"v": video_id},
+    )).first() is not None
+
+
+async def run_queued_reextract(item: dict) -> dict:
+    """Run one queued re-extract (called by the queue worker). Returns {"video_id", "db_video_id"}; raises ReextractFailed."""
+    from models.database import AsyncSessionLocal
+    video_id = item["video_id"]
+    async with AsyncSessionLocal() as db:
+        fmt = await get_result(db, video_id)
+        stage = run_stage_of(fmt["url"] if fmt else item.get("url"))
+        model = (await db.execute(
+            text("SELECT model FROM processing_stages WHERE video_id = :v AND stage = :s AND status = 'processing' "
+                 "ORDER BY id DESC LIMIT 1"), {"v": video_id, "s": stage},
+        )).scalar()
+    await run_reextract(video_id, item.get("language") or "auto", model)
+    return {"video_id": video_id, "db_video_id": item.get("db_video_id")}
 
 _reextract_logger = logging.getLogger("api.reextract")
 
@@ -33,7 +89,7 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
             fmt = await get_result(db, video_id)
             if not fmt:
                 _reextract_logger.warning("reextract: video not found video_id=%s", video_id)
-                return
+                raise ReextractFailed("The video is not in History (deleted after the re-extract was queued?)")
             url = fmt["url"]
 
         if url and url.startswith("local://"):
@@ -52,7 +108,7 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
                     "retranscribe: file not found video_id=%s uuid_prefix=%s uploads_dir=%s",
                     video_id, uuid_prefix, uploads_dir,
                 )
-                return
+                raise ReextractFailed(FILE_GONE)
             audio_path = matches[0]
 
             async with AsyncSessionLocal() as db:
@@ -86,7 +142,7 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
                     "retranscribe: failed video_id=%s model=%s language=%s device=%s error=%s",
                     video_id, stt_model, language, stt_device, transcription.error_message,
                 )
-                return
+                raise ReextractFailed(transcription.error_message or "Transcription failed")
 
             detected_language = transcription.detected_language or (language if language != "auto" else "und")
             re_segments = transcription.segments or []
@@ -102,6 +158,9 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
                 for s in re_segments
                 if s.get("text", "").strip()
             ]
+            if not entries:
+                # decision 5: a silent skip becomes a failure; the saved transcript (and what was made from it) is NOT replaced
+                raise ReextractFailed("No speech was found in the file")
             audio_duration = int(re_segments[-1]["end"]) if re_segments and re_segments[-1].get("end") else None
             title = os.path.splitext(original_filename)[0]
             metadata = VideoMetadata(
@@ -145,7 +204,7 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
                 "reextract: extraction failed video_id=%s error_type=%s message=%s available=%s",
                 video_id, extraction.error_type, extraction.error_message, extraction.available_languages,
             )
-            return
+            raise ReextractFailed(extraction.error_message or "The subtitles could not be extracted")
         _reextract_logger.info(
             "reextract: success video_id=%s detected_lang=%s entries=%d",
             video_id, extraction.language, len(extraction.subtitles or []),
@@ -156,8 +215,11 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
         )
         async with AsyncSessionLocal() as db:
             await replace_subtitles_after_reextract(db, video_id, extraction, formatted)
-    except Exception:
+    except ReextractFailed:
+        raise
+    except Exception as exc:
         _reextract_logger.exception("reextract: unexpected error video_id=%s", video_id)
+        raise ReextractFailed(str(exc)[:500]) from exc
     finally:
         _REEXTRACT_SET.discard(video_id)
         _RETRANSCRIBE_PROGRESS.pop(video_id, None)

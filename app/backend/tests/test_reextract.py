@@ -73,8 +73,16 @@ async def test_reextract_youtube_video(client, seeded_video):
         )
         assert r.status_code == 200
         assert r.json()["status"] == "reextracting"
-        # Let the background task run and exit cleanly inside the patch scope
-        await asyncio.sleep(0.2)
+        # The queue worker runs it (NS-11 stage 6) and the failure ends the item with the message
+        from tests.baseline_helpers import run_reextract_items
+        (item,) = await run_reextract_items(seeded_video["video_id"])
+        assert item["status"] == "failed" and item["error_message"] == "mocked — no yt-dlp in tests"
+    from sqlalchemy import text
+    from models.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        await db.execute(text("DELETE FROM processing_queue WHERE video_id = :v"), {"v": seeded_video["video_id"]})
+        await db.execute(text("DELETE FROM processing_stages WHERE video_id = :v"), {"v": seeded_video["video_id"]})
+        await db.commit()
 
 
 @pytest.mark.asyncio
