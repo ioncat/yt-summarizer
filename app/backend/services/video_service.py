@@ -267,13 +267,22 @@ async def get_history(
 ) -> dict:
     offset = (page - 1) * page_size
     base = select(Video).where(~Video.url.startswith("__pending__"))
-    if search:
-        q = f"%{search}%"
-        base = base.where(Video.title.ilike(q) | Video.author.ilike(q))
     if favorites_only:
         base = base.where(Video.is_favorite == True)  # noqa: E712
-    stmt = base.order_by(Video.created_at.desc()).offset(offset).limit(page_size)
-    rows = (await db.execute(stmt)).scalars().all()
+    if search:
+        # Matched in Python: SQLite's LIKE/ILIKE folds only ASCII, so "борщ" would miss "Борщ". No LIKE
+        # either, so "%" and "_" in the query are plain characters.
+        from services.text_search import fold
+        needle = fold(search)
+        cols = base.with_only_columns(Video.id, Video.title, Video.author).order_by(Video.created_at.desc())
+        matched = [r.id for r in (await db.execute(cols)).all()
+                   if needle in fold(r.title or "") or needle in fold(r.author or "")]
+        page_ids = matched[offset:offset + page_size]
+        by_id = {v.id: v for v in (await db.execute(select(Video).where(Video.id.in_(page_ids)))).scalars().all()}
+        rows = [by_id[i] for i in page_ids if i in by_id]
+    else:
+        stmt = base.order_by(Video.created_at.desc()).offset(offset).limit(page_size)
+        rows = (await db.execute(stmt)).scalars().all()
 
     items = []
     for v in rows:

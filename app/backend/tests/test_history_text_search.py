@@ -115,3 +115,36 @@ async def test_the_query_is_data_not_sql_or_a_path(client, make_video):
         r = await client.get("/api/history/text-search", params={"q": q})
         assert r.status_code == 200 and r.json()["videos"] == []
     assert (await client.get("/api/history")).status_code == 200
+
+
+# --- title / author search folds Cyrillic case (NS-29 review fix) -------------------
+
+async def _titles(client, **params):
+    return [i["video_id"] for i in (await client.get("/api/history", params=params)).json()["items"]]
+
+
+async def test_history_search_finds_cyrillic_titles_and_authors_in_any_case(client, make_video):
+    await make_video("srchBorsh001", title="Борщ по-украински", author="Кулинарный Канал")
+    for q in ("борщ", "БОРЩ", "Борщ", "по-украински", "кулинарный канал"):
+        assert "srchBorsh001" in await _titles(client, search=q), q
+    assert "srchBorsh001" not in await _titles(client, search="щи")
+
+
+async def test_history_search_treats_percent_and_underscore_as_plain_characters(client, make_video):
+    await make_video("srchWild0001", title="Скидка 50% и_точка")
+    assert "srchWild0001" in await _titles(client, search="50%")
+    assert "srchWild0001" in await _titles(client, search="и_т")
+    assert await _titles(client, search="%%%") == []   # used to match every video
+    assert await _titles(client, search="___") == []
+
+
+async def test_history_search_pages_and_keeps_newest_first_and_the_favorites_filter(client, make_video):
+    for i in range(23):
+        await make_video(f"srchPage{i:03d}", title=f"Пагинация {i}", age_days=i)
+    first = await _titles(client, search="пагинация", page=1)
+    second = await _titles(client, search="пагинация", page=2)
+    assert first == [f"srchPage{i:03d}" for i in range(20)]
+    assert second == ["srchPage020", "srchPage021", "srchPage022"]
+    assert await _titles(client, search="пагинация", page=3) == []
+    assert await _titles(client, search="пагинация", favorites_only="true") == []
+    assert len(await _titles(client)) >= 20  # no search: the old path still pages

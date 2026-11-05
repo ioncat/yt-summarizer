@@ -22,7 +22,7 @@ PART_COLUMNS = {
 }
 
 
-def _fold(text: str) -> str:
+def fold(text: str) -> str:
     """Lower-case that keeps every character at its index (so positions stay valid)."""
     low = text.lower()
     if len(low) == len(text):
@@ -32,7 +32,7 @@ def _fold(text: str) -> str:
 
 def find_hits(text: str, query: str) -> tuple[int, int | None]:
     """(number of matches, position of the first one or None)."""
-    folded, needle = _fold(text), _fold(query)
+    folded, needle = fold(text), fold(query)
     first = folded.find(needle)
     if first < 0:
         return 0, None
