@@ -241,3 +241,26 @@ async def test_run_summary_success():
     assert "Summary complete" in result
     assert "This video is a great introduction to the topic." in result
     assert "vid123" in result
+
+
+# ─── the channel comes from the backend's `author` field ──────────────────────
+
+@pytest.mark.asyncio
+async def test_get_result_shows_the_channel_from_author():
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(f"{BASE}/api/result/vidA").mock(return_value=httpx.Response(200, json={
+            "video_id": "vidA", "title": "T", "author": "Real Channel", "summary_text": "S"}))
+        result = await get_result("vidA")
+    assert "Channel: Real Channel" in result
+
+
+@pytest.mark.asyncio
+async def test_search_history_uses_author_for_filter_and_listing():
+    items = [
+        {"video_id": "v1", "title": "One", "author": "Corey Schafer", "has_summary": True},
+        {"video_id": "v2", "title": "Two", "author": "Other", "has_summary": False},
+    ]
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(f"{BASE}/api/history?page=1").mock(return_value=httpx.Response(200, json={"items": items}))
+        result = await search_history(query="corey")
+    assert "One — Corey Schafer" in result and "Two" not in result

@@ -67,6 +67,11 @@ async def _poll_summary(client: httpx.AsyncClient, video_id: str) -> dict:
     raise TimeoutError(f"Summarization timed out after {POLL_TIMEOUT}s")
 
 
+def _channel(item: dict) -> str:
+    """The backend sends the channel as `author`."""
+    return item.get("author") or item.get("channel") or ""
+
+
 def _format_result(data: dict, include_text: bool = False) -> str:
     lines: list[str] = []
 
@@ -74,8 +79,9 @@ def _format_result(data: dict, include_text: bool = False) -> str:
     lines.append(f"# {title}")
 
     meta: list[str] = []
-    if data.get("channel"):
-        meta.append(f"Channel: {data['channel']}")
+    channel = _channel(data)
+    if channel:
+        meta.append(f"Channel: {channel}")
     if data.get("duration"):
         mins = int(data["duration"]) // 60
         meta.append(f"Duration: {mins} min")
@@ -188,7 +194,7 @@ async def search_history(query: str = "", limit: int = 20) -> str:
         q = query.lower()
         items = [
             i for i in items
-            if q in (i.get("title") or "").lower() or q in (i.get("channel") or "").lower()
+            if q in (i.get("title") or "").lower() or q in _channel(i).lower()
         ]
 
     items = items[:limit]
@@ -204,7 +210,7 @@ async def search_history(query: str = "", limit: int = 20) -> str:
         if item.get("has_cleaned"):
             flags.append("cleaned")
         flag_str = f" [{', '.join(flags)}]" if flags else ""
-        channel = f" — {item['channel']}" if item.get("channel") else ""
+        channel = f" — {_channel(item)}" if _channel(item) else ""
         lines.append(f"- {item.get('title', 'Unknown')}{channel}{flag_str}  (video_id: {item['video_id']})")
 
     return "\n".join(lines)
