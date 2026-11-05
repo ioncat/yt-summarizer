@@ -111,6 +111,8 @@ Stage 0 done 2026-11-01 (tests only, no production change): baseline tests `11d6
 Planned order (one commit per stage, review + QA after each): 0 delete the dead ProcessingPage chain; 1 queue items by `video_id` (local files) and fix the History bulk id; 2 mind map; 3 summary; 4 cleanup (DB-backed progress first); 5 file transcription; 6 re-extract/re-transcribe; 7 YouTube extract (`/api/process`, MCP and HomePage change with it)
 Labels: `by-backend` | Status: 🟡 Stage 0 done, decisions pending | Depends on: NS-12
 
+Stage 1 (commits f245cb1, 149206f, d3fba36, b5ec2b4): reviewed CLEAN, QA pending. Low findings left for later: no cap on `video_ids`/`urls` in `/api/queue/bulk` (40,000 ids give a 500; add `Field(max_length=500)`); `force` is ignored with `video_ids`; `duplicates` mixes URLs and ids; whitespace-only ids return 200 with added 0; no lock against two simultaneous bulk calls with the same id (one duplicate item at worst).
+
 ---
 
 ### After step 3 — small items unblocked by restructure
