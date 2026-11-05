@@ -61,9 +61,9 @@ async def test_many_rapid_updates_are_coalesced_and_the_last_value_always_lands(
     writes: list[tuple[int, int]] = []
     real = stage_progress.set_progress
 
-    async def counting(video_id, stage, done, total, unit=None):
+    async def counting(video_id, stage, done, total, unit=None, extra=None):
         writes.append((done, total))
-        return await real(video_id, stage, done, total, unit)
+        return await real(video_id, stage, done, total, unit, extra)
 
     w = ProgressWriter(VIDEO_ID, "cleanup", "paragraph", min_interval=0.3)
     with patch.object(stage_progress, "set_progress", counting):
@@ -183,3 +183,32 @@ async def test_the_queue_page_progress_of_a_running_item_comes_from_its_run_row(
     await set_progress(VIDEO_ID, "cleanup", 4, 7)
     items = {i["id"]: i for i in (await client.get("/api/queue")).json()["items"]}
     assert items[item]["progress"] == "cleanup: paragraph 4/7"                 # the unit word stays
+
+
+# --- extra meta and calls from the speech-to-text worker thread (NS-11 stage 5) ---------------------------------------
+
+async def test_set_progress_merges_extra_keys_into_the_meta_and_keeps_the_others():
+    await begin("transcribe")
+    await set_progress(VIDEO_ID, "transcribe", 5, 100, "s", {"segments": 3})
+    await set_progress(VIDEO_ID, "transcribe", 9, 100, None, {"segments": 4})
+    r = await row("transcribe")
+    assert (r["progress_done"], r["progress_total"]) == (9, 100)
+    assert json.loads(r["meta"]) == {"unit": "s", "segments": 4}
+
+
+async def test_the_writer_can_be_called_from_another_thread():
+    import threading
+    await begin("transcribe")
+    w = ProgressWriter(VIDEO_ID, "transcribe", "s", min_interval=0.0)       # created in the loop that will write
+
+    def engine():                                                              # like the speech-to-text engine in to_thread
+        for i in range(1, 6):
+            w.update(i * 2, 10, {"segments": i})
+
+    t = threading.Thread(target=engine)
+    t.start()
+    await asyncio.get_running_loop().run_in_executor(None, t.join)
+    await asyncio.sleep(0.1)
+    await w.close()
+    r = await row("transcribe")
+    assert (r["progress_done"], r["progress_total"]) == (10, 10) and json.loads(r["meta"])["segments"] == 5
