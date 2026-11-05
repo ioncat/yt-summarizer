@@ -16,6 +16,7 @@ import {
   getStatus,
   getQueue,
   ADD_TIMEOUT_MS,
+  UncertainAddError,
 } from '../api'
 
 function makeResponse(body: unknown, status = 200): Response {
@@ -247,9 +248,32 @@ describe('add and poll calls give up instead of hanging (NS-28)', () => {
     await p
   })
 
-  it('a server that is down gives "Cannot reach the server", not a raw TypeError', async () => {
+  it('a lost connection on an ADD says the link may have been added, not "backend not running"', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
-    await expect(queueBulkAdd(['x'])).rejects.toThrow('Cannot reach the server. Is the backend running?')
+    const err = await queueBulkAdd(['x']).catch(e => e)
+    expect(err).toBeInstanceOf(UncertainAddError)
+    expect(err.message).toBe('No answer from the server. The link may have been added: check the queue before retrying.')
+    await expect(queueBulkAddByIds(['file-1'], ['cleanup'])).rejects.toBeInstanceOf(UncertainAddError)
+  })
+
+  it('a timeout on an add is an UncertainAddError too; a server answer (even 503) is not', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', hangingFetch())
+    const timedOut = queueBulkAdd(['x']).catch(e => e)
+    await vi.advanceTimersByTimeAsync(40_001)
+    expect(await timedOut).toBeInstanceOf(UncertainAddError)
+    vi.useRealTimers()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({ detail: 'database busy, try again' }, 503)))
+    const busy = await queueBulkAdd(['x']).catch(e => e)
+    expect(busy).not.toBeInstanceOf(UncertainAddError)   // the server answered: the link was not added
+    expect(busy.message).toBe('database busy, try again')
+  })
+
+  it('polling the queue with the server down still says "Cannot reach the server"', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    const err = await getQueue().catch(e => e)
+    expect(err).not.toBeInstanceOf(UncertainAddError)
+    expect(err.message).toBe('Cannot reach the server. Is the backend running?')
   })
 
   it('a 503 "database busy" is shown as that text', async () => {

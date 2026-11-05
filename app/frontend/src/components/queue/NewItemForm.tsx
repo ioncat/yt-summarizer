@@ -1,6 +1,6 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AddOutcome, AddRow } from './useQueueAdd'
+import { AddOutcome, AddRow, Settled } from './useQueueAdd'
 
 function shortLink(url: string) {
   return url.length > 70 ? url.slice(0, 67) + '…' : url
@@ -9,31 +9,35 @@ function shortLink(url: string) {
 /** One link, the default pipeline (the Home page's choice), Enter adds it; the page stays where it is.
  *  Enter takes the text out of the field at once and sends it as its own "Adding..." row, so links typed in quick
  *  succession are all sent and a finishing request never wipes what has been typed since. */
-export default function NewItemForm({ add, rows, isAdding, onRetry, onDismiss, onClose }: {
+export default function NewItemForm({ add, rows, settled, isAdding, onRetry, onDismiss, onClose }: {
   add: (url: string) => Promise<AddOutcome | null>
   rows: AddRow[]
+  settled: Settled | null
   isAdding: (url: string) => boolean
   onRetry: (id: number) => void
   onDismiss: (id: number) => void
   onClose: () => void
 }) {
   const [url, setUrl] = useState('')
-  const [outcome, setOutcome] = useState<AddOutcome | null>(null)
   const busy = rows.some(r => r.state === 'adding')
   const sameLinkBusy = isAdding(url.trim())  // this very link has an "Adding..." row: Add and Enter do nothing
+
+  // A link that turned out to be queued / added / processed (also after a Retry) leaves no copy in the field.
+  useEffect(() => {
+    if (settled && settled.outcome.kind !== 'invalid') setUrl(cur => (cur.trim() === settled.url ? '' : cur))
+  }, [settled])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
     const link = url.trim()
     if (!link || isAdding(link)) return
     setUrl('')                                    // the link now lives in its own row; the field is free for the next one
-    setOutcome(null)
     const result = await add(link)
-    if (result === null) return  // already being sent (a second Enter before the first row was drawn)
-    setOutcome(result.kind === 'error' ? null : result)  // an error stays visible in its own row, with Retry
     // a link that is not a link comes back to the field for editing, unless something new was typed meanwhile
-    if (result.kind === 'invalid') setUrl(cur => (cur === '' ? link : cur))
+    if (result?.kind === 'invalid') setUrl(cur => (cur === '' ? link : cur))
   }
+
+  const outcome = settled?.outcome ?? null
 
   return (
     <form onSubmit={submit} className="px-6 py-4 border-b border-outline-variant bg-surface-container-low flex flex-col gap-2">
@@ -56,7 +60,7 @@ export default function NewItemForm({ add, rows, isAdding, onRetry, onDismiss, o
           Close
         </button>
       </div>
-      {outcome && (
+      {outcome && outcome.kind !== 'error' && (
         <p className={`text-body-sm ${outcome.kind === 'added' ? 'text-tertiary' : outcome.kind === 'invalid' ? 'text-error' : 'text-on-surface'}`} role="status">
           {outcome.kind === 'added' && 'Added to the queue.'}
           {outcome.kind === 'in_queue' && 'Already in the queue.'}
@@ -69,13 +73,14 @@ export default function NewItemForm({ add, rows, isAdding, onRetry, onDismiss, o
       {rows.length > 0 && (
         <ul className="flex flex-col gap-1" aria-label="Links being added">
           {rows.map(r => (
-            <li key={r.id} data-testid="adding-row" className="flex items-center gap-3 text-body-sm">
+            <li key={r.id} data-testid="adding-row" className="flex items-center gap-3 text-body-sm flex-wrap">
               <span className="material-symbols-outlined text-[18px] text-secondary">{r.state === 'adding' ? 'sync' : 'error'}</span>
               <span className="font-mono text-on-surface-variant" title={r.url}>{shortLink(r.url)}</span>
               {r.state === 'adding' && <span className="text-secondary">Adding…</span>}
               {r.state === 'failed' && (
                 <>
-                  <span className="text-error" role="alert">Not added: {r.error}</span>
+                  {/* no answer: the server may have added it, so do not claim it was not */}
+                  <span className="text-error" role="alert">{r.uncertain ? r.error : `Not added: ${r.error}`}</span>
                   <button type="button" onClick={() => onRetry(r.id)} className="font-semibold text-primary underline">Retry</button>
                   <button type="button" onClick={() => onDismiss(r.id)} className="text-secondary underline">Dismiss</button>
                 </>

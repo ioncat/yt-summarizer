@@ -5,6 +5,7 @@ import QueuePage from '../pages/QueuePage'
 import * as api from '../api'
 
 vi.mock('../api', () => ({
+  UncertainAddError: class UncertainAddError extends Error {},
   getQueue: vi.fn(),
   queueBulkAdd: vi.fn(),
   deleteQueueItem: vi.fn(),
@@ -218,6 +219,60 @@ describe('QueuePage "New" (NS-24a)', () => {
     fireEvent.click(retry)
     fireEvent.click(retry)
     expect(api.queueBulkAdd).toHaveBeenCalledTimes(2)         // the first try + ONE retry
+  })
+
+  it('no answer to an add: the row says the link may have been added, it does not claim "Not added"', async () => {
+    vi.mocked(api.queueBulkAdd).mockRejectedValue(
+      new api.UncertainAddError('No answer from the server. The link may have been added: check the queue before retrying.'))
+    renderQueue()
+    await openAndSubmit('https://youtu.be/lostAnswer01')
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('No answer from the server. The link may have been added: check the queue before retrying.')
+    expect(alert.textContent).not.toContain('Not added')
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
+  })
+
+  it('Retry after a lost answer finds the link already queued: "Already in the queue." shows, the row goes, the field is clear', async () => {
+    vi.mocked(api.queueBulkAdd).mockRejectedValueOnce(
+      new api.UncertainAddError('No answer from the server. The link may have been added: check the queue before retrying.'))
+    renderQueue()
+    await openAndSubmit('https://youtu.be/lostAnswer02')
+    await screen.findByRole('alert')
+    vi.mocked(api.queueBulkAdd).mockResolvedValueOnce({
+      added: 0, ids: [], invalid: [], duplicates: ['https://youtu.be/lostAnswer02'],
+      duplicate_details: [{ url: 'https://youtu.be/lostAnswer02', video_id: 'lostAnswer02', reason: 'in_queue' }],
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText('Already in the queue.')).toBeTruthy()
+    expect(screen.queryByTestId('adding-row')).toBeNull()                 // one row all along, now gone
+    expect((screen.getByLabelText('New video link') as HTMLInputElement).value).toBe('')
+    expect(api.queueBulkAdd).toHaveBeenCalledTimes(2)
+  })
+
+  it('Retry creates no second row while it runs', async () => {
+    vi.mocked(api.queueBulkAdd).mockRejectedValueOnce(new Error('boom'))
+    renderQueue()
+    await openAndSubmit('https://youtu.be/oneRowOnly01')
+    await screen.findByText('Not added: boom')
+    vi.mocked(api.queueBulkAdd).mockReturnValueOnce(new Promise(() => {}))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(screen.getAllByTestId('adding-row')).toHaveLength(1)
+    expect(screen.getByTestId('adding-row').textContent).toContain('Adding…')
+  })
+
+  it('the same link typed again into the field is cleared once its Retry settles as already queued', async () => {
+    vi.mocked(api.queueBulkAdd).mockRejectedValueOnce(new Error('boom'))
+    renderQueue()
+    await openAndSubmit('https://youtu.be/typedAgain001')
+    await screen.findByText('Not added: boom')
+    fireEvent.change(screen.getByLabelText('New video link'), { target: { value: 'https://youtu.be/typedAgain001' } })
+    vi.mocked(api.queueBulkAdd).mockResolvedValueOnce({
+      added: 0, ids: [], invalid: [], duplicates: ['x'],
+      duplicate_details: [{ url: 'x', video_id: 'typedAgain001', reason: 'in_queue' }],
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await screen.findByText('Already in the queue.')
+    await waitFor(() => expect((screen.getByLabelText('New video link') as HTMLInputElement).value).toBe(''))
   })
 
   it('Dismiss removes a failed row without sending anything', async () => {

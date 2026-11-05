@@ -8,9 +8,14 @@ export const POLL_TIMEOUT_MS = 10_000  // one poll of the queue list
 export const ADD_TIMEOUT_HINT = 'The link may have been added: check the queue before retrying.'
 const POLL_TIMEOUT_HINT = 'The server may be busy or not running.'
 
-/** fetch that gives up after `ms` (NS-28): a hung request becomes an error the page can show, with a Retry. */
+/** An add whose answer never arrived (timeout or a lost connection): the server may well have added the link. */
+export class UncertainAddError extends Error {}
+
+/** fetch that gives up after `ms` (NS-28): a hung request becomes an error the page can show, with a Retry.
+ *  With `uncertain` (an add), no answer at all - timeout or network failure - is an UncertainAddError that says the
+ *  link may have been added; for other calls a network failure is "Cannot reach the server". */
 export async function fetchWithTimeout(
-  input: string, init: RequestInit = {}, ms = ADD_TIMEOUT_MS, hint = ADD_TIMEOUT_HINT,
+  input: string, init: RequestInit = {}, ms = ADD_TIMEOUT_MS, hint = ADD_TIMEOUT_HINT, uncertain = false,
 ): Promise<Response> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), ms)
@@ -18,9 +23,13 @@ export async function fetchWithTimeout(
     return await fetch(input, { ...init, signal: controller.signal })
   } catch (err) {
     if (controller.signal.aborted) {
-      throw new Error(`No answer from the server in ${Math.round(ms / 1000)} s. ${hint}`)
+      const message = `No answer from the server in ${Math.round(ms / 1000)} s. ${hint}`
+      throw uncertain ? new UncertainAddError(message) : new Error(message)
     }
-    if (err instanceof TypeError) throw new Error('Cannot reach the server. Is the backend running?')
+    if (err instanceof TypeError) {
+      if (uncertain) throw new UncertainAddError(`No answer from the server. ${hint}`)
+      throw new Error('Cannot reach the server. Is the backend running?')
+    }
     throw err
   } finally {
     clearTimeout(timer)
@@ -554,7 +563,7 @@ export async function queueBulkAdd(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ urls, pipeline_stages: pipeline_stages ?? null, force, language: language ?? null }),
-  })
+  }, ADD_TIMEOUT_MS, ADD_TIMEOUT_HINT, true)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(errorText(body, 'Failed to add to queue'))
@@ -571,7 +580,7 @@ export async function queueBulkAddByIds(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ video_ids, pipeline_stages }),
-  })
+  }, ADD_TIMEOUT_MS, ADD_TIMEOUT_HINT, true)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(errorText(body, 'Failed to add to queue'))
