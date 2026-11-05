@@ -179,7 +179,7 @@ async def test_chat_proxy_validates_chat_num_ctx(client):
     respx.post(CHAT).mock(side_effect=handler)
     short = [{"role": "user", "content": "Привет"}]
     try:
-        for value, expected in (("abc", 32768), ("", 32768), ("999999", 65536), ("100", 8192))  # tiny floor: the computed size for a short chat (8192) wins:
+        for value, expected in (("abc", 32768), ("", 32768), ("999999", 65536), ("100", 8192)):  # tiny floor: the computed size for a short chat (8192) wins
             await client.put("/api/settings/app", json={"chat_num_ctx": value, "llm_max_num_ctx": "32768"})
             r = await client.post("/api/chat", json={"model": "m", "messages": short})
             assert r.status_code == 200, value                 # never a 500
