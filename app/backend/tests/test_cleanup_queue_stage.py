@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 
 from services import queue_service as q
-from services.stage_control import CLEANUP_CANCEL, CLEANUP_PROGRESS, StageCancelled
+from services.stage_control import CLEANUP_CANCEL, StageCancelled
 from tests.baseline_helpers import (
     Gate, VIDEO_ID, add_item, benchmark_rows, fmt_row, get_item, reset_benchmarks, reset_queue, run_worker, set_fmt,
 )
@@ -17,20 +17,18 @@ URL = f"/api/result/{VIDEO_ID}"
 @pytest_asyncio.fixture(autouse=True)
 async def _setup(client):
     CLEANUP_CANCEL.clear()
-    CLEANUP_PROGRESS.clear()
     await reset_queue()
     await reset_benchmarks()
     await client.put("/api/settings/cleanup", json={"model": "m-clean"})
     await client.put("/api/settings/app", json={"ollama_url": "http://localhost:11434"})
     yield
     CLEANUP_CANCEL.clear()
-    CLEANUP_PROGRESS.clear()
     await reset_queue()
 
 
-def test_the_cancel_set_and_the_progress_dict_are_shared_with_the_result_router():
+def test_the_cancel_set_is_shared_with_the_result_router():
     from routers import result as r
-    assert r._CANCEL_SET is CLEANUP_CANCEL and r._CLEANUP_PROGRESS is CLEANUP_PROGRESS
+    assert r._CANCEL_SET is CLEANUP_CANCEL
 
 
 async def test_the_result_page_sees_the_paragraph_counters_of_a_queue_run_and_they_go_away_after(client, seeded_video):
@@ -45,14 +43,16 @@ async def test_the_result_page_sees_the_paragraph_counters_of_a_queue_run_and_th
             await asyncio.sleep(0.02)
         assert data["cleanup_status"] == "processing"
         assert data["cleanup_paragraphs_done"] == 2 and data["cleanup_paragraphs_total"] == 3   # what the page polls
-        assert q._QUEUE_PROGRESS[3] == "cleanup: paragraph 2/3"                                  # and the queue page
+        from models.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
+            assert (await q._live_progress(db, [3])) == {3: "cleanup: paragraph 2/3"}                                  # and the queue page
         gate.release.set()
         await task
     data = (await client.get(URL)).json()
-    assert "cleanup_paragraphs_done" not in data and VIDEO_ID not in CLEANUP_PROGRESS
+    assert "cleanup_paragraphs_done" not in data           # the run is over: no live counters
 
 
-async def test_the_counters_are_removed_when_the_stage_fails_too(seeded_video):
+async def test_the_counters_are_removed_when_the_stage_fails_too(client, seeded_video):
     async def boom(*a, **k):
         k["on_progress"](1, 3)
         raise RuntimeError("llm exploded")
@@ -60,7 +60,8 @@ async def test_the_counters_are_removed_when_the_stage_fails_too(seeded_video):
     with patch("services.text_cleaner.clean_text", boom):
         with pytest.raises(RuntimeError):
             await q._run_cleanup_stage(VIDEO_ID, 1)
-    assert VIDEO_ID not in CLEANUP_PROGRESS
+    data = (await client.get(URL)).json()
+    assert "cleanup_paragraphs_done" not in data and data["stages"]["cleanup"]["status"] in ("failed", "cancelled")
 
 
 async def test_stop_during_cleanup_resets_the_status_and_keeps_the_previous_cleaned_text(seeded_video):

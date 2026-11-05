@@ -7,7 +7,7 @@ from sqlalchemy import text
 
 from models.database import AsyncSessionLocal
 from services import queue_service as q
-from services.stage_control import CLEANUP_CANCEL, CLEANUP_PROGRESS
+from services.stage_control import CLEANUP_CANCEL
 from tests.baseline_helpers import Gate, VIDEO_ID, add_item, fmt_row, get_item, reset_queue, run_worker, set_fmt
 
 URL = f"/api/result/{VIDEO_ID}"
@@ -16,14 +16,12 @@ URL = f"/api/result/{VIDEO_ID}"
 @pytest_asyncio.fixture(autouse=True)
 async def _setup(client):
     CLEANUP_CANCEL.clear()
-    CLEANUP_PROGRESS.clear()
     await reset_queue()
     await client.put("/api/settings/cleanup", json={"model": "m-clean"})
     await client.put("/api/settings/summarization", json={"model": "m-sum"})
     await client.put("/api/settings/app", json={"ollama_url": "http://localhost:11434"})
     yield
     CLEANUP_CANCEL.clear()
-    CLEANUP_PROGRESS.clear()
     await reset_queue()
 
 

@@ -9,12 +9,8 @@ from __future__ import annotations
 CLEANUP_CANCEL: set[str] = set()  # video ids whose running cleanup must stop (after the paragraph in hand)
 MINDMAP_CANCEL: set[str] = set()  # video ids whose running mind map must stop
 SUMMARY_CANCEL: set[str] = set()  # video ids whose running summarization must stop
-# Live chunk progress of a running summarization {video_id: {"done": n, "total": m}}, shown on the result page
-# (GET /api/result/<id> adds summary_chunks_done / summary_chunks_total while it runs)
-SUMMARY_PROGRESS: dict[str, dict] = {}
-# Live paragraph progress of a running cleanup {video_id: {"done": n, "total": m}} (GET /api/result/<id> adds
-# cleanup_paragraphs_done / cleanup_paragraphs_total while it runs). In memory for now; NS-11 decision 2 moves it to the DB.
-CLEANUP_PROGRESS: dict[str, dict] = {}
+# (The live paragraph / chunk counters of a running cleanup / summary are no longer here: they are on the stage's run row in
+# processing_stages, services/stage_progress.py - NS-11 decision 2.)
 
 
 class StageCancelled(Exception):

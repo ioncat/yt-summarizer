@@ -20,7 +20,7 @@ from models.database import AsyncSessionLocal
 from services import queue_service as q
 from tests.baseline_helpers import (
     VIDEO_ID, Gate, benchmark_rows, clear_router_state, fmt_count, fmt_row,
-    reset_benchmarks, reset_queue, set_fmt,
+    reset_benchmarks, reset_queue, set_fmt, wait_for_counters,
 )
 
 YT_URL = f"https://www.youtube.com/watch?v={VIDEO_ID}"
@@ -62,7 +62,8 @@ async def test_queue_cleanup_success_writes_same_fields_as_background_copy(seede
         task = asyncio.create_task(q._run_cleanup_stage(VIDEO_ID, 7))
         await gate.wait_started()
         assert (await fmt_row())["cleanup_status"] == "processing"
-        assert q._QUEUE_PROGRESS[7] == "cleanup: paragraph 1/3"
+        counters = await wait_for_counters("cleanup")
+        assert (counters["progress_done"], counters["progress_total"]) == (1, 3)         # on the run row (stage 4b)
         gate.release.set()
         await task
     row = await fmt_row()
@@ -169,7 +170,8 @@ async def test_queue_summary_success_progress_and_fields(seeded_video):
         task = asyncio.create_task(q._run_summary_stage(VIDEO_ID, 8))
         await gate.wait_started()
         assert (await fmt_row())["summary_status"] == "processing"
-        assert q._QUEUE_PROGRESS[8] == "summary: chunk 2/6"
+        counters = await wait_for_counters("summary")
+        assert (counters["progress_done"], counters["progress_total"]) == (2, 6)
         gate.release.set()
         await task
     row = await fmt_row()

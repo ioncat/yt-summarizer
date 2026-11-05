@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 
 from services import queue_service as q
-from services.stage_control import SUMMARY_CANCEL, SUMMARY_PROGRESS, StageCancelled
+from services.stage_control import SUMMARY_CANCEL, StageCancelled
 from tests.baseline_helpers import (
     Gate, VIDEO_ID, add_item, benchmark_rows, fmt_row, get_item, reset_benchmarks, reset_queue, run_worker, set_fmt,
 )
@@ -17,20 +17,18 @@ URL = f"/api/result/{VIDEO_ID}"
 @pytest_asyncio.fixture(autouse=True)
 async def _setup(client):
     SUMMARY_CANCEL.clear()
-    SUMMARY_PROGRESS.clear()
     await reset_queue()
     await reset_benchmarks()
     await client.put("/api/settings/summarization", json={"model": "m-sum"})
     await client.put("/api/settings/app", json={"ollama_url": "http://localhost:11434"})
     yield
     SUMMARY_CANCEL.clear()
-    SUMMARY_PROGRESS.clear()
     await reset_queue()
 
 
-def test_the_cancel_set_and_the_progress_dict_are_shared_with_the_result_router():
+def test_the_cancel_set_is_shared_with_the_result_router():
     from routers import result as r
-    assert r._SUMMARY_CANCEL_SET is SUMMARY_CANCEL and r._SUMMARY_PROGRESS is SUMMARY_PROGRESS
+    assert r._SUMMARY_CANCEL_SET is SUMMARY_CANCEL
 
 
 async def test_the_result_page_sees_the_chunk_counters_of_a_queue_run_and_they_go_away_after(client, seeded_video):
@@ -45,14 +43,16 @@ async def test_the_result_page_sees_the_chunk_counters_of_a_queue_run_and_they_g
             await asyncio.sleep(0.02)
         assert data["summary_status"] == "processing"
         assert data["summary_chunks_done"] == 2 and data["summary_chunks_total"] == 5     # what the page polls
-        assert q._QUEUE_PROGRESS[3] == "summary: chunk 2/5"                               # and what the queue page shows
+        from models.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
+            assert (await q._live_progress(db, [3])) == {3: "summary: chunk 2/5"}                               # and what the queue page shows
         gate.release.set()
         await task
     data = (await client.get(URL)).json()
-    assert "summary_chunks_done" not in data and VIDEO_ID not in SUMMARY_PROGRESS
+    assert "summary_chunks_done" not in data           # the run is over: no live counters
 
 
-async def test_the_counters_are_removed_when_the_stage_fails_or_is_cancelled_too(seeded_video):
+async def test_the_counters_are_removed_when_the_stage_fails_or_is_cancelled_too(client, seeded_video):
     async def boom(*a, **k):
         k["on_progress"](1, 3)
         raise RuntimeError("llm exploded")
@@ -60,7 +60,8 @@ async def test_the_counters_are_removed_when_the_stage_fails_or_is_cancelled_too
     with patch("services.text_summarizer.summarize_text", boom):
         with pytest.raises(RuntimeError):
             await q._run_summary_stage(VIDEO_ID, 1)
-    assert VIDEO_ID not in SUMMARY_PROGRESS
+    data = (await client.get(URL)).json()
+    assert "summary_chunks_done" not in data and data["stages"]["summary"]["status"] in ("failed", "cancelled")
 
 
 async def test_stop_during_generation_resets_the_status_and_keeps_the_previous_summary(seeded_video):

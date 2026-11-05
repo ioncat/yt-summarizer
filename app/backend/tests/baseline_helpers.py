@@ -68,6 +68,20 @@ async def reset_benchmarks() -> None:
         await db.commit()
 
 
+async def wait_for_counters(stage: str, video_id: str = VIDEO_ID, timeout: float = 5.0) -> dict:
+    """The open run row of `stage` once its live counters are written (they are written a moment after the callback)."""
+    deadline = asyncio.get_event_loop().time() + timeout
+    while True:
+        async with AsyncSessionLocal() as db:
+            r = (await db.execute(
+                text("SELECT * FROM processing_stages WHERE video_id = :v AND stage = :s AND status = 'processing' "
+                     "AND progress_total IS NOT NULL ORDER BY id DESC LIMIT 1"), {"v": video_id, "s": stage})).mappings().first()
+        if r:
+            return dict(r)
+        assert asyncio.get_event_loop().time() < deadline, f"no counters were written for {stage}"
+        await asyncio.sleep(0.02)
+
+
 async def reset_queue() -> None:
     async with AsyncSessionLocal() as db:
         await db.execute(text("DELETE FROM processing_queue"))
@@ -102,7 +116,7 @@ def clear_router_state() -> None:
     from routers import result as r
     for s in (r._CANCEL_SET, r._SUMMARY_CANCEL_SET, r._MINDMAP_CANCEL_SET, r._REEXTRACT_SET):
         s.clear()
-    for d in (r._CLEANUP_PROGRESS, r._SUMMARY_PROGRESS, r._RETRANSCRIBE_PROGRESS):
+    for d in (r._RETRANSCRIBE_PROGRESS,):
         d.clear()
     from services import queue_service as q
     q._QUEUE_PROGRESS.clear()
