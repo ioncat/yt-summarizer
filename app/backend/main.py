@@ -3,7 +3,8 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
@@ -14,7 +15,9 @@ from routers.api import router as api_router
 # ---------------------------------------------------------------------------
 # Logging — write to console + file (robust against uvicorn pre-configuration)
 # ---------------------------------------------------------------------------
-_log_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/logs"))
+# YT_SUMMARIZER_LOG_DIR lets the test suite write somewhere else, so pytest never pollutes the live log
+_log_dir = os.path.abspath(os.environ.get("YT_SUMMARIZER_LOG_DIR")
+                           or os.path.join(os.path.dirname(__file__), "../../data/logs"))
 os.makedirs(_log_dir, exist_ok=True)
 _log_file = os.path.join(_log_dir, "backend.log")
 
@@ -111,6 +114,13 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+@app.exception_handler(Exception)
+async def _log_unhandled_exception(request: Request, exc: Exception) -> JSONResponse:
+    """uvicorn prints a crashed request to the console only; put it into backend.log with its traceback."""
+    logging.getLogger("api").error("unhandled error in %s %s", request.method, request.url.path, exc_info=exc)
+    return JSONResponse({"detail": "Internal Server Error"}, status_code=500)
+
 
 app.add_middleware(
     CORSMiddleware,

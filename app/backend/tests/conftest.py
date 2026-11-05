@@ -6,6 +6,7 @@ module-level engine is already bound to the real DB file.
 """
 import sys
 import os
+import tempfile
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -14,6 +15,10 @@ from sqlalchemy.pool import StaticPool
 
 # Ensure backend is on sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# main.py attaches its log file when it is imported: point it at a temp folder BEFORE that import, so a test
+# run never writes into the live data/logs/backend.log
+os.environ["YT_SUMMARIZER_LOG_DIR"] = tempfile.mkdtemp(prefix="yt-summarizer-test-logs-")
 
 # --- Patch engine BEFORE any import of main or routers ---
 import models.database as _db_module
