@@ -62,18 +62,18 @@ async def test_an_item_with_failed_stages_that_did_not_raise_is_partial_and_name
     assert (await _stage_rows("cleanup"))[0]["queue_item_id"] == item
 
 
-async def _partial_item(stages=("cleanup", "summary"), done=("cleanup",), failed=("summary",)):
+async def _partial_item(stages=("cleanup", "summary"), done=("cleanup",), failed=("summary",), video_id=VIDEO_ID):
     """A finished partial item as the worker leaves it: some stages done, some failed, all tied to the item."""
     async with AsyncSessionLocal() as db:
         item = (await db.execute(
             text("INSERT INTO processing_queue (url, video_id, status, pipeline_stages, added_at, sort_order, error_message) "
                  "VALUES (:u, :v, 'partial', :s, datetime('now'), 1, 'Summary failed: x')"),
-            {"u": f"https://www.youtube.com/watch?v={VIDEO_ID}", "v": VIDEO_ID, "s": json.dumps(list(stages))})).lastrowid
+            {"u": f"https://www.youtube.com/watch?v={video_id}", "v": video_id, "s": json.dumps(list(stages))})).lastrowid
         for st, status in [(s, "done") for s in done] + [(s, "failed") for s in failed]:
             await db.execute(
                 text("INSERT INTO processing_stages (video_id, stage, status, queue_item_id, attempt, error_text, created_at) "
                      "VALUES (:v, :s, :st, :q, 1, :e, datetime('now'))"),
-                {"v": VIDEO_ID, "s": st, "st": status, "q": item, "e": "x" if status == "failed" else None})
+                {"v": video_id, "s": st, "st": status, "q": item, "e": "x" if status == "failed" else None})
         await db.commit()
     return item
 
@@ -143,3 +143,55 @@ async def test_the_queue_counts_show_partial(client, seeded_video):
     await _partial_item()
     body = (await client.get("/api/queue/counts")).json()
     assert body["counts"]["partial"] == 1 and body["active"] == 0     # a partial item is finished: not "active"
+
+
+# --- a partial item must never be stuck on the queue page (review of d9cff0b) --------------------------------
+
+async def _queue(client):
+    return {i["id"]: i for i in (await client.get("/api/queue")).json()["items"]}
+
+
+async def test_the_queue_says_whether_a_partial_item_can_still_be_retried(client, seeded_video):
+    live = await _partial_item()
+    no_failed_left = await _partial_item(failed=(), done=("cleanup", "summary"))
+    video_gone = await _partial_item(video_id="goneVideo01")
+    got = await _queue(client)
+    assert got[live]["retryable"] is True
+    assert got[no_failed_left]["retryable"] is False and got[video_gone]["retryable"] is False
+
+
+async def test_clean_failed_removes_stuck_partial_items_and_keeps_retryable_ones(client, seeded_video):
+    live = await _partial_item()
+    no_failed_left = await _partial_item(failed=(), done=("cleanup", "summary"))
+    video_gone = await _partial_item(video_id="goneVideo01")
+    async with AsyncSessionLocal() as db:
+        await db.execute(text(
+            "INSERT INTO processing_queue (url, video_id, status, pipeline_stages, added_at, sort_order) "
+            "VALUES ('https://www.youtube.com/watch?v=failedItem03', 'failedItem03', 'failed', '[\"extract\"]', datetime('now'), 9)"))
+        await db.commit()
+    r = await client.delete("/api/queue/failed")
+    assert r.json() == {"cleared": 3}                       # the failed item and the two stuck partial ones
+    assert list(await _queue(client)) == [live]
+    assert {no_failed_left, video_gone}.isdisjoint(await _queue(client))
+
+
+async def test_a_stuck_partial_item_can_be_removed_one_by_one(client, seeded_video):
+    stuck = await _partial_item(failed=(), done=("cleanup", "summary"))
+    assert (await client.delete(f"/api/queue/{stuck}")).status_code == 200
+    assert stuck not in await _queue(client)
+
+
+async def test_retry_of_a_stuck_partial_item_says_nothing_is_left_to_retry(client, seeded_video):
+    stuck = await _partial_item(video_id="goneVideo02")
+    r = await client.post(f"/api/queue/{stuck}/retry")
+    assert r.status_code == 409 and "Nothing left to retry" in r.json()["detail"]
+    assert (await _queue(client))[stuck]["status"] == "partial"
+    assert (await client.post("/api/queue/failed/retry")).json() == {"retried": 0}
+
+
+async def test_deleting_the_video_makes_its_partial_item_stuck_and_clean_failed_removes_it(client, seeded_video):
+    item = await _partial_item()
+    assert (await _queue(client))[item]["retryable"] is True
+    assert (await client.delete(f"/api/result/{VIDEO_ID}")).status_code == 200      # stage rows go with the video
+    assert (await _queue(client))[item]["retryable"] is False
+    assert (await client.delete("/api/queue/failed")).json() == {"cleared": 1}

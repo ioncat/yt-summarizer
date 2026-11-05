@@ -411,3 +411,42 @@ describe('QueuePage "partial" items (NS-25)', () => {
     expect(screen.getByText('partial')).toBeTruthy()
   })
 })
+
+describe('QueuePage stuck partial items (NS-25 review)', () => {
+  const stuck = item(7, 'https://youtu.be/stuck000001', {
+    status: 'partial', pipeline_stages: ['cleanup', 'summary'], error_message: 'Summary failed: x', retryable: false,
+  })
+  const live = item(8, 'https://youtu.be/live0000001', {
+    status: 'partial', pipeline_stages: ['summary'], error_message: 'Summary failed: y', retryable: true,
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [stuck, live], count: 2 })
+  })
+
+  it('a partial item with nothing left to retry has no Retry, but a Remove, and counts for Clean failed', async () => {
+    renderQueue()
+    expect(await screen.findByRole('button', { name: /Clean failed \(1\)/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Retry failed \(1\)/ })).toBeTruthy()      // only the retryable one
+    expect(screen.getAllByTitle('Retry the failed stages')).toHaveLength(1)
+    expect(screen.getAllByTitle('Nothing left to retry: remove from the queue')).toHaveLength(1)
+  })
+
+  it('Remove on a stuck partial item deletes it', async () => {
+    vi.mocked(api.deleteQueueItem).mockResolvedValue(undefined as never)
+    renderQueue()
+    fireEvent.click(await screen.findByTitle('Nothing left to retry: remove from the queue'))
+    await waitFor(() => expect(api.deleteQueueItem).toHaveBeenCalledWith(7))
+    await waitFor(() => expect(screen.queryByText('https://youtu.be/stuck000001')).toBeNull())
+  })
+
+  it('Clean failed drops the stuck partial item and keeps the retryable one', async () => {
+    vi.mocked(api.clearQueueFailed).mockResolvedValue({ cleared: 1 } as never)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderQueue()
+    fireEvent.click(await screen.findByRole('button', { name: /Clean failed/ }))
+    await waitFor(() => expect(screen.getAllByText('partial')).toHaveLength(1))
+    expect(screen.getAllByTitle('Retry the failed stages')).toHaveLength(1)
+  })
+})

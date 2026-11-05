@@ -155,7 +155,7 @@ async def get_queue(db: AsyncSession) -> list[dict]:
         )
     )
     rows = result.fetchall()
-    return [
+    items = [
         {
             "id": r[0],
             "url": r[1],
@@ -173,6 +173,11 @@ async def get_queue(db: AsyncSession) -> list[dict]:
         }
         for r in rows
     ]
+    for item in items:
+        if item["status"] == "partial":
+            # can Retry still do something? (a re-extract or a deleted video takes the failed runs away)
+            item["retryable"] = await _partial_retryable(db, item["id"], item["pipeline_stages"], item["video_id"])
+    return items
 
 
 async def get_queue_counts(db: AsyncSession) -> dict[str, int]:
@@ -225,12 +230,19 @@ async def clear_pending(db: AsyncSession) -> int:
 
 
 async def clear_failed(db: AsyncSession) -> int:
-    """Delete all failed items. Returns deleted count."""
+    """Delete all failed items, and the partial items that are stuck (nothing left to retry: their video is gone, or has no
+    failed stage any more). A partial item that can still be retried is kept. Returns deleted count."""
     result = await db.execute(
         text("DELETE FROM processing_queue WHERE status = 'failed'")
     )
+    count = result.rowcount
+    for item_id, video_id, stages in (await db.execute(
+        text("SELECT id, video_id, pipeline_stages FROM processing_queue WHERE status = 'partial'"),
+    )).fetchall():
+        if not await _partial_retryable(db, item_id, json.loads(stages) if stages else ["extract"], video_id):
+            count += (await db.execute(text("DELETE FROM processing_queue WHERE id = :id"), {"id": item_id})).rowcount
     await db.commit()
-    return result.rowcount
+    return count
 
 
 async def _item_failed_stages(db: AsyncSession, item_id: int, stages: list[str]) -> list[tuple[str, str | None]]:
@@ -242,6 +254,17 @@ async def _item_failed_stages(db: AsyncSession, item_id: int, stages: list[str])
     )).fetchall():
         newest[stage] = (status, error)
     return [(s, newest[s][1]) for s in stages if s in newest and newest[s][0] == "failed"]
+
+
+async def _partial_retryable(db: AsyncSession, item_id: int, stages: list[str], video_id: str | None) -> bool:
+    """A partial item can be retried while its video is in History and one of its stages still ends failed."""
+    if video_id:
+        gone = (await db.execute(
+            text("SELECT 1 FROM videos WHERE video_id = :v AND url NOT LIKE '__pending__%' LIMIT 1"), {"v": video_id},
+        )).first() is None
+        if gone:
+            return False
+    return bool(await _item_failed_stages(db, item_id, stages))
 
 
 async def _reset_to_pending(db: AsyncSession, item_id: int, status: str, stages_json: str) -> None:
@@ -260,29 +283,33 @@ async def _reset_to_pending(db: AsyncSession, item_id: int, status: str, stages_
         )
 
 
-async def _retry(db: AsyncSession, item_id: int, status: str, pipeline_stages: str | None) -> bool:
+async def _retry(db: AsyncSession, item_id: int, status: str, pipeline_stages: str | None,
+                 video_id: str | None = None) -> bool:
     """Reset one failed / partial item. False when a partial item has no failed stage left to run (nothing changes)."""
     stages_json = pipeline_stages or json.dumps(["extract"])
     if status == "partial":
-        failed = [s for s, _ in await _item_failed_stages(db, item_id, json.loads(stages_json))]
-        if not failed:
+        if not await _partial_retryable(db, item_id, json.loads(stages_json), video_id):
             return False
-        stages_json = json.dumps(failed)
+        stages_json = json.dumps([s for s, _ in await _item_failed_stages(db, item_id, json.loads(stages_json))])
     await _reset_to_pending(db, item_id, status, stages_json)
     return True
 
 
 async def retry_item(db: AsyncSession, item_id: int) -> str:
-    """Reset a failed or partial item back to pending. Returns 'not_found' | 'not_failed' | 'ok'."""
+    """Reset a failed or partial item back to pending.
+
+    Returns 'not_found' | 'not_failed' | 'nothing_left' (a partial item with no failed stage left to run) | 'ok'."""
     result = await db.execute(
-        text("SELECT status, pipeline_stages FROM processing_queue WHERE id = :id"),
+        text("SELECT status, pipeline_stages, video_id FROM processing_queue WHERE id = :id"),
         {"id": item_id},
     )
     row = result.fetchone()
     if not row:
         return "not_found"
-    if row[0] not in ("failed", "partial") or not await _retry(db, item_id, row[0], row[1]):
+    if row[0] not in ("failed", "partial"):
         return "not_failed"
+    if not await _retry(db, item_id, row[0], row[1], row[2]):
+        return "nothing_left"
     await db.commit()
     return "ok"
 
@@ -290,11 +317,11 @@ async def retry_item(db: AsyncSession, item_id: int) -> str:
 async def retry_all_failed(db: AsyncSession) -> int:
     """Reset all failed and partial items to pending (a partial one restarts only its failed stages). Returns count."""
     rows = (await db.execute(
-        text("SELECT id, status, pipeline_stages FROM processing_queue WHERE status IN ('failed', 'partial')"),
+        text("SELECT id, status, pipeline_stages, video_id FROM processing_queue WHERE status IN ('failed', 'partial')"),
     )).fetchall()
     count = 0
-    for item_id, status, stages in rows:
-        if await _retry(db, item_id, status, stages):
+    for item_id, status, stages, video_id in rows:
+        if await _retry(db, item_id, status, stages, video_id):
             count += 1
     await db.commit()
     return count

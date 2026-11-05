@@ -569,6 +569,7 @@ export interface QueueItem {
   finished_at: string | null
   sort_order: number
   progress: string | null
+  retryable?: boolean   // partial items only: false = nothing left to retry (video gone or no failed step), "Clean failed" removes it
 }
 
 export interface QueueDuplicate {

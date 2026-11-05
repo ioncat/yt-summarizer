@@ -31,6 +31,10 @@ function formatTime(iso: string | null) {
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+// "Clean failed" removes failed items and partial items with nothing left to retry
+const isStuckPartial = (i: QueueItem) => i.status === 'partial' && i.retryable === false
+const isCleanable = (i: QueueItem) => i.status === 'failed' || isStuckPartial(i)
+
 const STATUS_ORDER: Record<string, number> = { processing: 0, pending: 1, failed: 2, partial: 2, done: 3, skipped: 4 }
 
 export default function QueuePage() {
@@ -97,7 +101,7 @@ export default function QueuePage() {
     if (!confirm('Remove all failed items?')) return
     try {
       const res = await clearQueueFailed()
-      if (res.cleared > 0) setItems(prev => prev.filter(i => i.status !== 'failed'))
+      if (res.cleared > 0) setItems(prev => prev.filter(i => !isCleanable(i)))
     } catch { /* ignore */ }
   }
 
@@ -123,9 +127,10 @@ export default function QueuePage() {
   }
 
   const pendingCount = items.filter(i => i.status === 'pending').length
-  const failedCount  = items.filter(i => i.status === 'failed').length
-  // "partial": the item ran to its end but a stage failed. Retry restarts only the failed stages; Clean removes failed items only.
-  const retryableCount = items.filter(i => i.status === 'failed' || i.status === 'partial').length
+  const failedCount  = items.filter(isCleanable).length
+  // "partial": the item ran to its end but a stage failed. Retry restarts only the failed stages; Clean removes failed items
+  // and the partial ones that have nothing left to retry.
+  const retryableCount = items.filter(i => i.status === 'failed' || (i.status === 'partial' && !isStuckPartial(i))).length
   const processingItem = items.find(i => i.status === 'processing')
 
   const sortedItems = [...items].sort((a, b) => {
@@ -345,7 +350,8 @@ export default function QueuePage() {
                             {item.status === 'partial' && (
                               <>
                                 <span className="material-symbols-outlined text-[18px] text-secondary">warning</span>
-                                <span className="text-secondary font-semibold text-body-sm" title="Some stages failed; the rest worked">partial</span>
+                                <span className="text-secondary font-semibold text-body-sm"
+                                  title={isStuckPartial(item) ? 'Some stages failed, and nothing is left to retry' : 'Some stages failed; the rest worked'}>partial</span>
                                 {item.error_message && (
                                   <button
                                     onClick={() => setExpandedError(expandedError === item.id ? null : item.id)}
@@ -381,7 +387,16 @@ export default function QueuePage() {
                               close
                             </button>
                           )}
-                          {(item.status === 'failed' || item.status === 'partial') && (
+                          {isStuckPartial(item) && (
+                            <button
+                              onClick={() => handleDelete(item.id)}
+                              title="Nothing left to retry: remove from the queue"
+                              className="material-symbols-outlined text-[18px] text-outline hover:text-error transition-colors"
+                            >
+                              close
+                            </button>
+                          )}
+                          {(item.status === 'failed' || (item.status === 'partial' && !isStuckPartial(item))) && (
                             <button
                               onClick={() => handleRetry(item.id)}
                               title={item.status === 'partial' ? 'Retry the failed stages' : 'Retry'}

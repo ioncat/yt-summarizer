@@ -466,7 +466,8 @@ async def clear_queue_pending(db: Annotated[AsyncSession, Depends(get_db)]):
 
 @router.delete("/queue/failed")
 async def clear_queue_failed(db: Annotated[AsyncSession, Depends(get_db)]):
-    """Clear all failed queue items. Partial items (some stages done, some failed) are kept."""
+    """Clear all failed queue items, and the partial items that are stuck (nothing left to retry). A partial item that
+    can still be retried is kept."""
     from services.queue_service import clear_failed
     count = await clear_failed(db)
     return {"cleared": count}
@@ -489,6 +490,9 @@ async def retry_queue_item(item_id: int, db: Annotated[AsyncSession, Depends(get
         raise HTTPException(status_code=404, detail="Item not found")
     if result == "not_failed":
         raise HTTPException(status_code=409, detail="Item is not in failed or partial state")
+    if result == "nothing_left":
+        raise HTTPException(status_code=409, detail="Nothing left to retry: no failed step remains for this video. "
+                                                    "Remove the item with Clean failed.")
     return {"retried": item_id}
 
 
