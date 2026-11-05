@@ -187,3 +187,27 @@ async def test_a_locked_database_while_queueing_gives_503_and_no_half_state(clie
     r = await client.post(f"{URL}/mindmap")
     assert r.status_code == 503 and r.json() == {"detail": "database busy, try again"}
     assert (await fmt_row())["mindmap_status"] is None and await _items() == []   # nothing was changed
+
+
+# --- the saved map is returned also after a failed regeneration (review fix 2) ---------------------------
+
+async def test_a_plain_request_returns_the_saved_map_after_a_failed_regeneration_instead_of_queueing_again(client, seeded_video):
+    await set_fmt(mindmap_text="SAVED MAP", mindmap_status="failed", mindmap_error="model returned nothing")
+    r = await client.post(f"{URL}/mindmap")
+    assert r.json() == {"status": "done", "mindmap_text": "SAVED MAP"}
+    assert await _items() == []                                   # nothing was queued
+
+
+async def test_a_plain_request_while_a_regeneration_runs_queues_nothing_new(client, seeded_video):
+    await set_fmt(mindmap_text="SAVED MAP", mindmap_status="processing")
+    await add_item(["mindmap"])                                   # the running / queued regeneration
+    r = await client.post(f"{URL}/mindmap")
+    assert r.json() == {"status": "processing"}                  # it is running: say so, do not hand out the old map
+    assert len(await _items()) == 1
+
+
+async def test_regenerate_still_queues_after_a_failed_run(client, seeded_video):
+    await set_fmt(mindmap_text="SAVED MAP", mindmap_status="failed", mindmap_error="boom")
+    r = await client.post(f"{URL}/mindmap", params={"force": "true"})
+    assert r.json() == {"status": "processing"} and len(await _items()) == 1
+    assert (await fmt_row())["mindmap_text"] == "SAVED MAP"

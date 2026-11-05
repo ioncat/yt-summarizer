@@ -474,8 +474,9 @@ async def trigger_mindmap(
     if not result:
         raise HTTPException(404, "Video not found")
 
-    # Return the saved map if there is one and the user did not ask to regenerate
-    if not force and result.get("mindmap_text") and result.get("mindmap_status") == "done":
+    # Return the saved map if there is one and the user did not ask to regenerate: also after a FAILED regeneration (the old
+    # map was kept), not only when the last run succeeded. While a run is going on, nothing new is queued.
+    if not force and result.get("mindmap_text") and result.get("mindmap_status") != "processing":
         return {"status": "done", "mindmap_text": result["mindmap_text"]}
 
     _MINDMAP_CANCEL_SET.discard(video_id)
