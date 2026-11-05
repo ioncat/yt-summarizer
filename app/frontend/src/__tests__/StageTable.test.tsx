@@ -50,4 +50,22 @@ describe('StageTable (NS-25)', () => {
     expect(screen.getByText('running')).toBeTruthy()
     expect(screen.getByText('stopped')).toBeTruthy()
   })
+
+  it('a running step shows its live counters with the unit word (stage 4b)', () => {
+    render(<StageTable result={result({
+      cleanup: run({ status: 'processing', finished_at: null, progress_done: 3, progress_total: 10, meta: { unit: 'paragraph' } }),
+      summary: run({ status: 'processing', finished_at: null, progress_done: 1, progress_total: 4, meta: {} }),
+    })} />)
+    expect(screen.getByText('paragraph 3 / 10')).toBeTruthy()
+    expect(screen.getByText('1 / 4')).toBeTruthy()
+  })
+
+  it('a finished or waiting step shows no counters', () => {
+    render(<StageTable result={result({
+      cleanup: run({ progress_done: 10, progress_total: 10, meta: { unit: 'paragraph' } }),
+      summary: run({ status: 'processing', finished_at: null }),                  // queued: nothing written yet
+    })} />)
+    expect(screen.queryByText(/paragraph 10/)).toBeNull()
+    expect(screen.queryByText(/\//)).toBeNull()
+  })
 })

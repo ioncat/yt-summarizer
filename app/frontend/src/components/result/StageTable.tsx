@@ -47,6 +47,9 @@ function Row({ stage, run }: { stage: string; run: StageRun }) {
         {took != null && <> · {formatDuration(took)}</>}
       </td>
       <td className="py-2 text-on-surface-variant">
+        {run.status === 'processing' && run.progress_total != null && (
+          <span>{typeof run.meta.unit === 'string' ? `${run.meta.unit} ` : ''}{run.progress_done ?? 0} / {run.progress_total}</span>
+        )}
         {run.status === 'failed' && (
           <span className="text-error">
             {run.error_code ? (REASON[run.error_code] ?? run.error_code) : 'failed'}
