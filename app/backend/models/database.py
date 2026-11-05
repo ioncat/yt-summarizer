@@ -135,8 +135,19 @@ async def _seed_app_settings() -> None:
         await session.commit()
 
 
+async def _backfill_stages() -> None:
+    """Fill processing_stages from the old per-stage columns (NS-25). Idempotent; a failure is logged, never fatal."""
+    from services.stage_backfill import backfill_processing_stages
+    try:
+        async with engine.begin() as conn:
+            await backfill_processing_stages(conn)
+    except Exception:  # noqa: BLE001
+        logger.exception("startup: filling processing_stages failed (the old columns are untouched)")
+
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await _migrate_db()
     await _seed_app_settings()
+    await _backfill_stages()

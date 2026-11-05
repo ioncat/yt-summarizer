@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.database import Base
@@ -152,6 +152,34 @@ class ProcessingQueueItem(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ProcessingStage(Base):
+    """One run of one stage of one video (NS-25): extract / transcribe / cleanup / summary / mindmap.
+
+    One row per run, history kept. The CURRENT state of a stage is its newest row; what is shown as the saved result (model,
+    mode, times) comes from the newest 'done' row. `video_id` is the YouTube / file-... id of `videos.video_id`, as in the
+    queue. Names of stages, statuses and reason codes: services/stage_codes.py. Created from the old per-stage columns of
+    subtitles_formatted by services/stage_backfill.py (rows marked meta {"legacy": true}).
+    """
+    __tablename__ = "processing_stages"
+    __table_args__ = (Index("ix_processing_stages_video_stage", "video_id", "stage", "id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    video_id: Mapped[str] = mapped_column(String, nullable=False)
+    stage: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="processing")  # processing | done | failed | cancelled
+    queue_item_id: Mapped[int | None] = mapped_column(Integer)      # the processing_queue item that ran it (None: legacy rows)
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)  # 1, 2, ... for this video and stage
+    model: Mapped[str | None] = mapped_column(String)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    error_code: Mapped[str | None] = mapped_column(String(40))
+    error_text: Mapped[str | None] = mapped_column(Text)
+    meta: Mapped[str | None] = mapped_column(Text)                  # JSON: summary mode / chunks, device, {"legacy": true}
+    progress_done: Mapped[int | None] = mapped_column(Integer)      # live counters of a running stage (NS-11 stage 4b)
+    progress_total: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
 
 class BenchmarkRun(Base):
