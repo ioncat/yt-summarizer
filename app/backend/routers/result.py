@@ -18,13 +18,11 @@ from starlette.background import BackgroundTask
 
 from models.database import get_db
 from services.subtitle_extractor import extract_subtitles, extract_video_id, validate_youtube_url, _ytdlp_cmd
-from services.text_cleaner import clean_text
 from services.stage_control import (
     CLEANUP_CANCEL, CLEANUP_PROGRESS, MINDMAP_CANCEL, SUMMARY_CANCEL, SUMMARY_PROGRESS,
 )
 from services.video_service import (
     delete_video,
-    finish_cleanup,
     get_app_setting,
     get_result,
     get_stage_settings,
@@ -40,7 +38,6 @@ from services.video_service import (
     toggle_favorite,
 )
 from routers.download import _mp4_format_spec
-from services.ollama_options import begin_llm_run, llm_failure_reason
 from routers.settings import _uploads_dir
 
 logger = logging.getLogger("api")
@@ -93,46 +90,6 @@ async def favorite_video(
 ):
     new_state = await toggle_favorite(db, video_id)
     return {"video_id": video_id, "is_favorite": new_state}
-
-
-async def _run_cleanup(video_id: str) -> None:
-    """Background task: run LLM cleanup and persist result."""
-    from models.database import AsyncSessionLocal
-    from datetime import datetime as _dt
-
-    async with AsyncSessionLocal() as db:
-        fmt = await get_result(db, video_id)
-        if not fmt or not fmt.get("formatted_text"):
-            return
-        formatted_text = fmt["formatted_text"]
-        stage = await get_stage_settings(db, "cleanup")
-        ollama_url = await get_app_setting(db, "ollama_url")
-        parallel_workers = int(await get_app_setting(db, "parallel_workers") or "1")
-        begin_llm_run(await get_app_setting(db, "llm_max_num_ctx"))
-
-    def _on_cleanup_progress(done: int, total: int) -> None:
-        _CLEANUP_PROGRESS[video_id] = {"done": done, "total": total}
-
-    started_at = _dt.utcnow()
-    cleaned = await clean_text(
-        formatted_text,
-        system_prompt=stage.get("system_prompt"),
-        user_prompt_template=stage.get("user_prompt_template"),
-        model=stage.get("model"),
-        ollama_url=ollama_url,
-        is_cancelled=lambda: video_id in _CANCEL_SET,
-        on_progress=_on_cleanup_progress,
-        parallel_workers=parallel_workers,
-    )
-
-    _CLEANUP_PROGRESS.pop(video_id, None)
-
-    async with AsyncSessionLocal() as db:
-        if video_id in _CANCEL_SET:
-            _CANCEL_SET.discard(video_id)
-            await reset_cleanup_status(db, video_id)
-        else:
-            await finish_cleanup(db, video_id, cleaned, started_at=started_at, error=llm_failure_reason())
 
 
 @router.post("/result/{video_id}/cleanup")
