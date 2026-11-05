@@ -133,3 +133,30 @@ describe('HomePage: adding through the queue keeps the page (NS-24a)', () => {
     expect(await screen.findByText('Not a YouTube link.')).toBeTruthy()
   })
 })
+
+
+describe('HomePage: a failed or slow add (NS-28)', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it('shows "Adding..." on the button while the server has not answered', async () => {
+    let answer!: (v: api.QueueAddResult) => void
+    vi.mocked(api.queueBulkAdd).mockReturnValue(new Promise(res => { answer = res }))
+    await submitUrl('https://youtu.be/slowHome0001')
+    expect(await screen.findByRole('button', { name: 'Adding…' })).toBeTruthy()
+    answer({ added: 1, ids: [1], invalid: [], duplicates: [] })
+    expect(await screen.findByText(/Added to the queue/)).toBeTruthy()
+  })
+
+  it('a failed add shows the reason and a Retry that sends the same link again', async () => {
+    vi.mocked(api.queueBulkAdd).mockRejectedValueOnce(new Error('No answer from the server in 15 s - it may be busy or not running. Try again.'))
+    await submitUrl('https://youtu.be/retryHome001')
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('No answer from the server in 15 s')
+    vi.mocked(api.queueBulkAdd).mockResolvedValueOnce({ added: 1, ids: [2], invalid: [], duplicates: [] })
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText(/Added to the queue/)).toBeTruthy()
+    expect(api.queueBulkAdd).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(api.queueBulkAdd).mock.calls[1][0]).toEqual(['https://youtu.be/retryHome001'])
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})

@@ -1,5 +1,25 @@
 const BASE = '/api'
 
+export const ADD_TIMEOUT_MS = 15_000   // adding to the queue: a busy server must not leave the page waiting forever
+export const POLL_TIMEOUT_MS = 10_000  // one poll of the queue list
+
+/** fetch that gives up after `ms` (NS-28): a hung request becomes an error the page can show, with a Retry. */
+export async function fetchWithTimeout(input: string, init: RequestInit = {}, ms = ADD_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ms)
+  try {
+    return await fetch(input, { ...init, signal: controller.signal })
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new Error(`No answer from the server in ${Math.round(ms / 1000)} s - it may be busy or not running. Try again.`)
+    }
+    if (err instanceof TypeError) throw new Error('Cannot reach the server. Is the backend running?')
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /** The message of an error response body. `detail` is a string, an object with `message`, or - for a request
  *  the server refused to parse (422) - a list of problems; a list must never end up as "[object Object]". */
 export function errorText(body: unknown, fallback: string): string {
@@ -523,7 +543,7 @@ export async function queueBulkAdd(
   force = false,
   language?: string,
 ): Promise<QueueAddResult> {
-  const res = await fetch(`${BASE}/queue/bulk`, {
+  const res = await fetchWithTimeout(`${BASE}/queue/bulk`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ urls, pipeline_stages: pipeline_stages ?? null, force, language: language ?? null }),
@@ -540,7 +560,7 @@ export async function queueBulkAddByIds(
   video_ids: string[],
   pipeline_stages: string[],
 ): Promise<{ added: number; ids: number[]; invalid: string[]; duplicates: string[]; missing: string[] }> {
-  const res = await fetch(`${BASE}/queue/bulk`, {
+  const res = await fetchWithTimeout(`${BASE}/queue/bulk`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ video_ids, pipeline_stages }),
@@ -553,7 +573,7 @@ export async function queueBulkAddByIds(
 }
 
 export async function getQueue(): Promise<{ items: QueueItem[]; count: number }> {
-  const res = await fetch(`${BASE}/queue`)
+  const res = await fetchWithTimeout(`${BASE}/queue`, {}, POLL_TIMEOUT_MS)
   if (!res.ok) throw new Error('Failed to load queue')
   return res.json()
 }

@@ -112,8 +112,12 @@ export default function HomePage() {
     }
   }
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    return submitLink()
+  }
+
+  async function submitLink() {
     setError('')
     setQueueNote(null)
     const trimmedUrl = url.trim()
@@ -398,8 +402,14 @@ export default function HomePage() {
             )}
 
             {error && (
-              <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3">
-                <p className="text-body-sm text-on-error-container whitespace-pre-line">{error}</p>
+              <div role="alert" className="bg-error-container border border-error/30 rounded-lg px-4 py-3 flex items-center gap-3 flex-wrap">
+                <p className="text-body-sm text-on-error-container whitespace-pre-line flex-1">{error}</p>
+                {url.trim() && !loading && (
+                  <button type="button" onClick={() => void submitLink()}
+                    className="px-3 py-1 rounded-lg border border-error text-error text-label-sm font-semibold hover:bg-error hover:text-on-error">
+                    Retry
+                  </button>
+                )}
               </div>
             )}
 
@@ -409,7 +419,7 @@ export default function HomePage() {
                 disabled={loading || !url.trim()}
                 className="flex-grow bg-primary text-on-primary py-4 px-6 rounded-lg text-label-md font-bold transition-all hover:opacity-90 active:scale-[0.98] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                {loading ? 'Submitting…' : 'Add to queue'}
+                {loading ? 'Adding…' : 'Add to queue'}
               </button>
               <button
                 type="button"

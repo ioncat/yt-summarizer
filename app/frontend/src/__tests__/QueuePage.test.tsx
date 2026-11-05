@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import QueuePage from '../pages/QueuePage'
@@ -100,12 +100,49 @@ describe('QueuePage "New" (NS-24a)', () => {
     expect(await screen.findByText('Not a YouTube link.')).toBeTruthy()
   })
 
-  it('shows the error when the request fails and keeps what was typed', async () => {
+  it('a failed add stays visible as a row with the reason and a Retry; what was typed is kept', async () => {
     vi.mocked(api.queueBulkAdd).mockRejectedValue(new Error('boom'))
     renderQueue()
     await openAndSubmit('https://youtu.be/newVideo001')
-    expect(await screen.findByText('boom')).toBeTruthy()
+    expect(await screen.findByText('Not added: boom')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
     expect((screen.getByLabelText('New video link') as HTMLInputElement).value).toBe('https://youtu.be/newVideo001')
+  })
+
+  it('shows an "Adding..." row at once, before the server has answered, and drops it when the add succeeded', async () => {
+    let answer!: (v: api.QueueAddResult) => void
+    vi.mocked(api.queueBulkAdd).mockReturnValue(new Promise(res => { answer = res }))
+    renderQueue()
+    await openAndSubmit('https://youtu.be/slowAdd0001')
+    const row = await screen.findByTestId('adding-row')
+    expect(row.textContent).toContain('https://youtu.be/slowAdd0001')
+    expect(row.textContent).toContain('Adding…')
+    expect(screen.getByRole('button', { name: 'Adding…' })).toBeTruthy()
+    answer({ added: 1, ids: [1], invalid: [], duplicates: [] })
+    await waitFor(() => expect(screen.queryByTestId('adding-row')).toBeNull())
+    expect(await screen.findByText('Added to the queue.')).toBeTruthy()
+  })
+
+  it('Retry sends the same link again and the row goes away once it is added', async () => {
+    vi.mocked(api.queueBulkAdd).mockRejectedValueOnce(new Error('database busy, try again'))
+    renderQueue()
+    await openAndSubmit('https://youtu.be/retryMe0001')
+    await screen.findByText('Not added: database busy, try again')
+    vi.mocked(api.queueBulkAdd).mockResolvedValueOnce({ added: 1, ids: [7], invalid: [], duplicates: [] })
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(screen.queryByTestId('adding-row')).toBeNull())
+    expect(api.queueBulkAdd).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(api.queueBulkAdd).mock.calls[1][0]).toEqual(['https://youtu.be/retryMe0001'])
+  })
+
+  it('Dismiss removes a failed row without sending anything', async () => {
+    vi.mocked(api.queueBulkAdd).mockRejectedValue(new Error('boom'))
+    renderQueue()
+    await openAndSubmit('https://youtu.be/dismissMe01')
+    await screen.findByText('Not added: boom')
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(screen.queryByTestId('adding-row')).toBeNull()
+    expect(api.queueBulkAdd).toHaveBeenCalledTimes(1)
   })
 
   it('an empty field adds nothing and Close hides the form', async () => {
@@ -121,5 +158,55 @@ describe('QueuePage "New" (NS-24a)', () => {
     vi.mocked(api.getQueue).mockResolvedValue({ items: [item(3, 'local://talk.m4a', { video_id: 'file-1a2b3c4d' })], count: 1 })
     renderQueue()
     expect(await screen.findByText('talk.m4a')).toBeTruthy()
+  })
+})
+
+
+describe('QueuePage polling (NS-28)', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('keeps one poll in flight: a slow answer is not overtaken by new requests', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let answer!: (v: { items: api.QueueItem[]; count: number }) => void
+    vi.mocked(api.getQueue).mockReturnValue(new Promise(res => { answer = res }))
+    renderQueue()
+    await vi.advanceTimersByTimeAsync(10_000)               // three poll ticks while the first is still unanswered
+    expect(api.getQueue).toHaveBeenCalledTimes(1)
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [], count: 0 })
+    answer({ items: [], count: 0 })
+    await vi.advanceTimersByTimeAsync(3_100)
+    expect(vi.mocked(api.getQueue).mock.calls.length).toBeGreaterThanOrEqual(2)  // polling goes on afterwards
+  })
+
+  it('an add that finishes during a poll triggers one more load whose answer wins', async () => {
+    let first!: (v: { items: api.QueueItem[]; count: number }) => void
+    vi.mocked(api.getQueue).mockReturnValueOnce(new Promise(res => { first = res }))  // the initial load, slow
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [item(9, 'https://youtu.be/justAdded001')], count: 1 })
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({ added: 1, ids: [9], invalid: [], duplicates: [] })
+    renderQueue()
+    await openAndSubmit('https://youtu.be/justAdded001')
+    await screen.findByText('Added to the queue.')
+    expect(api.getQueue).toHaveBeenCalledTimes(1)             // the reload waits for the poll in flight
+    first({ items: [], count: 0 })                            // the OLD answer (no row) arrives first
+    await waitFor(() => expect(api.getQueue).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText('justAdded001')).toBeTruthy()  // the newer answer is what stays
+  })
+
+  it('after two failed polls a banner says the backend cannot be reached, the old list stays, and it clears on success', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.mocked(api.getQueue).mockResolvedValueOnce({ items: [item(1, 'https://youtu.be/lastGood0001')], count: 1 })
+    vi.mocked(api.getQueue).mockRejectedValue(new Error('Cannot reach the server. Is the backend running?'))
+    renderQueue()
+    await vi.advanceTimersByTimeAsync(100)
+    expect(await screen.findByText('lastGood0001')).toBeTruthy()
+    await vi.advanceTimersByTimeAsync(3_100)                   // 1st failed poll: no banner yet
+    expect(screen.queryByRole('alert')).toBeNull()
+    await vi.advanceTimersByTimeAsync(3_100)                   // 2nd failed poll
+    expect((await screen.findByRole('alert')).textContent).toContain('Cannot reach the backend')
+    expect(screen.getByText('lastGood0001')).toBeTruthy()   // last good list still shown
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [item(1, 'https://youtu.be/lastGood0001')], count: 1 })
+    await vi.advanceTimersByTimeAsync(3_100)
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
   })
 })

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { getQueue, deleteQueueItem, clearQueuePending, clearQueueFailed, retryQueueItem, retryAllFailed, QueueItem } from '../api'
 import NewItemForm from '../components/queue/NewItemForm'
+import { useQueueAdd } from '../components/queue/useQueueAdd'
 
 function activeStage(progress: string | null): string | null {
   if (!progress) return null
@@ -38,15 +39,27 @@ export default function QueuePage() {
   const [expandedError, setExpandedError] = useState<number | null>(null)
   const [newOpen, setNewOpen] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const inFlight = useRef(false)    // one request at a time: a slow answer cannot be overtaken by a newer one
+  const reloadAfter = useRef(false) // a reload asked for while one was running (e.g. right after an add)
+  const [pollFailures, setPollFailures] = useState(0)
 
   async function load() {
+    if (inFlight.current) { reloadAfter.current = true; return }
+    inFlight.current = true
     try {
       const data = await getQueue()
       setItems(data.items)
-    } catch { /* ignore */ } finally {
+      setPollFailures(0)
+    } catch {
+      setPollFailures(n => n + 1)  // the last good list stays on screen; after two misses a banner says so
+    } finally {
+      inFlight.current = false
       setLoading(false)
+      if (reloadAfter.current) { reloadAfter.current = false; void load() }
     }
   }
+
+  const adds = useQueueAdd(load)
 
   useEffect(() => {
     load()
@@ -162,7 +175,16 @@ export default function QueuePage() {
           </div>
         </div>
 
-        {newOpen && <NewItemForm onAdded={load} onClose={() => setNewOpen(false)} />}
+        {pollFailures >= 2 && (
+          <div role="alert" className="px-6 py-3 bg-error-container text-on-error-container text-body-sm border-b border-outline-variant">
+            Cannot reach the backend - showing the last list; trying again every few seconds.
+          </div>
+        )}
+
+        {newOpen && (
+          <NewItemForm add={adds.add} rows={adds.rows} onRetry={adds.retry} onDismiss={adds.dismiss}
+            onClose={() => setNewOpen(false)} />
+        )}
 
         {/* Processing banner */}
         {processingItem && (

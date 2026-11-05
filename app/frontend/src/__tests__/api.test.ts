@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   processVideo,
   getResult,
@@ -14,6 +14,7 @@ import {
   startCleanup,
   startMindmap,
   getStatus,
+  getQueue,
 } from '../api'
 
 function makeResponse(body: unknown, status = 200): Response {
@@ -209,5 +210,55 @@ describe('ids from the address bar are encoded in the request path (NS-24a revie
     await getResult('dQw4w9WgXcQ')
     await getResult('file-1a2b3c4d')
     expect(fetchMock.mock.calls.map(c => c[0])).toEqual(['/api/result/dQw4w9WgXcQ', '/api/result/file-1a2b3c4d'])
+  })
+})
+
+
+describe('add and poll calls give up instead of hanging (NS-28)', () => {
+  beforeEach(() => { vi.resetAllMocks() })
+  afterEach(() => { vi.useRealTimers() })
+
+  function hangingFetch() {
+    return vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_res, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')))
+    }))
+  }
+
+  it('queueBulkAdd and queueBulkAddByIds fail after 15 s with a message that says what to do', async () => {
+    vi.useFakeTimers()
+    const fetchMock = hangingFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    const a = expect(queueBulkAdd(['x'])).rejects.toThrow('No answer from the server in 15 s - it may be busy or not running. Try again.')
+    const b = expect(queueBulkAddByIds(['file-1'], ['cleanup'])).rejects.toThrow('No answer from the server in 15 s')
+    await vi.advanceTimersByTimeAsync(14_999)
+    expect(fetchMock.mock.calls.every(c => c[1]?.signal?.aborted === false)).toBe(true)  // not before 15 s
+    await vi.advanceTimersByTimeAsync(2)
+    await a
+    await b
+  })
+
+  it('getQueue fails after 10 s, so a hung poll cannot stop the polling for good', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', hangingFetch())
+    const p = expect(getQueue()).rejects.toThrow('No answer from the server in 10 s')
+    await vi.advanceTimersByTimeAsync(10_001)
+    await p
+  })
+
+  it('a server that is down gives "Cannot reach the server", not a raw TypeError', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    await expect(queueBulkAdd(['x'])).rejects.toThrow('Cannot reach the server. Is the backend running?')
+  })
+
+  it('a 503 "database busy" is shown as that text', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({ detail: 'database busy, try again' }, 503)))
+    await expect(queueBulkAdd(['x'])).rejects.toThrow('database busy, try again')
+  })
+
+  it('a fast answer clears the timer and returns normally', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({ added: 1, ids: [1], invalid: [], duplicates: [] })))
+    expect((await queueBulkAdd(['x'])).added).toBe(1)
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

@@ -1,44 +1,31 @@
 import { FormEvent, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { queueBulkAdd, QueueAddResult } from '../../api'
-import { defaultQueueStages } from '../../utils/pipeline'
+import { AddOutcome, AddRow } from './useQueueAdd'
 
-type Outcome =
-  | { kind: 'added' }
-  | { kind: 'processed'; videoId: string }
-  | { kind: 'in_queue' }
-  | { kind: 'invalid' }
-  | { kind: 'error'; message: string }
-
-function outcomeOf(res: QueueAddResult): Outcome {
-  if (res.added > 0) return { kind: 'added' }
-  const dup = res.duplicate_details?.[0]
-  if (dup) return dup.reason === 'processed' ? { kind: 'processed', videoId: dup.video_id } : { kind: 'in_queue' }
-  return { kind: 'invalid' }
+function shortLink(url: string) {
+  return url.length > 70 ? url.slice(0, 67) + '…' : url
 }
 
-/** One link, the default pipeline from Settings, Enter adds it; the page stays where it is. */
-export default function NewItemForm({ onAdded, onClose }: { onAdded: () => void; onClose: () => void }) {
+/** One link, the default pipeline (the Home page's choice), Enter adds it; the page stays where it is. */
+export default function NewItemForm({ add, rows, onRetry, onDismiss, onClose }: {
+  add: (url: string) => Promise<AddOutcome>
+  rows: AddRow[]
+  onRetry: (id: number) => void
+  onDismiss: (id: number) => void
+  onClose: () => void
+}) {
   const [url, setUrl] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [outcome, setOutcome] = useState<Outcome | null>(null)
+  const [outcome, setOutcome] = useState<AddOutcome | null>(null)
+  const busy = rows.some(r => r.state === 'adding')
 
   async function submit(e: FormEvent) {
     e.preventDefault()
     const link = url.trim()
-    if (!link || busy) return
-    setBusy(true)
-    try {
-      // the same choice as the Home page (its "full pipeline" checkbox, else extract only)
-      const res = await queueBulkAdd([link], defaultQueueStages(), false)
-      const o = outcomeOf(res)
-      setOutcome(o)
-      if (o.kind === 'added') { setUrl(''); onAdded() }
-    } catch (err) {
-      setOutcome({ kind: 'error', message: err instanceof Error ? err.message : 'Failed to add to queue' })
-    } finally {
-      setBusy(false)
-    }
+    if (!link) return
+    setOutcome(null)
+    const result = await add(link)
+    setOutcome(result.kind === 'error' ? null : result)  // an error stays visible in its own row, with Retry
+    if (result.kind === 'added') setUrl('')
   }
 
   return (
@@ -53,7 +40,7 @@ export default function NewItemForm({ onAdded, onClose }: { onAdded: () => void;
           aria-label="New video link"
           className="flex-1 px-4 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
         />
-        <button type="submit" disabled={busy || !url.trim()}
+        <button type="submit" disabled={!url.trim()}
           className="px-4 py-2 bg-primary text-on-primary rounded-lg text-label-md font-semibold disabled:opacity-50">
           {busy ? 'Adding…' : 'Add'}
         </button>
@@ -63,15 +50,32 @@ export default function NewItemForm({ onAdded, onClose }: { onAdded: () => void;
         </button>
       </div>
       {outcome && (
-        <p className={`text-body-sm ${outcome.kind === 'added' ? 'text-tertiary' : outcome.kind === 'error' || outcome.kind === 'invalid' ? 'text-error' : 'text-on-surface'}`} role="status">
+        <p className={`text-body-sm ${outcome.kind === 'added' ? 'text-tertiary' : outcome.kind === 'invalid' ? 'text-error' : 'text-on-surface'}`} role="status">
           {outcome.kind === 'added' && 'Added to the queue.'}
           {outcome.kind === 'in_queue' && 'Already in the queue.'}
           {outcome.kind === 'invalid' && 'Not a YouTube link.'}
-          {outcome.kind === 'error' && outcome.message}
           {outcome.kind === 'processed' && (
             <>Already processed. <Link className="font-semibold text-primary underline" to={`/result/${outcome.videoId}`}>Open the result</Link></>
           )}
         </p>
+      )}
+      {rows.length > 0 && (
+        <ul className="flex flex-col gap-1" aria-label="Links being added">
+          {rows.map(r => (
+            <li key={r.id} data-testid="adding-row" className="flex items-center gap-3 text-body-sm">
+              <span className="material-symbols-outlined text-[18px] text-secondary">{r.state === 'adding' ? 'sync' : 'error'}</span>
+              <span className="font-mono text-on-surface-variant" title={r.url}>{shortLink(r.url)}</span>
+              {r.state === 'adding' && <span className="text-secondary">Adding…</span>}
+              {r.state === 'failed' && (
+                <>
+                  <span className="text-error" role="alert">Not added: {r.error}</span>
+                  <button type="button" onClick={() => onRetry(r.id)} className="font-semibold text-primary underline">Retry</button>
+                  <button type="button" onClick={() => onDismiss(r.id)} className="text-secondary underline">Dismiss</button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
     </form>
   )
