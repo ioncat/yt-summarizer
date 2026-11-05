@@ -19,12 +19,10 @@ from starlette.background import BackgroundTask
 from models.database import get_db
 from services.subtitle_extractor import extract_subtitles, extract_video_id, validate_youtube_url, _ytdlp_cmd
 from services.text_cleaner import clean_text
-from services.text_summarizer import summarize_text, extract_notes, MAP_REDUCE_THRESHOLD
 from services.stage_control import MINDMAP_CANCEL, SUMMARY_CANCEL, SUMMARY_PROGRESS
 from services.video_service import (
     delete_video,
     finish_cleanup,
-    finish_summary,
     get_app_setting,
     get_result,
     get_stage_settings,
@@ -346,77 +344,6 @@ async def trigger_reextract(
             )
     background_tasks.add_task(_run_reextract, video_id, body.language, body.model)
     return {"status": "reextracting"}
-
-
-async def _run_summary(video_id: str) -> None:
-    """Background task: run LLM summarization and persist result."""
-    from models.database import AsyncSessionLocal
-    from datetime import datetime as _dt
-
-    async with AsyncSessionLocal() as db:
-        fmt = await get_result(db, video_id)
-        if not fmt:
-            return
-        # Prefer cleaned text, fall back to formatted
-        source_text = fmt.get("cleaned_text") or fmt.get("formatted_text")
-        if not source_text:
-            return
-        language = fmt.get("language")
-        stage = await get_stage_settings(db, "summarization")
-        extract_stage = await get_stage_settings(db, "summarization_extract")
-        combine_stage = await get_stage_settings(db, "summarization_combine")
-        ollama_url = await get_app_setting(db, "ollama_url")
-        force_map_reduce = (await get_app_setting(db, "force_map_reduce") or "false") == "true"
-        parallel_workers = int(await get_app_setting(db, "parallel_workers") or "1")
-        begin_llm_run(await get_app_setting(db, "llm_max_num_ctx"))
-
-    def _on_chunk_progress(done: int, total: int) -> None:
-        _SUMMARY_PROGRESS[video_id] = {"done": done, "total": total}
-
-    # Auto-select Full Extract for chapter videos ≥ MAP_REDUCE_THRESHOLD chars
-    use_full_extract = (
-        not force_map_reduce
-        and bool(fmt.get("chapters"))
-        and len(source_text) >= MAP_REDUCE_THRESHOLD
-    )
-
-    started_at = _dt.utcnow()
-    if use_full_extract:
-        summary, mode, chunks_count = await extract_notes(
-            source_text,
-            model=stage.get("model"),
-            ollama_url=ollama_url,
-            is_cancelled=lambda: video_id in _SUMMARY_CANCEL_SET,
-            on_progress=_on_chunk_progress,
-            language=language,
-            parallel_workers=parallel_workers,
-            # Use extract defaults — not summarization prompts
-        )
-    else:
-        summary, mode, chunks_count = await summarize_text(
-            source_text,
-            system_prompt=stage.get("system_prompt"),
-            user_prompt_template=stage.get("user_prompt_template"),
-            model=stage.get("model"),
-            ollama_url=ollama_url,
-            is_cancelled=lambda: video_id in _SUMMARY_CANCEL_SET,
-            force_map_reduce=force_map_reduce,
-            extract_prompt=extract_stage.get("user_prompt_template"),
-            combine_prompt=combine_stage.get("user_prompt_template"),
-            on_progress=_on_chunk_progress,
-            language=language,
-            parallel_workers=parallel_workers,
-        )
-
-    _SUMMARY_PROGRESS.pop(video_id, None)
-
-    async with AsyncSessionLocal() as db:
-        if video_id in _SUMMARY_CANCEL_SET:
-            _SUMMARY_CANCEL_SET.discard(video_id)
-            await reset_summary_status(db, video_id)
-        else:
-            await finish_summary(db, video_id, summary, mode=mode, chunks_count=chunks_count, started_at=started_at,
-                                 error=llm_failure_reason())
 
 
 @router.post("/result/{video_id}/summary")
