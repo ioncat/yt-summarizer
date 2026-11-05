@@ -68,36 +68,75 @@ async def get_duplicate_reasons(db: AsyncSession, video_ids: list[str]) -> dict[
     return found
 
 
+# One INSERT that both checks and writes (NS-28 review): the sort order is taken inside the statement, and with
+# `unique` the row is only inserted when no pending / processing row exists for that video_id. SQLite runs the
+# statement under the write lock, so of two requests adding the same link at the same moment the second one sees the
+# first one's row and inserts nothing (rowcount 0), instead of both passing a separate "is it queued?" check.
+_INSERT_ITEM = (
+    "INSERT INTO processing_queue (url, video_id, status, pipeline_stages, language, added_at, sort_order) "
+    "SELECT :url, :vid, 'pending', :stages, :language, datetime('now'), "
+    "(SELECT COALESCE(MAX(sort_order), 0) + 1 FROM processing_queue)"
+)
+_NOT_QUEUED = (
+    " WHERE NOT EXISTS (SELECT 1 FROM processing_queue "
+    "WHERE video_id = :vid AND status IN ('pending', 'processing'))"
+)
+
+
 async def add_items(
     db: AsyncSession,
     urls: list[str],
     pipeline_stages: list[str],
     language: str | None = None,
 ) -> list[int]:
-    """Insert queue items. Returns list of inserted IDs.
+    """Insert queue items without any duplicate check (force). Returns list of inserted IDs.
     video_id (YouTube ID) is stored at insert time for dedup checks.
     language=None means auto-detect; pass explicit code (e.g. "ru") to force.
     """
     from services.subtitle_extractor import extract_video_id as _extract_video_id
 
     stages_json = json.dumps(pipeline_stages)
-    result = await db.execute(text("SELECT COALESCE(MAX(sort_order), 0) FROM processing_queue"))
-    max_order = result.scalar() or 0
-
     ids: list[int] = []
-    for i, url in enumerate(urls):
+    for url in urls:
         vid = _extract_video_id(url)  # always valid here (caller already validated)
         res = await db.execute(
-            text(
-                "INSERT INTO processing_queue (url, video_id, status, pipeline_stages, language, added_at, sort_order) "
-                "VALUES (:url, :vid, 'pending', :stages, :language, datetime('now'), :order)"
-            ),
-            {"url": url, "vid": vid, "stages": stages_json, "language": language, "order": max_order + i + 1},
+            text(_INSERT_ITEM),
+            {"url": url, "vid": vid, "stages": stages_json, "language": language},
         )
         ids.append(res.lastrowid)
 
     await db.commit()
     return ids
+
+
+async def add_items_unique(
+    db: AsyncSession,
+    urls: list[str],
+    pipeline_stages: list[str],
+    language: str | None = None,
+) -> tuple[list[int], list[tuple[str, str]]]:
+    """Insert queue items, each only if its video is not already pending / processing, atomically.
+
+    Returns (inserted ids, [(url, video_id)] skipped because the video was queued meanwhile).
+    """
+    from services.subtitle_extractor import extract_video_id as _extract_video_id
+
+    stages_json = json.dumps(pipeline_stages)
+    ids: list[int] = []
+    skipped: list[tuple[str, str]] = []
+    for url in urls:
+        vid = _extract_video_id(url)
+        res = await db.execute(
+            text(_INSERT_ITEM + _NOT_QUEUED),
+            {"url": url, "vid": vid, "stages": stages_json, "language": language},
+        )
+        if res.rowcount == 1:
+            ids.append(res.lastrowid)
+        else:
+            skipped.append((url, vid))
+
+    await db.commit()
+    return ids, skipped
 
 
 async def get_queue(db: AsyncSession) -> list[dict]:

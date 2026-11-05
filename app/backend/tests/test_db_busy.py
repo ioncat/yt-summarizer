@@ -141,7 +141,7 @@ URL = "https://www.youtube.com/watch?v=busyAdd0001"
 
 async def test_the_add_survives_a_short_lock(client, monkeypatch):
     from services import queue_service
-    real, state = queue_service.add_items, {"calls": 0}
+    real, state = queue_service.add_items_unique, {"calls": 0}
 
     async def flaky(*a, **k):
         state["calls"] += 1
@@ -149,7 +149,7 @@ async def test_the_add_survives_a_short_lock(client, monkeypatch):
             raise locked()
         return await real(*a, **k)
 
-    monkeypatch.setattr(queue_service, "add_items", flaky)
+    monkeypatch.setattr(queue_service, "add_items_unique", flaky)
     r = await client.post("/api/queue/bulk", json={"urls": [URL], "pipeline_stages": ["cleanup"]})
     assert r.status_code == 200 and r.json()["added"] == 1 and state["calls"] == 2
     items = (await client.get("/api/queue")).json()["items"]
@@ -163,7 +163,7 @@ async def test_a_lock_that_stays_gives_503_database_busy_and_adds_nothing(client
     async def always_locked(*a, **k):
         raise locked()
 
-    monkeypatch.setattr(queue_service, "add_items", always_locked)
+    monkeypatch.setattr(queue_service, "add_items_unique", always_locked)
     r = await client.post("/api/queue/bulk", json={"urls": [URL], "pipeline_stages": ["cleanup"]})
     assert r.status_code == 503 and r.json() == {"detail": BUSY_MESSAGE} and r.headers["retry-after"] == str(RETRY_AFTER_S)
     assert (await client.get("/api/queue")).json()["items"] == []

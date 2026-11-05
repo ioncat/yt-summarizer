@@ -347,7 +347,7 @@ async def queue_bulk_add(
     reported as a duplicate (two runs of the same stage on one video would overwrite each other).
     At most 500 urls and 500 video_ids per request.
     """
-    from services.queue_service import add_items, get_duplicate_reasons
+    from services.queue_service import add_items, add_items_unique, get_duplicate_reasons
     from services.queue_by_id import RESULT_STAGES, add_by_video_ids
     from services.db_retry import retry_locked
     import json as _json
@@ -411,9 +411,16 @@ async def queue_bulk_add(
 
     # Step 4: add only new
     ids: list[int] = []
-    if new_urls:
+    if new_urls and body.force:
         ids = await retry_locked(
             lambda: add_items(db, new_urls, stages, language=body.language or None), db, "queue add: insert")
+    elif new_urls:
+        # check and insert in one statement per link: two identical adds at once give one row, not two
+        ids, raced = await retry_locked(
+            lambda: add_items_unique(db, new_urls, stages, language=body.language or None), db, "queue add: insert")
+        for url, vid in raced:
+            duplicates.append(url)
+            duplicate_details.append({"url": url, "video_id": vid, "reason": "in_queue"})
 
     missing: list[str] = []
     if body.video_ids:

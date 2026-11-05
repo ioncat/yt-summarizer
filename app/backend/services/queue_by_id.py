@@ -46,16 +46,22 @@ async def add_by_video_ids(db: AsyncSession, video_ids: list[str], stages: list[
     duplicates = [v for v in wanted if v in found and v in queued]
     to_add = [v for v in wanted if v in found and v not in queued]
 
-    max_order = (await db.execute(text("SELECT COALESCE(MAX(sort_order), 0) FROM processing_queue"))).scalar() or 0
     stages_json = json.dumps(stages)
     ids: list[int] = []
-    for i, vid in enumerate(to_add):
+    for vid in to_add:
         url, db_id = found[vid]
+        # one statement checks and inserts: a request that queued the same id a moment ago wins, this one skips it
         res = await db.execute(
             text("INSERT INTO processing_queue (url, video_id, db_video_id, status, pipeline_stages, added_at, sort_order) "
-                 "VALUES (:url, :vid, :dbid, 'pending', :stages, datetime('now'), :order)"),
-            {"url": url, "vid": vid, "dbid": db_id, "stages": stages_json, "order": max_order + i + 1},
+                 "SELECT :url, :vid, :dbid, 'pending', :stages, datetime('now'), "
+                 "(SELECT COALESCE(MAX(sort_order), 0) + 1 FROM processing_queue) "
+                 "WHERE NOT EXISTS (SELECT 1 FROM processing_queue "
+                 "WHERE video_id = :vid AND status IN ('pending', 'processing'))"),
+            {"url": url, "vid": vid, "dbid": db_id, "stages": stages_json},
         )
-        ids.append(res.lastrowid)
+        if res.rowcount == 1:
+            ids.append(res.lastrowid)
+        else:
+            duplicates.append(vid)
     await db.commit()
     return {"ids": ids, "duplicates": duplicates, "missing": missing}
