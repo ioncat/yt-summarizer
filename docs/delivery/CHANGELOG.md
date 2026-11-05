@@ -2,6 +2,10 @@
 
 Reverse-chronological, append-only. Format: see `documentation-conventions.md`.
 
+## 2026-11-05
+
+- **Empty model answers fixed (NS-26)**: summary, mind map and cleanup failed on long texts because Ollama ran with its default 4096-token context and a thinking model spent it all on thinking, returning an empty answer. Every Ollama chat call now sends a `num_ctx` sized to the input (setting `llm_max_num_ctx`, 4096–65536; the chat keeps `chat_num_ctx` as a floor); an empty answer is its own error with a clear message on the result page (`cleanup_error`, `summary_error`, `mindmap_error` columns, added by a migration; a backup was taken). Verified live: the two videos that failed now get summary and mind map. Reviewed: clean after two rounds. Commits: `90c7437`, `7d26488`, `41ae0bf`, `552d34a`, `8b45c65`.
+
 ## 2026-11-01
 
 - **Qwen3-ASR works (NS-20)**: the Qwen engine picks its device through torch and falls back to CPU; CUDA build of torch installed (`2.14.1+cu126`); audio is converted to wav with ffmpeg first, so `.m4a`/`.mp4`/`.mkv` work; both engines accept language codes and names (re-transcribe with large-v3 had failed silently on `Russian`); `requirements.txt` fixed (`qwen-asr>=0.0.6`, torch note). Reviewed: clean after follow-ups. Commits: `a4b14c7`, `0cebb65`, `79304c9`, `0749a62`, `a2cc87d`.
