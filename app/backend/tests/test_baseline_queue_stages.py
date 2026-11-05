@@ -550,10 +550,12 @@ async def test_process_file_transcribes_and_stores_model_device_and_deletes_uplo
         await db.commit()
 
 
-async def test_history_style_url_of_a_local_file_is_queued_under_a_truncated_id(client, seeded_video):
-    # BASELINE: known bug — History "queue" builds youtube.com/watch?v=<video_id> for every selected
-    # row, including file-* items; the 11-char id parser keeps 'file-8dd203', the item is accepted,
-    # and the worker later skips the unknown video silently (item ends 'done', nothing processed).
+async def test_url_form_of_a_local_file_id_is_queued_under_a_truncated_id(client, seeded_video):
+    # BASELINE: known bug — the History page used to build youtube.com/watch?v=<video_id> for every
+    # selected row, including file-* items; since NS-11 stage 1 it sends `video_ids` instead (see
+    # test_queue_by_video_id.py). The URL form itself still behaves like this: the 11-char id parser
+    # keeps 'file-8dd203', the item is accepted, and the worker later skips the unknown video
+    # silently (item ends 'done', nothing processed).
     r = await client.post("/api/queue/bulk", json={
         "urls": ["https://www.youtube.com/watch?v=file-8dd2037a"], "pipeline_stages": ["cleanup"], "force": True})
     assert r.status_code == 200 and r.json()["added"] == 1

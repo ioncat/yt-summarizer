@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { getHistory, deleteResult, deleteResultsBulk, queueBulkAdd, toggleFavorite, HistoryItem } from '../api'
+import { getHistory, deleteResult, deleteResultsBulk, queueBulkAddByIds, toggleFavorite, HistoryItem } from '../api'
 import { classifyVideo, VideoType } from '../utils/videoType'
 
 const HISTORY_PIPELINE_PRESETS = [
@@ -143,12 +143,12 @@ export default function HistoryPage() {
     if (!ids.length) return
     const preset = HISTORY_PIPELINE_PRESETS.find(p => p.value === queuePipeline)
     const stages = preset?.stages ?? ['cleanup', 'summary']
-    const urls = items
-      .filter(i => selected.has(i.video_id))
-      .map(i => `https://www.youtube.com/watch?v=${i.video_id}`)
+    // By id, not by URL: a local file has no YouTube URL (its id used to be cut short and the item did nothing)
     try {
-      const res = await queueBulkAdd(urls, stages, true)
-      setQueueMsg(`Added ${res.added} video${res.added !== 1 ? 's' : ''} to queue`)
+      const res = await queueBulkAddByIds(ids, stages)
+      const skipped = res.duplicates.length ? ` (${res.duplicates.length} already in the queue)` : ''
+      const gone = res.missing.length ? ` (${res.missing.length} not found)` : ''
+      setQueueMsg(`Added ${res.added} video${res.added !== 1 ? 's' : ''} to queue${skipped}${gone}`)
       setSelected(new Set())
       setSelectMode(false)
     } catch {

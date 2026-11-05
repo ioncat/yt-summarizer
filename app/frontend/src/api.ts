@@ -504,6 +504,23 @@ export async function queueBulkAdd(
   return res.json()
 }
 
+/** Queue results that are already in History (also local files) by video_id; LLM stages only. */
+export async function queueBulkAddByIds(
+  video_ids: string[],
+  pipeline_stages: string[],
+): Promise<{ added: number; ids: number[]; invalid: string[]; duplicates: string[]; missing: string[] }> {
+  const res = await fetch(`${BASE}/queue/bulk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ video_ids, pipeline_stages }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail?.message || body.detail || 'Failed to add to queue')
+  }
+  return res.json()
+}
+
 export async function getQueue(): Promise<{ items: QueueItem[]; count: number }> {
   const res = await fetch(`${BASE}/queue`)
   if (!res.ok) throw new Error('Failed to load queue')

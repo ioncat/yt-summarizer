@@ -11,6 +11,7 @@ function activeStage(progress: string | null): string | null {
 }
 
 function shortUrl(url: string) {
+  if (url.startsWith('local://')) return url.slice('local://'.length)  // a local file: show its name
   try {
     const u = new URL(url)
     const v = u.searchParams.get('v')
