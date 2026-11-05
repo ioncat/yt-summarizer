@@ -10,7 +10,7 @@ from typing import Annotated
 import httpx
 from services.http_client import http_client
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import get_db
@@ -33,10 +33,13 @@ _YTDLP_UPDATE_STATUS: dict = {"status": "idle"}  # idle | running | done | faile
 _COOKIES_MAX_BYTES = 5 * 1024 * 1024  # 5 MB — cookie files are small
 
 
+MAX_MODEL_NAME_CHARS = 200   # a model name ends up in run rows, error messages and the page
+
+
 class StageSettingsRequest(BaseModel):
     system_prompt: str | None = None
     user_prompt_template: str | None = None
-    model: str | None = None
+    model: str | None = Field(None, max_length=MAX_MODEL_NAME_CHARS)
 
 
 class AppSettingsRequest(BaseModel):
@@ -46,7 +49,7 @@ class AppSettingsRequest(BaseModel):
     force_map_reduce: bool | None = None
     parallel_workers: str | None = None
     stt_engine: str | None = None
-    stt_model: str | None = None
+    stt_model: str | None = Field(None, max_length=MAX_MODEL_NAME_CHARS)
     stt_device: str | None = None
     stt_cache_path: str | None = None
     upload_auto_delete: str | None = None

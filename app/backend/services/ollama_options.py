@@ -26,6 +26,7 @@ MIN_NUM_CTX = 4096
 CHARS_PER_TOKEN = 3
 DEFAULT_RESERVE_TOKENS = 4096
 _BUCKETS = (4096, 8192, 16384, 32768, 65536)
+MAX_REASON_CHARS = 500  # as str(exc)[:500] in the stage runners
 MAX_NUM_CTX = max(_BUCKETS)  # upper bound of any cap, 65536
 
 _max_num_ctx: ContextVar[int] = ContextVar("llm_max_num_ctx", default=DEFAULT_MAX_NUM_CTX)
@@ -67,10 +68,11 @@ def begin_llm_run(max_num_ctx: str | int | None = None) -> None:
 
 
 def record_failure_reason(message: str) -> None:
-    """Called by an LLM call that got no usable answer; the first reason of a run is kept."""
+    """Called by an LLM call that got no usable answer; the first reason of a run is kept (cut to MAX_REASON_CHARS: the
+    text may come from an Ollama answer or a setting, and ends up in the database and on the page)."""
     box = _failure_reason.get()
     if box is not None and not box:
-        box.append(message)
+        box.append(message[:MAX_REASON_CHARS])
 
 
 def record_llm_exception(exc: Exception, model: str | None) -> None:

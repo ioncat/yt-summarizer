@@ -223,3 +223,28 @@ async def test_init_db_runs_the_fill_and_survives_a_second_start(make_video):
     assert count >= 2                                           # extract + cleanup
     await dbm.init_db()
     assert len(await _rows("stgInit00001")) == count            # a restart adds nothing
+
+
+# --- bounded reasons and model names (NS-25 last review) ----------------------------------------------------
+
+def test_a_failure_reason_is_cut_to_500_characters():
+    from services.ollama_options import begin_llm_run, llm_failure_reason, record_failure_reason
+    begin_llm_run(None)
+    record_failure_reason("x" * 5000)
+    assert len(llm_failure_reason()) == 500
+    record_failure_reason("second reasons are ignored")
+    assert llm_failure_reason() == "x" * 500
+
+
+@pytest.mark.parametrize("stage", ["cleanup", "summarization", "chat"])
+async def test_a_model_name_longer_than_200_characters_is_refused(client, stage):
+    assert (await client.put(f"/api/settings/{stage}", json={"model": "m" * 200})).status_code == 200
+    r = await client.put(f"/api/settings/{stage}", json={"model": "m" * 201})
+    assert r.status_code == 422
+    assert (await client.get("/api/settings")).json()[stage]["model"] == "m" * 200          # the refused value was not saved
+    await client.put(f"/api/settings/{stage}", json={"model": None})
+
+
+async def test_the_stt_model_setting_has_the_same_limit(client):
+    assert (await client.put("/api/settings/app", json={"stt_model": "w" * 201})).status_code == 422
+    assert (await client.put("/api/settings/app", json={"stt_model": "base"})).status_code == 200
