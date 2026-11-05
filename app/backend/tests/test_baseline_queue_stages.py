@@ -141,15 +141,72 @@ async def test_queue_summary_success_progress_and_fields(seeded_video):
     assert gate.calls[0]["is_cancelled"]() is False  # BASELINE: no cancel in the queue copy
 
 
-async def test_queue_summary_without_model_is_silently_skipped(seeded_video):
-    # BASELINE: known gap — same silent skip as cleanup
-    # correct: the item ends 'failed' with a message (no summarization model)
+async def test_queue_summary_without_model_ends_failed_with_a_message(seeded_video):
+    # was: BASELINE known gap — a silent skip (status untouched, the queue item ended 'done').
+    # NS-11 owner decision 5: an explicit failure with a message.
     from httpx import AsyncClient, ASGITransport
     from main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         await c.put("/api/settings/summarization", json={"model": None})
-    await q._run_summary_stage(VIDEO_ID, 1)
-    assert (await fmt_row())["summary_status"] is None
+    with pytest.raises(q.StageFailure):
+        await q._run_summary_stage(VIDEO_ID, 1)
+    row = await fmt_row()
+    assert row["summary_status"] == "failed"
+    assert row["summary_error"] == "Summary needs an Ollama URL and a summarization model: set them in Settings"
+
+
+async def test_queue_summary_without_ollama_url_ends_failed_with_a_message(seeded_video):
+    from httpx import AsyncClient, ASGITransport
+    from main import app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        await c.put("/api/settings/app", json={"ollama_url": None})
+    with pytest.raises(q.StageFailure):
+        await q._run_summary_stage(VIDEO_ID, 1)
+    assert "Ollama URL" in (await fmt_row())["summary_error"]
+
+
+async def test_queue_summary_without_text_ends_failed_with_a_message(seeded_video):
+    await set_fmt(formatted_text=None, cleaned_text=None)
+    with pytest.raises(q.StageFailure):
+        await q._run_summary_stage(VIDEO_ID, 1)
+    row = await fmt_row()
+    assert row["summary_status"] == "failed" and "no text" in row["summary_error"]
+
+
+async def test_queue_summary_for_an_unknown_video_raises_a_message_instead_of_passing_silently():
+    with pytest.raises(q.StageFailure, match="not in History"):
+        await q._run_summary_stage("no-such-video", 1)
+
+
+async def test_queue_summary_stage_failure_message_is_not_replaced_by_an_earlier_llm_reason(seeded_video):
+    from services.ollama_options import begin_llm_run, record_failure_reason
+    begin_llm_run(None)
+    record_failure_reason("an older stage's reason")
+    await set_fmt(formatted_text=None, cleaned_text=None)
+    with pytest.raises(q.StageFailure):
+        await q._run_summary_stage(VIDEO_ID, 1)
+    assert "no text" in (await fmt_row())["summary_error"]
+
+
+async def test_queue_summary_empty_result_stores_a_reason(seeded_video):
+    gate = Gate(result=("", "single", 1))
+    gate.release.set()
+    with patch("services.text_summarizer.summarize_text", gate.llm()):
+        await q._run_summary_stage(VIDEO_ID, 1)
+    row = await fmt_row()
+    assert row["summary_status"] == "failed" and row["summary_error"] == "The model returned no summary"
+
+
+async def test_queue_item_for_a_summary_without_model_ends_failed_not_done(seeded_video):
+    from httpx import AsyncClient, ASGITransport
+    from main import app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        await c.put("/api/settings/summarization", json={"model": None})
+    from tests.baseline_helpers import add_item, get_item, run_worker
+    item = await add_item(["summary"])
+    await run_worker([item])
+    row = await get_item(item)
+    assert row["status"] == "failed" and "summarization model" in row["error_message"]
 
 
 async def test_queue_summary_exception_marks_failed_and_reraises(seeded_video):
