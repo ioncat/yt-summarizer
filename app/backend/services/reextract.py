@@ -56,6 +56,14 @@ async def reextract_queued(db, video_id: str) -> bool:
     )).first() is not None
 
 
+async def release_reextract(db, video_id: str, url: str | None) -> None:
+    """A queued re-extract will not run (Remove, Clear pending, Stop): its run row, opened on the request, is cancelled so nothing
+    stays 'processing' without an owner."""
+    from services import stage_runs
+    await stage_runs.cancel(db, video_id, run_stage_of(url))
+    await db.commit()
+
+
 async def stop_reextract(db, video_id: str) -> str:
     """Stop button: "stopped" (a queued re-extract was removed), "stopping" (a running one was told to stop) or "none". Either way
     nothing is replaced: the saved subtitles and what was made from them stay."""
@@ -69,8 +77,7 @@ async def stop_reextract(db, video_id: str) -> str:
     if row[1] == "processing":
         TRANSCRIBE_CANCEL.add(video_id)
         return "stopping"
-    if await delete_item(db, row[0]) == "deleted":
-        await _record(video_id, run_stage_of(row[2]), "cancelled")      # its run, opened on the request, ends with it
+    if await delete_item(db, row[0]) == "deleted":                         # (releases the run too)
         return "stopped"
     TRANSCRIBE_CANCEL.add(video_id)          # it started in the meantime: tell the running one
     return "stopping"

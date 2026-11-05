@@ -22,7 +22,7 @@ from models.database import AsyncSessionLocal
 from services.ollama_options import begin_llm_run, llm_failure_reason
 from services import stage_runs
 from services.file_stt import LOCAL_PREFIX, release_upload, run_queued_file, transcribe_text
-from services.reextract import run_queued_reextract
+from services.reextract import release_reextract, run_queued_reextract
 from services.stage_progress import ProgressWriter
 from services.queue_by_id import STAGE_COLUMNS, release_stage_status
 from services.stage_control import (
@@ -242,9 +242,11 @@ async def delete_item(db: AsyncSession, item_id: int, upload_message: str = "Rem
         for stage in STAGE_COLUMNS:
             if f'"{stage}"' in (row[2] or ""):
                 await release_stage_status(db, row[1], stage)  # it was to run this stage: no status stuck 'processing'
-    if row[0] == "pending" and (row[3] or "").startswith(LOCAL_PREFIX):
+    if row[0] == "pending" and (row[3] or "").startswith(LOCAL_PREFIX) and '"reextract"' not in (row[2] or ""):
         # an upload that will not be transcribed after all: its task must not stay pending for ever (NS-11 stage 5)
         await release_upload(db, row[1], row[4], upload_message)
+    if row[0] == "pending" and '"reextract"' in (row[2] or ""):
+        await release_reextract(db, row[1], row[3])       # a re-extract that will not run: its run row ends (NS-11 stage 6)
     return "deleted"
 
 
@@ -258,6 +260,10 @@ async def clear_pending(db: AsyncSession) -> int:
     ]
     uploads = (await db.execute(
         text("SELECT video_id, db_video_id FROM processing_queue WHERE status = 'pending' AND url LIKE 'local://%' "
+             "AND pipeline_stages NOT LIKE '%\"reextract\"%' AND video_id IS NOT NULL"),
+    )).fetchall()
+    reextracts = (await db.execute(
+        text("SELECT video_id, url FROM processing_queue WHERE status = 'pending' AND pipeline_stages LIKE '%\"reextract\"%' "
              "AND video_id IS NOT NULL"),
     )).fetchall()
     result = await db.execute(
@@ -269,6 +275,8 @@ async def clear_pending(db: AsyncSession) -> int:
             await release_stage_status(db, video_id, stage)  # that stage will never run: no stuck 'processing'
     for video_id, db_video_id in uploads:
         await release_upload(db, video_id, db_video_id, "Removed from the queue")   # the uploads' tasks end failed, not pending
+    for video_id, url in reextracts:
+        await release_reextract(db, video_id, url)                                  # the re-extracts' runs end (NS-11 stage 6)
     return result.rowcount
 
 
