@@ -128,33 +128,52 @@ async def get_item(item_id: int) -> dict:
 
 
 async def run_worker(item_ids: list[int], timeout: float = 15.0) -> None:
-    """Run the queue worker until every given item is done / failed / skipped (or the timeout).
+    """Run the queue worker until every given item is done / failed / skipped AND the worker has finished with it.
 
-    The wait is on the worker's own "item finished" calls, NOT on polling the database: the test database is one shared
-    connection, and a polling session that closes sends a ROLLBACK on that connection, which can undo the stage's
-    UPDATE that is in flight (a stage's status write then silently disappears).
+    Two traps of the shared in-memory test connection this avoids:
+    - no polling of the database: a polling session that closes sends a ROLLBACK on the shared connection, which can
+      undo a stage's UPDATE that is in flight;
+    - no cancelling of the worker while it still writes (after marking an item failed it may tidy up statuses): a
+      cancel inside a session closes the shared connection and the whole test database disappears.
+    So the worker is cancelled only when it asks for its NEXT item, i.e. when it is idle between items.
     """
     from services import queue_service as q
     wanted = set(item_ids)
     finished: set[int] = set()
-    all_done = asyncio.Event()
-    originals = {name: getattr(q, name) for name in ("_set_done", "_set_failed", "_set_skipped")}
+    idle = asyncio.Event()
+    originals = {name: getattr(q, name) for name in ("_set_done", "_set_failed", "_set_skipped", "_pick_next")}
 
-    def wrap(name):
+    def wrap_finish(name):
         async def inner(item_id, *args, **kwargs):
             result = await originals[name](item_id, *args, **kwargs)
             finished.add(item_id)
-            if wanted <= finished:
-                all_done.set()
             return result
         return inner
 
-    for name in originals:
-        setattr(q, name, wrap(name))
+    async def pick_next():
+        if wanted <= finished:        # everything asked for is finished and the worker is back at the top of its loop
+            idle.set()
+            return None
+        return await originals["_pick_next"]()
+
+    for name in ("_set_done", "_set_failed", "_set_skipped"):
+        setattr(q, name, wrap_finish(name))
+    q._pick_next = pick_next
+
+    class _FastAsyncio:               # the worker's pauses between items (1 s, 5 s) are not worth waiting for in a test
+        def __getattr__(self, attr):
+            return getattr(asyncio, attr)
+
+        @staticmethod
+        async def sleep(seconds, *args):
+            await asyncio.sleep(min(seconds, 0.01), *args)
+
+    real_asyncio = q.asyncio
+    q.asyncio = _FastAsyncio()
     task = asyncio.create_task(q.queue_worker())
     try:
         try:
-            await asyncio.wait_for(all_done.wait(), timeout)
+            await asyncio.wait_for(idle.wait(), timeout)
         except asyncio.TimeoutError:
             pass
     finally:
@@ -162,5 +181,6 @@ async def run_worker(item_ids: list[int], timeout: float = 15.0) -> None:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         q._WORKER_STOP = False
+        q.asyncio = real_asyncio
         for name, fn in originals.items():
             setattr(q, name, fn)

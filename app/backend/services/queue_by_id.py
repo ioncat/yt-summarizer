@@ -109,3 +109,30 @@ async def has_processing_item(db: AsyncSession, video_id: str) -> bool:
         text("SELECT 1 FROM processing_queue WHERE video_id = :vid AND status = 'processing' LIMIT 1"), {"vid": video_id},
     )).first()
     return row is not None
+
+
+async def release_mindmap_status(db: AsyncSession, video_id: str, status: str | None = None, error: str | None = None) -> bool:
+    """A mind map that was marked 'processing' has lost its queue item: give the status back (NS-11 stage 2 review).
+
+    The endpoint sets 'processing' at once; the item that was to run it may then be removed from the queue (Remove, Clear
+    pending) or its multi-stage item may fail at an earlier stage, and nothing would ever end the status. This sets it to
+    `status` (None = idle, or 'failed' with `error`) - only if it still says 'processing' AND no other pending / processing
+    item of the video still includes the mind map stage (that one will end it). A saved map is never touched.
+    Returns True if the status was changed.
+    """
+    other = (await db.execute(
+        text("SELECT 1 FROM processing_queue WHERE video_id = :v AND status IN ('pending', 'processing') "
+             "AND pipeline_stages LIKE :has LIMIT 1"),
+        {"v": video_id, "has": '%"mindmap"%'},
+    )).first()
+    if other is not None:
+        return False
+    res = await db.execute(
+        text("UPDATE subtitles_formatted SET mindmap_status = :status, mindmap_error = :error "
+             "WHERE mindmap_status = 'processing' AND id = ("
+             "SELECT sf.id FROM subtitles_formatted sf JOIN videos v ON sf.video_id = v.id "
+             "WHERE v.video_id = :v AND v.url NOT LIKE '__pending__%' ORDER BY sf.created_at DESC LIMIT 1)"),
+        {"status": status, "error": error, "v": video_id},
+    )
+    await db.commit()
+    return res.rowcount == 1
