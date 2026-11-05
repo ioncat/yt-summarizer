@@ -93,10 +93,7 @@ export default function HomePage() {
     setLoading(true)
     try {
       const res = await processFile(selectedFile, fileLanguage)
-      navigate(
-        `/processing/${res.task_id}/${res.video_id}?url=${encodeURIComponent('local://' + selectedFile.name)}`,
-        { state: { autoPipeline: false } }
-      )
+      navigate(`/processing/${res.task_id}/${res.video_id}?url=${encodeURIComponent('local://' + selectedFile.name)}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
     } finally {
@@ -178,10 +175,7 @@ export default function HomePage() {
         storeAutoDownloadIntent()
         try {
           const res = await processVideo(trimmedUrl, language)
-          navigate(
-            `/processing/${res.task_id}/${res.video_id}?url=${encodeURIComponent(trimmedUrl)}`,
-            { state: { autoPipeline: false } }
-          )
+          navigate(`/processing/${res.task_id}/${res.video_id}?url=${encodeURIComponent(trimmedUrl)}`)
         } catch (err) {
           if (err instanceof VideoAlreadyExistsError) {
             navigate(`/result/${err.videoId}`)
