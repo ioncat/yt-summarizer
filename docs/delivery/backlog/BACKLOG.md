@@ -232,6 +232,12 @@ Likely design (to confirm by the research): the add path does one fast insert an
 Related: NS-24 (quick one-by-one add, "New" button), NS-25 (stage table), NS-11 (one pipeline, state in the DB)
 Labels: `by-backend`, `by-frontend` | Status: 🔵 Planned | Depends on: NS-11
 
+
+**NS-29 — The agent (MCP) chooses what it gets** (feature, 🔴 high by owner, runs next to NS-11; touches only `app/mcp_server.py`, `app/tests`)
+Today `get_result` returns title, meta and the summary; `include_text` works only when there is no summary, is cut at 20,000 chars and has no paging. No mind map, status, errors, or search inside text.
+Wanted: `get_result(video_id, parts=[summary|transcript|cleaned|mindmap|status], offset, limit)` (transcript paged with a total length in the answer, so the agent can read a long video in pieces; `status` shows stage states and `*_error`); `search_history` also searches inside the text (snippet + position); a small `list_parts`-style hint in the answer of what exists for the video. Defaults keep today's behaviour (summary). Backend endpoints only if the existing ones lack a field; no new request that takes a path or program.
+Done when: tests for each part, paging and defaults; real call from Claude Code on a long video reads it in pieces. Review required (outward interface).
+
 **NS-18 — Finish splitting the routers** (after NS-11)
 Origin: CTO, 2026-11-01; NS-12 review ("`result.py` 665 and `process.py` 459 lines, over the 400-line limit")
 Value: the rule "a file over about 400 lines is split" holds for the backend too
