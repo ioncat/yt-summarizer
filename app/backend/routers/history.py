@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import get_db
+from services.text_search import MIN_QUERY_LEN, search_texts
 from services.video_service import delete_video, get_history
 
 router = APIRouter()
@@ -20,6 +21,19 @@ async def list_history(
     favorites_only: bool = False,
 ):
     return await get_history(db, page=page, search=search or None, favorites_only=favorites_only)
+
+
+@router.get("/history/text-search")
+async def search_history_texts(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    q: str = "",
+    limit: int = 20,
+):
+    """Find videos by words inside their transcript, cleaned text, summary or mind map (read-only)."""
+    q = q.strip()
+    if len(q) < MIN_QUERY_LEN:
+        raise HTTPException(status_code=400, detail=f"Query must be at least {MIN_QUERY_LEN} characters")
+    return await search_texts(db, q, limit=max(1, min(limit, 50)))
 
 
 class BulkDeleteRequest(BaseModel):
