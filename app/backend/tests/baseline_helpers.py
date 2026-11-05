@@ -134,7 +134,7 @@ async def get_item(item_id: int) -> dict:
 
 
 async def run_worker(item_ids: list[int], timeout: float = 15.0) -> None:
-    """Run the queue worker until every given item is done / failed / skipped AND the worker has finished with it.
+    """Run the queue worker until every given item is done / partial / failed / skipped AND the worker has finished with it.
 
     Two traps of the shared in-memory test connection this avoids:
     - no polling of the database: a polling session that closes sends a ROLLBACK on the shared connection, which can
@@ -147,7 +147,7 @@ async def run_worker(item_ids: list[int], timeout: float = 15.0) -> None:
     wanted = set(item_ids)
     finished: set[int] = set()
     idle = asyncio.Event()
-    originals = {name: getattr(q, name) for name in ("_set_done", "_set_failed", "_set_skipped", "_pick_next")}
+    originals = {name: getattr(q, name) for name in ("_set_done", "_set_partial", "_set_failed", "_set_skipped", "_pick_next")}
 
     def wrap_finish(name):
         async def inner(item_id, *args, **kwargs):
@@ -162,7 +162,7 @@ async def run_worker(item_ids: list[int], timeout: float = 15.0) -> None:
             return None
         return await originals["_pick_next"]()
 
-    for name in ("_set_done", "_set_failed", "_set_skipped"):
+    for name in ("_set_done", "_set_partial", "_set_failed", "_set_skipped"):
         setattr(q, name, wrap_finish(name))
     q._pick_next = pick_next
 

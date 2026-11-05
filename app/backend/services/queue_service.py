@@ -3,7 +3,8 @@
 Worker runs as a single asyncio task (started in lifespan). Processes one item
 at a time — Ollama cannot handle parallel heavy requests.
 
-Status flow: pending → processing → done | failed
+Status flow: pending → processing → done | partial | failed | skipped
+(partial = the item ran to its end but one or more of its stages failed; the message names them - NS-25)
 On backend restart: items stuck in 'processing' are reset to 'pending'.
 """
 from __future__ import annotations
@@ -232,38 +233,71 @@ async def clear_failed(db: AsyncSession) -> int:
     return result.rowcount
 
 
+async def _item_failed_stages(db: AsyncSession, item_id: int, stages: list[str]) -> list[tuple[str, str | None]]:
+    """The stages of this queue item whose NEWEST run ended failed, as [(stage, error text)] in pipeline order."""
+    newest: dict[str, tuple[str, str | None]] = {}
+    for stage, status, error in (await db.execute(
+        text("SELECT stage, status, error_text FROM processing_stages WHERE queue_item_id = :id ORDER BY id"),
+        {"id": item_id},
+    )).fetchall():
+        newest[stage] = (status, error)
+    return [(s, newest[s][1]) for s in stages if s in newest and newest[s][0] == "failed"]
+
+
+async def _reset_to_pending(db: AsyncSession, item_id: int, status: str, stages_json: str) -> None:
+    """Back to pending. A partial item restarts ONLY the stages that failed (the rest is done and in History)."""
+    if status == "partial":
+        await db.execute(
+            text("UPDATE processing_queue SET status = 'pending', error_message = NULL, started_at = NULL, "
+                 "finished_at = NULL, pipeline_stages = :stages WHERE id = :id"),
+            {"stages": stages_json, "id": item_id},
+        )
+    else:
+        await db.execute(
+            text("UPDATE processing_queue SET status = 'pending', error_message = NULL, started_at = NULL, "
+                 "finished_at = NULL WHERE id = :id"),
+            {"id": item_id},
+        )
+
+
+async def _retry(db: AsyncSession, item_id: int, status: str, pipeline_stages: str | None) -> bool:
+    """Reset one failed / partial item. False when a partial item has no failed stage left to run (nothing changes)."""
+    stages_json = pipeline_stages or json.dumps(["extract"])
+    if status == "partial":
+        failed = [s for s, _ in await _item_failed_stages(db, item_id, json.loads(stages_json))]
+        if not failed:
+            return False
+        stages_json = json.dumps(failed)
+    await _reset_to_pending(db, item_id, status, stages_json)
+    return True
+
+
 async def retry_item(db: AsyncSession, item_id: int) -> str:
-    """Reset a failed item back to pending. Returns 'not_found' | 'not_failed' | 'ok'."""
+    """Reset a failed or partial item back to pending. Returns 'not_found' | 'not_failed' | 'ok'."""
     result = await db.execute(
-        text("SELECT status FROM processing_queue WHERE id = :id"),
+        text("SELECT status, pipeline_stages FROM processing_queue WHERE id = :id"),
         {"id": item_id},
     )
     row = result.fetchone()
     if not row:
         return "not_found"
-    if row[0] != "failed":
+    if row[0] not in ("failed", "partial") or not await _retry(db, item_id, row[0], row[1]):
         return "not_failed"
-    await db.execute(
-        text(
-            "UPDATE processing_queue SET status = 'pending', error_message = NULL, "
-            "started_at = NULL, finished_at = NULL WHERE id = :id"
-        ),
-        {"id": item_id},
-    )
     await db.commit()
     return "ok"
 
 
 async def retry_all_failed(db: AsyncSession) -> int:
-    """Reset all failed items to pending. Returns count."""
-    result = await db.execute(
-        text(
-            "UPDATE processing_queue SET status = 'pending', error_message = NULL, "
-            "started_at = NULL, finished_at = NULL WHERE status = 'failed'"
-        )
-    )
+    """Reset all failed and partial items to pending (a partial one restarts only its failed stages). Returns count."""
+    rows = (await db.execute(
+        text("SELECT id, status, pipeline_stages FROM processing_queue WHERE status IN ('failed', 'partial')"),
+    )).fetchall()
+    count = 0
+    for item_id, status, stages in rows:
+        if await _retry(db, item_id, status, stages):
+            count += 1
     await db.commit()
-    return result.rowcount
+    return count
 
 
 # ---------------------------------------------------------------------------
@@ -362,6 +396,20 @@ async def _release_unrun_stages(video_id: str | None, url: str, stages: list[str
                     error=f"{_STAGE_LABELS[stage]} did not run: an earlier stage failed ({reason[:300]})")
         except Exception:  # noqa: BLE001 - the item is already marked failed; this is only tidying
             logger.exception("Queue worker: could not release the %s status of %s", stage, video_id)
+
+
+async def _set_partial(item_id: int, video_id: str | None, db_video_id: str | None, message: str) -> None:
+    """The item ran to its end but a stage failed: not 'done'. The message names the failed stages."""
+    _QUEUE_PROGRESS.pop(item_id, None)
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            text(
+                "UPDATE processing_queue SET status = 'partial', finished_at = datetime('now'), "
+                "video_id = :vid, db_video_id = :dbvid, error_message = :msg WHERE id = :id"
+            ),
+            {"vid": video_id, "dbvid": db_video_id, "msg": message[:2000], "id": item_id},
+        )
+        await db.commit()
 
 
 async def _set_skipped(item_id: int, message: str) -> None:
@@ -824,8 +872,16 @@ async def queue_worker() -> None:
             if "mindmap" in pipeline_stages:
                 await _run_mindmap_stage(yt_video_id, item_id)
 
-            await _set_done(item_id, yt_video_id, db_video_id)
-            logger.info("Queue worker: item %d done video_id=%s", item_id, yt_video_id)
+            async with AsyncSessionLocal() as db:
+                failed = await _item_failed_stages(db, item_id, pipeline_stages)
+            if failed:
+                # a stage ended failed without raising (an empty answer): the item is not "done"
+                message = "; ".join(f"{_STAGE_LABELS.get(s, s)} failed: {err or 'no reason recorded'}" for s, err in failed)
+                await _set_partial(item_id, yt_video_id, db_video_id, message)
+                logger.warning("Queue worker: item %d partial video_id=%s: %s", item_id, yt_video_id, message)
+            else:
+                await _set_done(item_id, yt_video_id, db_video_id)
+                logger.info("Queue worker: item %d done video_id=%s", item_id, yt_video_id)
 
         except StageCancelled as e:
             logger.info("Queue worker: item %d cancelled: %s", item_id, e)

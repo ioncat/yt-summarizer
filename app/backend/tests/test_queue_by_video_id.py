@@ -65,7 +65,7 @@ async def _run_worker(item_id: int, timeout: float = 15.0) -> dict:
             async with AsyncSessionLocal() as db:
                 status = (await db.execute(text("SELECT status FROM processing_queue WHERE id = :i"),
                                            {"i": item_id})).scalar()
-            if status in ("done", "failed"):
+            if status in ("done", "partial", "failed"):
                 break
             await asyncio.sleep(0.05)
     finally:

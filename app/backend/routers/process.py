@@ -463,7 +463,7 @@ async def clear_queue_pending(db: Annotated[AsyncSession, Depends(get_db)]):
 
 @router.delete("/queue/failed")
 async def clear_queue_failed(db: Annotated[AsyncSession, Depends(get_db)]):
-    """Clear all failed queue items."""
+    """Clear all failed queue items. Partial items (some stages done, some failed) are kept."""
     from services.queue_service import clear_failed
     count = await clear_failed(db)
     return {"cleared": count}
@@ -471,7 +471,7 @@ async def clear_queue_failed(db: Annotated[AsyncSession, Depends(get_db)]):
 
 @router.post("/queue/failed/retry")
 async def retry_queue_failed(db: Annotated[AsyncSession, Depends(get_db)]):
-    """Reset all failed queue items to pending."""
+    """Reset all failed and partial queue items to pending; a partial item restarts only its failed stages."""
     from services.queue_service import retry_all_failed
     count = await retry_all_failed(db)
     return {"retried": count}
@@ -479,13 +479,13 @@ async def retry_queue_failed(db: Annotated[AsyncSession, Depends(get_db)]):
 
 @router.post("/queue/{item_id}/retry")
 async def retry_queue_item(item_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
-    """Reset a single failed queue item to pending."""
+    """Reset a single failed or partial queue item to pending."""
     from services.queue_service import retry_item
     result = await retry_item(db, item_id)
     if result == "not_found":
         raise HTTPException(status_code=404, detail="Item not found")
     if result == "not_failed":
-        raise HTTPException(status_code=409, detail="Item is not in failed state")
+        raise HTTPException(status_code=409, detail="Item is not in failed or partial state")
     return {"retried": item_id}
 
 

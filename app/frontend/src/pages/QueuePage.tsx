@@ -31,7 +31,7 @@ function formatTime(iso: string | null) {
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-const STATUS_ORDER: Record<string, number> = { processing: 0, pending: 1, failed: 2, done: 3, skipped: 4 }
+const STATUS_ORDER: Record<string, number> = { processing: 0, pending: 1, failed: 2, partial: 2, done: 3, skipped: 4 }
 
 export default function QueuePage() {
   const [items, setItems] = useState<QueueItem[]>([])
@@ -107,6 +107,7 @@ export default function QueuePage() {
       setItems(prev => prev.map(i =>
         i.id === id ? { ...i, status: 'pending', error_message: null } : i
       ))
+      load()  // a partial item now holds only its failed stages: show what the server says
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to retry')
     }
@@ -123,6 +124,8 @@ export default function QueuePage() {
 
   const pendingCount = items.filter(i => i.status === 'pending').length
   const failedCount  = items.filter(i => i.status === 'failed').length
+  // "partial": the item ran to its end but a stage failed. Retry restarts only the failed stages; Clean removes failed items only.
+  const retryableCount = items.filter(i => i.status === 'failed' || i.status === 'partial').length
   const processingItem = items.find(i => i.status === 'processing')
 
   const sortedItems = [...items].sort((a, b) => {
@@ -149,13 +152,13 @@ export default function QueuePage() {
               <span className="material-symbols-outlined text-[16px]">add</span>
               New
             </button>
-            {failedCount > 0 && (
+            {retryableCount > 0 && (
               <button
                 onClick={handleRetryAllFailed}
                 className="px-4 py-2 border border-primary text-primary rounded-lg text-label-md font-semibold hover:bg-primary/10 transition-colors flex items-center gap-1.5"
               >
                 <span className="material-symbols-outlined text-[16px]">replay</span>
-                Retry failed ({failedCount})
+                Retry failed ({retryableCount})
               </button>
             )}
             {failedCount > 0 && (
@@ -266,7 +269,7 @@ export default function QueuePage() {
                     <Fragment key={item.id}>
                       <tr className={`transition-colors ${
                         item.status === 'processing' ? 'bg-secondary-container/10 hover:bg-secondary-container/20'
-                        : item.status === 'failed'   ? 'bg-error-container/5 hover:bg-error-container/20'
+                        : item.status === 'failed' || item.status === 'partial' ? 'bg-error-container/5 hover:bg-error-container/20'
                         : 'hover:bg-surface-container-high'
                       }`}>
                         <td className="px-6 py-5 text-on-surface-variant text-body-sm">{idx + 1}</td>
@@ -339,6 +342,20 @@ export default function QueuePage() {
                                 )}
                               </>
                             )}
+                            {item.status === 'partial' && (
+                              <>
+                                <span className="material-symbols-outlined text-[18px] text-secondary">warning</span>
+                                <span className="text-secondary font-semibold text-body-sm" title="Some stages failed; the rest worked">partial</span>
+                                {item.error_message && (
+                                  <button
+                                    onClick={() => setExpandedError(expandedError === item.id ? null : item.id)}
+                                    className="material-symbols-outlined text-[16px] text-secondary hover:text-on-surface transition-colors"
+                                  >
+                                    {expandedError === item.id ? 'expand_less' : 'expand_more'}
+                                  </button>
+                                )}
+                              </>
+                            )}
                             {item.status === 'skipped' && (
                               <span className="text-on-surface-variant text-body-sm">skipped</span>
                             )}
@@ -364,10 +381,10 @@ export default function QueuePage() {
                               close
                             </button>
                           )}
-                          {item.status === 'failed' && (
+                          {(item.status === 'failed' || item.status === 'partial') && (
                             <button
                               onClick={() => handleRetry(item.id)}
-                              title="Retry"
+                              title={item.status === 'partial' ? 'Retry the failed stages' : 'Retry'}
                               className="material-symbols-outlined text-[18px] text-outline hover:text-primary transition-colors"
                             >
                               replay

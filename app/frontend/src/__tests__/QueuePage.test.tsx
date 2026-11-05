@@ -368,3 +368,46 @@ describe('QueuePage polling (NS-28)', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
   })
 })
+
+describe('QueuePage "partial" items (NS-25)', () => {
+  const partial = item(5, 'https://youtu.be/partial0001', {
+    status: 'partial', pipeline_stages: ['cleanup', 'summary'], error_message: 'Summary failed: the model returned nothing',
+  })
+  const failed = item(6, 'https://youtu.be/failed00001', { status: 'failed', error_message: 'boom' })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [partial, failed], count: 2 })
+  })
+
+  it('shows a "partial" pill whose message names the failed stage', async () => {
+    renderQueue()
+    expect(await screen.findByText('partial')).toBeTruthy()
+    fireEvent.click(screen.getAllByText('expand_more')[0])
+    expect(screen.getByText('Summary failed: the model returned nothing')).toBeTruthy()
+  })
+
+  it('"Retry failed" counts partial items, "Clean failed" counts only the failed ones', async () => {
+    renderQueue()
+    expect(await screen.findByRole('button', { name: /Retry failed \(2\)/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Clean failed \(1\)/ })).toBeTruthy()
+  })
+
+  it('a partial item has its own Retry, which reloads the table (it now holds only its failed stages)', async () => {
+    vi.mocked(api.retryQueueItem).mockResolvedValue({ retried: 5 } as never)
+    renderQueue()
+    await screen.findByText('partial')
+    fireEvent.click(screen.getAllByTitle('Retry the failed stages')[0])
+    await waitFor(() => expect(api.retryQueueItem).toHaveBeenCalledWith(5))
+    await waitFor(() => expect(vi.mocked(api.getQueue).mock.calls.length).toBeGreaterThan(1))
+  })
+
+  it('Clean failed removes failed rows but keeps the partial one', async () => {
+    vi.mocked(api.clearQueueFailed).mockResolvedValue({ cleared: 1 } as never)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderQueue()
+    fireEvent.click(await screen.findByRole('button', { name: /Clean failed/ }))
+    await waitFor(() => expect(screen.queryByText('boom')).toBeNull())
+    expect(screen.getByText('partial')).toBeTruthy()
+  })
+})

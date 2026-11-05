@@ -539,7 +539,7 @@ export interface QueueItem {
   url: string
   video_id: string | null
   db_video_id: string | null
-  status: 'pending' | 'processing' | 'done' | 'failed' | 'skipped'
+  status: 'pending' | 'processing' | 'done' | 'partial' | 'failed' | 'skipped'
   pipeline_stages: string[]
   error_message: string | null
   added_at: string

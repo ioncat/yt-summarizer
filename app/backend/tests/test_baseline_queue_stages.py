@@ -440,7 +440,7 @@ async def _run_worker(item_ids: list[int], timeout: float = 15.0) -> None:
             async with AsyncSessionLocal() as db:
                 rows = (await db.execute(text("SELECT status FROM processing_queue WHERE id IN (%s)" %
                                               ",".join(str(i) for i in item_ids)))).all()
-            if rows and all(r[0] in ("done", "failed") for r in rows):
+            if rows and all(r[0] in ("done", "partial", "failed") for r in rows):
                 break
             await asyncio.sleep(0.05)
     finally:
