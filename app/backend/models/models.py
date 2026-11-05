@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.database import Base
@@ -163,7 +163,11 @@ class ProcessingStage(Base):
     subtitles_formatted by services/stage_backfill.py (rows marked meta {"legacy": true}).
     """
     __tablename__ = "processing_stages"
-    __table_args__ = (Index("ix_processing_stages_video_stage", "video_id", "stage", "id"),)
+    __table_args__ = (
+        Index("ix_processing_stages_video_stage", "video_id", "stage", "id"),
+        # at most one OPEN run per video and stage, whatever the concurrency (stage_runs.begin)
+        Index("ux_processing_stages_open", "video_id", "stage", unique=True, sqlite_where=text("status = 'processing'")),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     video_id: Mapped[str] = mapped_column(String, nullable=False)

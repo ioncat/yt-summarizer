@@ -4,8 +4,10 @@ One row per run of a stage. They are called from the same places that write the 
 `set_*_processing / finish_* / fail_* / reset_*`, queue_by_id `release_stage_status`, the queue's extract and transcribe
 runners), inside the caller's transaction: these functions never commit, so a status column and its row change together.
 
-- begin():   the stage starts, or is queued (the endpoint marks it at once). One OPEN ('processing') row per video and stage:
-             a second begin reuses it (the queue worker starting what the endpoint already marked) and only fills in what is new.
+- begin():   the stage starts, or is queued (the endpoint marks it at once). One OPEN ('processing') row per video and stage,
+             guaranteed by ONE statement (insert unless an open row exists, attempt computed in it) and by a partial unique
+             index: concurrent begins (five clicks at once) give one row. A second begin reuses the open row (the queue
+             worker starting what the endpoint already marked) and only fills in what is new.
 - finish():  the open row becomes 'done' (model, times, meta); with no open row a done row is added.
 - fail():    the open row becomes 'failed' with the error text and a reason code (see stage_codes); with no open row one is added.
 - cancel():  the open row becomes 'cancelled' (Stop, a removed queue item). Nothing open: nothing to do.
@@ -35,21 +37,29 @@ async def _open_row(db: AsyncSession, video_id: str, stage: str) -> int | None:
     return row[0] if row else None
 
 
-async def _insert(db: AsyncSession, video_id: str, stage: str, status: str, **cols) -> int:
-    attempt = (await db.execute(
-        text("SELECT COALESCE(MAX(attempt), 0) + 1 FROM processing_stages WHERE video_id = :v AND stage = :s"),
-        {"v": video_id, "s": stage},
-    )).scalar_one()
-    now = _ts()
+_INSERT_RUN = (
+    "INSERT OR IGNORE INTO processing_stages (video_id, stage, status, queue_item_id, attempt, model, started_at, "
+    "finished_at, error_code, error_text, meta, created_at) "
+    "SELECT :v, :s, :status, :qid, "
+    "(SELECT COALESCE(MAX(attempt), 0) + 1 FROM processing_stages WHERE video_id = :v AND stage = :s), "
+    ":model, :started, :finished, :code, :err, :meta, :now"
+)
+
+
+async def _insert(db: AsyncSession, video_id: str, stage: str, status: str, **cols):
+    """Add a run (the attempt number is computed in the same statement). Returns the new row's id, or None when the
+    partial unique index refused a second OPEN row (a concurrent begin won)."""
+    sql = _INSERT_RUN
+    if status == "processing":
+        sql += (" WHERE NOT EXISTS (SELECT 1 FROM processing_stages WHERE video_id = :v AND stage = :s "
+                "AND status = 'processing')")
     res = await db.execute(
-        text("INSERT INTO processing_stages (video_id, stage, status, queue_item_id, attempt, model, started_at, finished_at, "
-             "error_code, error_text, meta, created_at) VALUES (:v, :s, :status, :qid, :attempt, :model, :started, :finished, "
-             ":code, :err, :meta, :now)"),
-        {"v": video_id, "s": stage, "status": status, "qid": cols.get("queue_item_id"), "attempt": attempt,
+        text(sql),
+        {"v": video_id, "s": stage, "status": status, "qid": cols.get("queue_item_id"),
          "model": cols.get("model"), "started": cols.get("started_at"), "finished": cols.get("finished_at"),
-         "code": cols.get("error_code"), "err": cols.get("error_text"), "meta": cols.get("meta"), "now": now},
+         "code": cols.get("error_code"), "err": cols.get("error_text"), "meta": cols.get("meta"), "now": _ts()},
     )
-    return res.lastrowid
+    return res.lastrowid if res.rowcount == 1 else None
 
 
 def _check(stage: str) -> None:
@@ -61,9 +71,11 @@ async def begin(db: AsyncSession, video_id: str, stage: str, model: str | None =
                 queue_item_id: int | None = None) -> int:
     """The stage is queued or starts. Returns the id of the open row."""
     _check(stage)
-    open_id = await _open_row(db, video_id, stage)
-    if open_id is None:
-        return await _insert(db, video_id, stage, "processing", model=model, queue_item_id=queue_item_id, started_at=_ts())
+    new_id = await _insert(db, video_id, stage, "processing", model=model, queue_item_id=queue_item_id, started_at=_ts())
+    if new_id is not None:
+        return new_id
+    open_id = await _open_row(db, video_id, stage)      # an open row exists already: reuse it
+    assert open_id is not None
     await db.execute(
         text("UPDATE processing_stages SET model = COALESCE(:model, model), queue_item_id = COALESCE(:qid, queue_item_id) "
              "WHERE id = :id"),
@@ -186,4 +198,20 @@ async def close_stale(db: AsyncSession) -> int:
              "WHERE status = 'processing'"),
         {"now": _ts()},
     )
+    return res.rowcount
+
+
+async def ensure_open_run_index(conn) -> int:
+    """Start-up, for a database that already has the table: make sure at most one OPEN run per video and stage, then create
+    the partial unique index that keeps it so. Older duplicate open rows (concurrent begins before the index existed) are
+    closed as cancelled, the newest stays. `conn` is an open connection. Returns how many rows were closed."""
+    res = await conn.execute(
+        text("UPDATE processing_stages SET status = 'cancelled', finished_at = :now, error_code = 'cancelled', "
+             "meta = :meta WHERE status = 'processing' AND id NOT IN ("
+             "SELECT MAX(id) FROM processing_stages WHERE status = 'processing' GROUP BY video_id, stage)"),
+        {"now": _ts(), "meta": json.dumps({"reason": "duplicate open run"})},
+    )
+    await conn.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_processing_stages_open ON processing_stages (video_id, stage) "
+        "WHERE status = 'processing'"))
     return res.rowcount

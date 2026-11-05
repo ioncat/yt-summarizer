@@ -135,6 +135,18 @@ async def _seed_app_settings() -> None:
         await session.commit()
 
 
+async def _ensure_stage_index() -> None:
+    """The one-open-run-per-stage index on a table that already existed (create_all skips existing tables)."""
+    from services.stage_runs import ensure_open_run_index
+    try:
+        async with engine.begin() as conn:
+            closed = await ensure_open_run_index(conn)
+            if closed:
+                logger.warning("startup: closed %d duplicate open run(s) in processing_stages", closed)
+    except Exception:  # noqa: BLE001
+        logger.exception("startup: could not create the open-run index of processing_stages")
+
+
 async def _backfill_stages() -> None:
     """Fill processing_stages from the old per-stage columns (NS-25). Idempotent; a failure is logged, never fatal."""
     from services.stage_backfill import backfill_processing_stages
@@ -150,4 +162,5 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
     await _migrate_db()
     await _seed_app_settings()
+    await _ensure_stage_index()
     await _backfill_stages()
