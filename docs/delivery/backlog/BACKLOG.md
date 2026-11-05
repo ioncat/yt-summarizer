@@ -155,6 +155,7 @@ Items, each a small separate commit:
 15. QA 2026-11-05: summary text starts with broken markdown on `jZ0pSd8iw3U` and `1C3Aj50pcnc`: `*   **\n\n## Вступление**` (a bold marker around a heading); model output, probably the prompt or a post-processing step; check the prompt and add a clean-up of the first lines
 16. QA 2026-11-05: browser console shows `<g> attribute transform: Expected number, "translate(NaN,NaN) scale(...)"` from the mind map (10 of 11 buffered errors on /queue; new compared with 2026-11-01); same family as item 10 (markmap drawn while hidden or with zero size); re-check on a fresh load of a Result page
 17. QA 2026-11-05: summary on a short video takes 8 s with gemma4:e4b (baseline 3 s with e2b): the summarization model in Settings is now e4b; not a defect, note for timing comparisons
+18. QA 2026-11-05 (stage 2): on a video with no cleaned text the Summarize button does nothing: no request, no message (cause unknown; may predate stage 2); show feedback or the missing step. Item 10/16 family seen again: four `SVGLength` errors from markmap while regenerating and stopping mind maps
 Labels: `by-frontend` (item 3 may need `by-backend`) | Status: 🔵 Planned | Depends on: NS-11, NS-13, NS-14 (most of these touch the pages being split)
 
 **NS-19 — Word list for speech-to-text** (idea, after the refactor; a new feature)
