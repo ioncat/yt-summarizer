@@ -231,7 +231,7 @@ async def test_video_ids_duplicates_are_listed_in_the_details_and_new_adds_have_
     body = {"video_ids": [LOCAL_ID], "pipeline_stages": ["cleanup"]}
     assert (await client.post("/api/queue/bulk", json=body)).json()["duplicate_details"] == []
     again = (await client.post("/api/queue/bulk", json=body)).json()
-    assert again["duplicate_details"] == [{"url": None, "video_id": LOCAL_ID, "reason": "in_queue"}]
+    assert again["duplicate_details"] == [{"url": None, "video_id": LOCAL_ID, "reason": "in_queue", "stages": ["cleanup"]}]
 
 
 # --- queue_default_pipeline: what a request without stages gets -----------------------------

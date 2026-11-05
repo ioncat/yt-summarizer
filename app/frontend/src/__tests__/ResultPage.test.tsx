@@ -250,6 +250,16 @@ describe('ResultPage', () => {
     expect(screen.queryByText(/cleanup → summary/)).toBeNull()
   })
 
+  it('Summarize before any cleanup: when stages are already queued the message names them (NS-25)', async () => {
+    m.queueBulkAddByIds.mockResolvedValue({ added: 0, ids: [], invalid: [], duplicates: [base.video_id], missing: [],
+      duplicate_details: [{ url: null, video_id: base.video_id, reason: 'in_queue', stages: ['cleanup', 'summary'] }] })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await renderPage()
+    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summarize/))
+    expect((await screen.findAllByText(/cleanup and summary are already in the queue/)).length).toBeGreaterThan(0)
+  })
+
   it('Summary: a local file uses the same endpoint', async () => {
     m.startSummary.mockResolvedValue(undefined as never)
     setResult({ video_id: 'file-1234', url: 'local://talk.mp3', subtitle_source: 'transcript', subtitles_type: null,

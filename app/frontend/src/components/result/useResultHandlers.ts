@@ -196,9 +196,10 @@ export function useResultHandlers({
         // server runs summary right after cleanup even if this page is closed (no client-side chain; NS-11 stage 4a)
         const res = await queueBulkAddByIds([videoId], ['cleanup', 'summary'])
         if (res.added === 0) {
+          const queued = (res.duplicate_details ?? []).flatMap(d => d.stages ?? [])
           setSummaryError(res.missing.length
             ? 'This video was not found in History.'
-            : 'This video already has an item in the queue: wait for it or remove it on the Queue page.')
+            : `${queued.length ? `${[...new Set(queued)].join(' and ')} ${queued.length > 1 ? 'are' : 'is'} already in the queue` : 'This video already has an item in the queue'}: wait for it or remove it on the Queue page.`)
           return
         }
         setQueuedMsg('cleanup+summary')

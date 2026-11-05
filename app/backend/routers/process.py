@@ -344,7 +344,9 @@ async def queue_bulk_add(
 
     `force` applies to `urls` only: it skips the "already processed / already in the queue" check so a
     video can be re-run. `video_ids` ignore it: an id that is already pending or processing is always
-    reported as a duplicate (two runs of the same stage on one video would overwrite each other).
+    reported as a duplicate (two runs of the same stage on one video would overwrite each other). Stage-aware (NS-25):
+    only the stages that a queued item already includes are skipped; the other requested stages are still queued, and a
+    duplicate names the stages that are already queued.
     At most 500 urls and 500 video_ids per request.
     """
     from services.queue_service import add_items, add_items_unique, get_duplicate_reasons
@@ -428,7 +430,8 @@ async def queue_bulk_add(
             lambda: add_by_video_ids(db, body.video_ids, body.pipeline_stages), db, "queue add: insert by id")
         ids += by_id["ids"]
         duplicates += by_id["duplicates"]
-        duplicate_details += [{"url": None, "video_id": v, "reason": "in_queue"} for v in by_id["duplicates"]]
+        duplicate_details += [{"url": None, "video_id": v, "reason": "in_queue", "stages": by_id["covered"].get(v, [])}
+                              for v in by_id["duplicates"]]
         missing = by_id["missing"]
 
     return {"added": len(ids), "ids": ids, "invalid": invalid, "duplicates": duplicates,

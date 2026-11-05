@@ -17,14 +17,18 @@ RESULT_STAGES = ("cleanup", "summary", "mindmap")
 
 
 async def add_by_video_ids(db: AsyncSession, video_ids: list[str], stages: list[str]) -> dict:
-    """Queue existing results. Returns {"ids": [...], "duplicates": [...], "missing": [...]}.
+    """Queue existing results. Returns {"ids": [...], "duplicates": [...], "missing": [...], "covered": {...}}.
 
-    duplicates: already pending or processing in the queue; missing: no such result in History.
-    Order of the given ids is kept; an id listed twice is queued once.
+    Stage-aware (NS-25): a stage that a pending / processing item of the video already includes is "covered" and is not
+    queued again, but the OTHER requested stages still are (a queued mind map no longer blocks "cleanup then summarize").
+    duplicates: every requested stage is covered, nothing was added; missing: no such result in History;
+    covered: {video_id: [the requested stages that were already queued]}, for duplicates and partly covered videos.
+    The stages of a new item are marked 'processing' at once, so a stage that never gets to run (an earlier one failed)
+    ends with a reason instead of an idle status. Order of the given ids is kept; an id listed twice is queued once.
     """
     wanted = list(dict.fromkeys(v.strip() for v in video_ids if v and v.strip()))
     if not wanted:
-        return {"ids": [], "duplicates": [], "missing": []}
+        return {"ids": [], "duplicates": [], "missing": [], "covered": {}}
 
     marks = ", ".join(f":v{i}" for i in range(len(wanted)))
     params = {f"v{i}": v for i, v in enumerate(wanted)}
@@ -35,38 +39,62 @@ async def add_by_video_ids(db: AsyncSession, video_ids: list[str], stages: list[
             params,
         )).fetchall()
     }
-    queued = {
-        r[0]
-        for r in (await db.execute(
-            text(f"SELECT video_id FROM processing_queue WHERE video_id IN ({marks}) "
-                 f"AND status IN ('pending','processing')"),
-            params,
-        )).fetchall()
-    }
+    queued_stages: dict[str, set[str]] = {}
+    for vid, item_stages in (await db.execute(
+        text(f"SELECT video_id, pipeline_stages FROM processing_queue WHERE video_id IN ({marks}) "
+             f"AND status IN ('pending','processing')"),
+        params,
+    )).fetchall():
+        queued_stages.setdefault(vid, set()).update(json.loads(item_stages) if item_stages else ["extract"])
 
     missing = [v for v in wanted if v not in found]
-    duplicates = [v for v in wanted if v in found and v in queued]
-    to_add = [v for v in wanted if v in found and v not in queued]
-
-    stages_json = json.dumps(stages)
+    duplicates: list[str] = []
+    covered: dict[str, list[str]] = {}
     ids: list[int] = []
-    for vid in to_add:
+    for vid in (v for v in wanted if v in found):
+        already = [s for s in stages if s in queued_stages.get(vid, ())]
+        todo = [s for s in stages if s not in already]
+        if already:
+            covered[vid] = already
+        if not todo:
+            duplicates.append(vid)
+            continue
         url, db_id = found[vid]
-        # one statement checks and inserts: a request that queued the same id a moment ago wins, this one skips it
+        likes = " OR ".join(f"pipeline_stages LIKE :s{i}" for i in range(len(todo)))
+        # one statement checks and inserts: a request that queued one of these stages a moment ago wins, this one skips it
         res = await db.execute(
             text("INSERT INTO processing_queue (url, video_id, db_video_id, status, pipeline_stages, added_at, sort_order) "
                  "SELECT :url, :vid, :dbid, 'pending', :stages, datetime('now'), "
                  "(SELECT COALESCE(MAX(sort_order), 0) + 1 FROM processing_queue) "
                  "WHERE NOT EXISTS (SELECT 1 FROM processing_queue "
-                 "WHERE video_id = :vid AND status IN ('pending', 'processing'))"),
-            {"url": url, "vid": vid, "dbid": db_id, "stages": stages_json},
+                 f"WHERE video_id = :vid AND status IN ('pending', 'processing') AND ({likes}))"),
+            {"url": url, "vid": vid, "dbid": db_id, "stages": json.dumps(todo),
+             **{f"s{i}": f'%"{s}"%' for i, s in enumerate(todo)}},
         )
         if res.rowcount == 1:
             ids.append(res.lastrowid)
+            await _mark_queued(db, vid, todo, res.lastrowid)
         else:
             duplicates.append(vid)
     await db.commit()
-    return {"ids": ids, "duplicates": duplicates, "missing": missing}
+    return {"ids": ids, "duplicates": duplicates, "missing": missing, "covered": covered}
+
+
+async def _mark_queued(db: AsyncSession, video_id: str, stages: list[str], item_id: int) -> None:
+    """The stages of a new item show 'processing' at once (as the single-stage endpoints do), tied to the item."""
+    from services import video_service as vs
+
+    todo = [s for s in stages if s in STAGE_COLUMNS]
+    if not todo:
+        return
+    if "cleanup" in todo:
+        model = (await vs.get_stage_settings(db, "cleanup")).get("model")
+        await vs.set_cleanup_processing(db, video_id, model=model, queue_item_id=item_id)
+    if "summary" in todo:
+        model = (await vs.get_stage_settings(db, "summarization")).get("model")
+        await vs.set_summary_processing(db, video_id, model=model, queue_item_id=item_id)
+    if "mindmap" in todo:
+        await vs.start_mindmap_generation(db, video_id, queue_item_id=item_id)
 
 
 # --- one stage of one video (the result page's mind map button) --------------------------------------------
