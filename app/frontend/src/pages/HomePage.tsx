@@ -32,6 +32,8 @@ export default function HomePage() {
   const [useStt, setUseStt] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [queueNote, setQueueNote] = useState<
+    { kind: 'added' | 'in_queue' | 'invalid' } | { kind: 'processed'; videoId: string } | null>(null)
   const [missingConfig, setMissingConfig] = useState<string[]>([])
   const [allSettings, setAllSettings] = useState<AllSettings | null>(null)
   const [autoPipeline, setAutoPipeline] = useState(
@@ -64,10 +66,14 @@ export default function HomePage() {
 
   const navigate = useNavigate()
 
+  // The page stays: a line says what happened, so the next link can be pasted at once.
   // A duplicate carries its video id from the server (links like /live/, youtu.be/ and /shorts/ have no ?v=)
   function afterQueueAdd(res: QueueAddResult) {
     const dup = res.duplicate_details?.[0]
-    navigate(dup?.reason === 'processed' ? `/result/${dup.video_id}` : '/queue')
+    if (dup?.reason === 'processed') setQueueNote({ kind: 'processed', videoId: dup.video_id })
+    else if (dup) setQueueNote({ kind: 'in_queue' })
+    else if (res.added > 0) { setQueueNote({ kind: 'added' }); setUrl('') }
+    else setQueueNote({ kind: 'invalid' })
   }
 
   function extractUrlFromLine(line: string): string {
@@ -123,6 +129,7 @@ export default function HomePage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError('')
+    setQueueNote(null)
     const trimmedUrl = url.trim()
 
     if (autoDownload && !autoPipeline && pipeline === 'extract') {
@@ -395,6 +402,15 @@ export default function HomePage() {
                 </div>
               )}
             </div>
+
+            {queueNote && (
+              <div role="status" className="bg-surface-container-low border border-outline-variant rounded-lg px-4 py-3 text-body-sm text-on-surface">
+                {queueNote.kind === 'added' && <>Added to the queue. <Link to="/queue" className="font-semibold text-primary underline">View queue →</Link></>}
+                {queueNote.kind === 'in_queue' && <>Already in the queue. <Link to="/queue" className="font-semibold text-primary underline">View queue →</Link></>}
+                {queueNote.kind === 'processed' && <>Already processed. <Link to={`/result/${queueNote.videoId}`} className="font-semibold text-primary underline">Open the result →</Link></>}
+                {queueNote.kind === 'invalid' && <span className="text-error">Not a YouTube link.</span>}
+              </div>
+            )}
 
             {error && (
               <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3">

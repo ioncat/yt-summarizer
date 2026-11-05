@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import HomePage from '../pages/HomePage'
 import * as api from '../api'
@@ -88,35 +88,48 @@ async function submitUrl(url: string) {
   fireEvent.submit(screen.getByPlaceholderText(/youtube\.com\/watch/i).closest('form')!)
 }
 
-describe('HomePage: a link that is already known (NS-24a)', () => {
+describe('HomePage: adding through the queue keeps the page (NS-24a)', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
   it.each([
-    ['https://www.youtube.com/live/Ifr9JgTm2TE', 'Ifr9JgTm2TE'],
-    ['https://youtu.be/Ifr9JgTm2TE', 'Ifr9JgTm2TE'],
-    ['https://www.youtube.com/shorts/Ifr9JgTm2TE', 'Ifr9JgTm2TE'],
-  ])('opens /result/<video id> for %s, never /result/<the whole url>', async (url, id) => {
+    ['https://www.youtube.com/live/Ifr9JgTm2TE'],
+    ['https://youtu.be/Ifr9JgTm2TE'],
+    ['https://www.youtube.com/shorts/Ifr9JgTm2TE'],
+  ])('a processed link (%s) says so and links to /result/<video id>, not to the whole url', async (url) => {
     vi.mocked(api.queueBulkAdd).mockResolvedValue({
       added: 0, ids: [], invalid: [], duplicates: [url],
-      duplicate_details: [{ url, video_id: id, reason: 'processed' }],
+      duplicate_details: [{ url, video_id: 'Ifr9JgTm2TE', reason: 'processed' }],
     })
     await submitUrl(url)
-    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe(`/result/${id}`))
+    const link = await screen.findByRole('link', { name: /Open the result/ })
+    expect(link.getAttribute('href')).toBe('/result/Ifr9JgTm2TE')
+    expect(screen.getByText(/Already processed/)).toBeTruthy()
+    expect(screen.getByTestId('where').textContent).toBe('/')   // the page did not jump away
   })
 
-  it('goes to the queue when the link is already waiting there', async () => {
+  it('a link already waiting in the queue says so and stays', async () => {
     const url = 'https://youtu.be/Ifr9JgTm2TE'
     vi.mocked(api.queueBulkAdd).mockResolvedValue({
       added: 0, ids: [], invalid: [], duplicates: [url],
       duplicate_details: [{ url, video_id: 'Ifr9JgTm2TE', reason: 'in_queue' }],
     })
     await submitUrl(url)
-    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/queue'))
+    expect(await screen.findByText(/Already in the queue/)).toBeTruthy()
+    expect(screen.getByTestId('where').textContent).toBe('/')
   })
 
-  it('goes to the queue after a normal add', async () => {
+  it('a new link is added, the field is cleared, the page stays with a link to the queue', async () => {
     vi.mocked(api.queueBulkAdd).mockResolvedValue({ added: 1, ids: [5], invalid: [], duplicates: [], duplicate_details: [] })
     await submitUrl('https://youtu.be/newVideo001')
-    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/queue'))
+    expect(await screen.findByText(/Added to the queue/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: /View queue/ }).getAttribute('href')).toBe('/queue')
+    expect((screen.getByPlaceholderText(/youtube\.com\/watch/i) as HTMLInputElement).value).toBe('')
+    expect(screen.getByTestId('where').textContent).toBe('/')
+  })
+
+  it('a link the server cannot use is reported', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({ added: 0, ids: [], invalid: ['x'], duplicates: [] })
+    await submitUrl('not a link at all')
+    expect(await screen.findByText('Not a YouTube link.')).toBeTruthy()
   })
 })
