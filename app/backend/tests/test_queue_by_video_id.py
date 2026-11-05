@@ -120,7 +120,8 @@ async def test_item_for_a_video_that_is_not_in_history_fails_with_a_message_not_
 async def test_bulk_add_queues_a_local_file_by_video_id(client, local_video):
     r = await client.post("/api/queue/bulk", json={"video_ids": [LOCAL_ID], "pipeline_stages": ["cleanup", "summary"]})
     assert r.status_code == 200
-    assert r.json() == {"added": 1, "ids": r.json()["ids"], "invalid": [], "duplicates": [], "missing": []}
+    assert r.json() == {"added": 1, "ids": r.json()["ids"], "invalid": [], "duplicates": [],
+                        "duplicate_details": [], "missing": []}
     item = (await client.get("/api/queue")).json()["items"][0]
     assert item["video_id"] == LOCAL_ID and item["url"] == LOCAL_URL and item["db_video_id"] == local_video["db_id"]
     assert item["pipeline_stages"] == ["cleanup", "summary"] and item["status"] == "pending"
@@ -199,3 +200,35 @@ async def test_blank_video_ids_are_a_400_not_a_silent_no_op(client, local_video)
         r = await client.post("/api/queue/bulk", json={"video_ids": ids, "pipeline_stages": ["cleanup"]})
         assert r.status_code == 400 and "empty id" in r.json()["detail"], ids
     assert (await client.get("/api/queue")).json()["items"] == []  # the valid id next to a blank one is not added
+
+
+# --- duplicates come back with the video id and the reason (NS-24a) --------------------
+
+async def test_duplicates_carry_the_video_id_for_every_url_form_and_the_reason(client, seeded_video):
+    live = "https://www.youtube.com/live/dQw4w9WgXcQ"      # already in History
+    short = "https://youtu.be/queuedDup01"                   # will be pending
+    shorts = "https://www.youtube.com/shorts/queuedDup02"
+    first = await client.post("/api/queue/bulk", json={"urls": [short, shorts]})
+    assert first.json()["added"] == 2
+    r = await client.post("/api/queue/bulk", json={"urls": [live, short, shorts]})
+    body = r.json()
+    assert body["added"] == 0 and body["duplicates"] == [live, short, shorts]  # the old key is unchanged
+    assert body["duplicate_details"] == [
+        {"url": live, "video_id": "dQw4w9WgXcQ", "reason": "processed"},
+        {"url": short, "video_id": "queuedDup01", "reason": "in_queue"},
+        {"url": shorts, "video_id": "queuedDup02", "reason": "in_queue"},
+    ]
+
+
+async def test_an_id_that_is_both_processed_and_queued_is_reported_as_processed(client, seeded_video):
+    url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    await client.post("/api/queue/bulk", json={"urls": [url], "force": True, "pipeline_stages": ["summary"]})
+    d = (await client.post("/api/queue/bulk", json={"urls": [url]})).json()["duplicate_details"]
+    assert d == [{"url": url, "video_id": "dQw4w9WgXcQ", "reason": "processed"}]
+
+
+async def test_video_ids_duplicates_are_listed_in_the_details_and_new_adds_have_none(client, local_video):
+    body = {"video_ids": [LOCAL_ID], "pipeline_stages": ["cleanup"]}
+    assert (await client.post("/api/queue/bulk", json=body)).json()["duplicate_details"] == []
+    again = (await client.post("/api/queue/bulk", json=body)).json()
+    assert again["duplicate_details"] == [{"url": None, "video_id": LOCAL_ID, "reason": "in_queue"}]

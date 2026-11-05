@@ -33,10 +33,12 @@ _QUEUE_PROGRESS: dict[int, str] = {}
 # CRUD
 # ---------------------------------------------------------------------------
 
-async def get_duplicate_video_ids(db: AsyncSession, video_ids: list[str]) -> set[str]:
-    """Return subset of video_ids that are already processed or pending in queue."""
+async def get_duplicate_reasons(db: AsyncSession, video_ids: list[str]) -> dict[str, str]:
+    """Why each id is a duplicate: "processed" (in History) or "in_queue" (pending / processing).
+
+    An id that is both counts as "processed"."""
     if not video_ids:
-        return set()
+        return {}
 
     placeholders = ", ".join(f":vid{i}" for i in range(len(video_ids)))
     params = {f"vid{i}": v for i, v in enumerate(video_ids)}
@@ -49,7 +51,7 @@ async def get_duplicate_video_ids(db: AsyncSession, video_ids: list[str]) -> set
         ),
         params,
     )
-    found: set[str] = {row[0] for row in done.fetchall()}
+    found: dict[str, str] = {row[0]: "processed" for row in done.fetchall()}
 
     # Already in queue with pending/processing status
     in_queue = await db.execute(
@@ -59,7 +61,9 @@ async def get_duplicate_video_ids(db: AsyncSession, video_ids: list[str]) -> set
         ),
         params,
     )
-    found.update(row[0] for row in in_queue.fetchall() if row[0])
+    for row in in_queue.fetchall():
+        if row[0]:
+            found.setdefault(row[0], "in_queue")
 
     return found
 

@@ -347,7 +347,7 @@ async def queue_bulk_add(
     reported as a duplicate (two runs of the same stage on one video would overwrite each other).
     At most 500 urls and 500 video_ids per request.
     """
-    from services.queue_service import add_items, get_duplicate_video_ids
+    from services.queue_service import add_items, get_duplicate_reasons
     from services.queue_by_id import RESULT_STAGES, add_by_video_ids
     import json as _json
 
@@ -389,13 +389,15 @@ async def queue_bulk_add(
     # Step 2: check against DB (skip if force=True — re-run mode from History)
     new_urls: list[str] = []
     duplicates: list[str] = []
+    duplicate_details: list[dict] = []  # per duplicate url: its video id and why (no URL parsing in the client)
     if body.force:
         new_urls = valid_urls  # no dedup — user explicitly re-queuing
     else:
-        duplicate_vids = await get_duplicate_video_ids(db, valid_vid_ids)
+        duplicate_vids = await get_duplicate_reasons(db, valid_vid_ids)
         for url, vid in zip(valid_urls, valid_vid_ids):
             if vid in duplicate_vids:
                 duplicates.append(url)
+                duplicate_details.append({"url": url, "video_id": vid, "reason": duplicate_vids[vid]})
             else:
                 new_urls.append(url)
 
@@ -416,9 +418,11 @@ async def queue_bulk_add(
         by_id = await add_by_video_ids(db, body.video_ids, body.pipeline_stages)
         ids += by_id["ids"]
         duplicates += by_id["duplicates"]
+        duplicate_details += [{"url": None, "video_id": v, "reason": "in_queue"} for v in by_id["duplicates"]]
         missing = by_id["missing"]
 
-    return {"added": len(ids), "ids": ids, "invalid": invalid, "duplicates": duplicates, "missing": missing}
+    return {"added": len(ids), "ids": ids, "invalid": invalid, "duplicates": duplicates,
+            "duplicate_details": duplicate_details, "missing": missing}
 
 
 @router.get("/queue")
