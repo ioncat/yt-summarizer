@@ -116,6 +116,28 @@ export interface ResultResponse {
   transcription_model?: string | null
   transcription_device?: string | null
   transcription_finished_at?: string | null
+  stages?: Partial<Record<StageName, StageRun>>   // NS-25: the newest run of each stage that has runs
+}
+
+export type StageName = 'extract' | 'transcribe' | 'cleanup' | 'summary' | 'mindmap'
+
+export interface StageRunDetail {
+  attempt: number
+  status: 'processing' | 'done' | 'failed' | 'cancelled'
+  queue_item_id: number | null
+  model: string | null
+  started_at: string | null
+  finished_at: string | null
+  error_code: string | null
+  error_text: string | null
+  meta: Record<string, unknown>
+  progress_done: number | null
+  progress_total: number | null
+}
+
+export interface StageRun extends StageRunDetail {
+  runs: number                       // how many runs this stage has had
+  last_done: StageRunDetail | null   // the run the shown result came from
 }
 
 export interface HistoryItem {

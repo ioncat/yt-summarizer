@@ -461,4 +461,20 @@ describe('ResultPage', () => {
     fireEvent.click(btn(/Download/))
     await waitFor(() => expect(m.downloadVideo).toHaveBeenCalledWith('abc123', 'mp4', 'best'))
   })
+
+  it('shows the stage table when the result has recorded runs, and not otherwise (NS-25)', async () => {
+    await renderPage()
+    expect(screen.queryByText(/Processing steps/)).toBeNull()
+    cleanup()
+    setResult({ stages: { summary: {
+      attempt: 2, status: 'failed', queue_item_id: 1, model: 'bad', started_at: null, finished_at: '2026-11-01T10:00:00',
+      error_code: 'timeout', error_text: 'Read timed out', meta: {}, progress_done: null, progress_total: null, runs: 2,
+      last_done: { attempt: 1, status: 'done', queue_item_id: 1, model: 'good', started_at: null, finished_at: '2026-11-01T09:00:00',
+        error_code: null, error_text: null, meta: {}, progress_done: null, progress_total: null },
+    } } })
+    await renderPage()
+    expect(await screen.findByText(/Processing steps \(1\)/)).toBeTruthy()
+    expect(screen.getByText('timed out')).toBeTruthy()
+    expect(screen.getByText('good')).toBeTruthy()
+  })
 })

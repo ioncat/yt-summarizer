@@ -14,6 +14,7 @@ import { ActionsBar } from '../components/result/ActionsBar'
 import { ErrorBanners } from '../components/result/ErrorBanners'
 import { TabsBar } from '../components/result/TabsBar'
 import { TabContent } from '../components/result/TabContent'
+import { StageTable } from '../components/result/StageTable'
 import { ChatInputBar } from '../components/result/ChatInputBar'
 import { useResultChat } from '../components/result/useResultChat'
 import { useResultHandlers } from '../components/result/useResultHandlers'
@@ -401,6 +402,9 @@ export default function ResultPage() {
             chatHistory={chatHistory} isChatting={isChatting} deleteChatMessage={deleteChatMessage}
             chatEndRef={chatEndRef} displayText={displayText}
           />
+
+          {/* ── What ran, with which model, and why a step failed (NS-25) ── */}
+          <StageTable result={result} />
         </div>
       </div>
 
