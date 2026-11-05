@@ -226,7 +226,11 @@ export default function ResultPage() {
           startSummaryTimer()
         }
       })
-      .catch(err => { console.error('[Result] getResult failed:', err); setError('Could not load result') })
+      .catch(err => {
+        console.error('[Result] getResult failed:', err)
+        setError(err instanceof Error && err.message === 'Result not found'
+          ? `Video "${videoId}" was not found in History.` : 'Could not load result')
+      })
   }
 
   useEffect(() => {

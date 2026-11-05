@@ -110,7 +110,8 @@ export async function getStatus(taskId: string): Promise<StatusResponse> {
 
 export async function getResult(videoId: string): Promise<ResultResponse> {
   const res = await fetch(`${BASE}/result/${videoId}`)
-  if (!res.ok) throw new Error('Result not found')
+  if (res.status === 404) throw new Error('Result not found')
+  if (!res.ok) throw new Error('Failed to load result')
   return res.json()
 }
 

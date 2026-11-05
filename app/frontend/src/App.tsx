@@ -36,6 +36,7 @@ import SettingsPage from './pages/SettingsPage'
 import BenchmarkPage from './pages/BenchmarkPage'
 import BenchmarksIndexPage from './pages/BenchmarksIndexPage'
 import QueuePage from './pages/QueuePage'
+import NotFoundPage from './pages/NotFoundPage'
 import { getHealth, getQueueCounts } from './api'
 import { Theme, getInitialTheme, saveTheme } from './utils/theme'
 
@@ -200,6 +201,7 @@ export default function App() {
         <Route path="/benchmarks"                   element={<BenchmarksIndexPage />} />
         <Route path="/benchmark/:videoId"           element={<BenchmarkPage />} />
         <Route path="/queue"                        element={<QueuePage />} />
+        <Route path="*"                             element={<NotFoundPage />} />
       </Routes>
     </ErrorBoundary>
   )
