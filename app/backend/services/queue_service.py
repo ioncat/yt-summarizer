@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import AsyncSessionLocal
 from services.ollama_options import begin_llm_run, llm_failure_reason
+from services import stage_runs
 from services.queue_by_id import STAGE_COLUMNS, release_stage_status
 from services.stage_control import (
     CLEANUP_CANCEL, CLEANUP_PROGRESS, MINDMAP_CANCEL, SUMMARY_CANCEL, SUMMARY_PROGRESS, StageCancelled,
@@ -454,7 +455,7 @@ async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
             model = stage.get("model")
             if not model or not ollama_url:
                 raise StageFailure("Cleanup needs an Ollama URL and a cleanup model: set them in Settings")
-            await set_cleanup_processing(db, yt_video_id, model=model)
+            await set_cleanup_processing(db, yt_video_id, model=model, queue_item_id=item_id)
 
         def on_cleanup_progress(done: int, total: int) -> None:
             _QUEUE_PROGRESS[item_id] = f"cleanup: paragraph {done}/{total}"
@@ -529,7 +530,7 @@ async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
             model = stage.get("model")
             if not model or not ollama_url:
                 raise StageFailure("Summary needs an Ollama URL and a summarization model: set them in Settings")
-            await set_summary_processing(db, yt_video_id, model=model)
+            await set_summary_processing(db, yt_video_id, model=model, queue_item_id=item_id)
 
         use_full_extract = (
             not force_map_reduce
@@ -725,7 +726,7 @@ async def _run_mindmap_stage(yt_video_id: str, item_id: int) -> None:
             lang_map = {"ru": "Russian", "en": "English", "uk": "Ukrainian", "de": "German",
                         "fr": "French", "es": "Spanish", "zh": "Chinese", "ja": "Japanese"}
             language = lang_map.get(lang_code.lower(), lang_code)
-            await start_mindmap_generation(db, yt_video_id)
+            await start_mindmap_generation(db, yt_video_id, queue_item_id=item_id)
 
         MINDMAP_CANCEL.discard(yt_video_id)  # a flag left over from an earlier run must not stop this one
         _QUEUE_PROGRESS[item_id] = "mindmap: generating…"
@@ -788,12 +789,14 @@ async def queue_worker() -> None:
             # Stage 1: transcribe OR extract (mutually exclusive) — skip for already-processed videos
             if "transcribe" in pipeline_stages:
                 _QUEUE_PROGRESS[item_id] = "downloading audio…"
-                transcribe_result = await _run_transcribe(url, language=item_language, item_id=item_id)
+                transcribe_result = await stage_runs.recorded(
+                    "transcribe", url, item_id, lambda: _run_transcribe(url, language=item_language, item_id=item_id))
                 yt_video_id = transcribe_result["video_id"]
                 db_video_id = transcribe_result["db_video_id"]
             elif "extract" in pipeline_stages:
                 _QUEUE_PROGRESS[item_id] = "extracting subtitles…"
-                extract_result = await _run_extract(url, language=item_language)
+                extract_result = await stage_runs.recorded(
+                    "extract", url, item_id, lambda: _run_extract(url, language=item_language))
                 yt_video_id = extract_result["video_id"]
                 db_video_id = extract_result["db_video_id"]
             else:

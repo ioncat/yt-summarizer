@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.models import Video, SubtitleRaw, SubtitleFormatted, ProcessingTask, PipelineSettings, AppSetting
 from models.models import generate_id
+from services import stage_runs
 from services.text_cleaner import DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE
 from services.text_summarizer import (
     DEFAULT_SYSTEM_PROMPT as DEFAULT_SUMMARY_SYSTEM_PROMPT,
@@ -356,7 +357,8 @@ async def _get_fmt_id(db: AsyncSession, video_id: str) -> str | None:
     return row[0] if row else None
 
 
-async def set_cleanup_processing(db: AsyncSession, video_id: str, model: str | None = None) -> bool:
+async def set_cleanup_processing(db: AsyncSession, video_id: str, model: str | None = None,
+                                 queue_item_id: int | None = None) -> bool:
     """Mark cleanup as in progress. Returns False if record not found.
     Does NOT touch cleanup_started_at / cleanup_finished_at — those are
     written only by finish_cleanup() so previous run's meta survives cancel.
@@ -374,6 +376,7 @@ async def set_cleanup_processing(db: AsyncSession, video_id: str, model: str | N
         """),
         {"model": model, "id": fmt_id},
     )
+    await stage_runs.begin(db, video_id, "cleanup", model, queue_item_id)
     await db.commit()
     return True
 
@@ -396,6 +399,7 @@ async def finish_cleanup(
             text("UPDATE subtitles_formatted SET cleanup_status = 'failed', cleanup_error = :error WHERE id = :id"),
             {"error": error, "id": fmt_id},
         )
+        await stage_runs.fail(db, video_id, "cleanup", error)
         await db.commit()
         return
     status = "done"
@@ -459,6 +463,7 @@ async def finish_cleanup(
                 },
             )
 
+    await stage_runs.finish(db, video_id, "cleanup", model=row[0] if row else None, started_at=started_dt)
     await db.commit()
 
 
@@ -476,10 +481,12 @@ async def reset_cleanup_status(db: AsyncSession, video_id: str) -> None:
         """),
         {"id": fmt_id},
     )
+    await stage_runs.cancel(db, video_id, "cleanup")
     await db.commit()
 
 
-async def set_summary_processing(db: AsyncSession, video_id: str, model: str | None = None) -> bool:
+async def set_summary_processing(db: AsyncSession, video_id: str, model: str | None = None,
+                                 queue_item_id: int | None = None) -> bool:
     """Mark summarization as in progress. Returns False if record not found.
     Does NOT touch summary_text / started_at / finished_at — those are
     written only by finish_summary() so previous run's meta survives cancel.
@@ -497,6 +504,7 @@ async def set_summary_processing(db: AsyncSession, video_id: str, model: str | N
         """),
         {"model": model, "id": fmt_id},
     )
+    await stage_runs.begin(db, video_id, "summary", model, queue_item_id)
     await db.commit()
     return True
 
@@ -525,6 +533,7 @@ async def finish_summary(
             text("UPDATE subtitles_formatted SET summary_status = 'failed', summary_error = :error WHERE id = :id"),
             {"error": error, "id": fmt_id},
         )
+        await stage_runs.fail(db, video_id, "summary", error)
         await db.commit()
         return
     status = "done"
@@ -598,6 +607,8 @@ async def finish_summary(
                 },
             )
 
+    await stage_runs.finish(db, video_id, "summary", model=row[0] if row else None, started_at=started_dt,
+                            meta={"mode": mode, "chunks": chunks_count})
     await db.commit()
 
 
@@ -616,6 +627,7 @@ async def reset_summary_status(db: AsyncSession, video_id: str) -> None:
         """),
         {"id": fmt_id},
     )
+    await stage_runs.cancel(db, video_id, "summary")
     await db.commit()
 
 
@@ -732,7 +744,7 @@ async def replace_subtitles_after_reextract(
     await db.commit()
 
 
-async def start_mindmap_generation(db: AsyncSession, video_id: str) -> None:
+async def start_mindmap_generation(db: AsyncSession, video_id: str, queue_item_id: int | None = None) -> None:
     """Mark mindmap as processing."""
     fmt_id = await _get_fmt_id(db, video_id)
     if not fmt_id:
@@ -741,6 +753,7 @@ async def start_mindmap_generation(db: AsyncSession, video_id: str) -> None:
         text("UPDATE subtitles_formatted SET mindmap_status = 'processing', mindmap_error = NULL WHERE id = :id"),
         {"id": fmt_id},
     )
+    await stage_runs.begin(db, video_id, "mindmap", None, queue_item_id)
     await db.commit()
 
 
@@ -759,6 +772,10 @@ async def finish_mindmap(db: AsyncSession, video_id: str, mindmap_text: str | No
         """),
         {"status": status, "mindmap": mindmap_text, "error": None if status == "done" else error, "id": fmt_id},
     )
+    if status == "done":
+        await stage_runs.finish(db, video_id, "mindmap")
+    else:
+        await stage_runs.fail(db, video_id, "mindmap", error)
     await db.commit()
 
 
@@ -771,6 +788,7 @@ async def reset_mindmap_status(db: AsyncSession, video_id: str) -> None:
         text("UPDATE subtitles_formatted SET mindmap_status = NULL WHERE id = :id"),
         {"id": fmt_id},
     )
+    await stage_runs.cancel(db, video_id, "mindmap")
     await db.commit()
 
 
@@ -781,6 +799,7 @@ async def fail_cleanup_stage(db: AsyncSession, video_id: str, error: str | None 
             text("UPDATE subtitles_formatted SET cleanup_status = 'failed', cleanup_error = :error WHERE id = :id"),
             {"id": fmt_id, "error": error},
         )
+        await stage_runs.fail(db, video_id, "cleanup", error)
         await db.commit()
 
 
@@ -791,6 +810,7 @@ async def fail_summary_stage(db: AsyncSession, video_id: str, error: str | None 
             text("UPDATE subtitles_formatted SET summary_status = 'failed', summary_error = :error WHERE id = :id"),
             {"id": fmt_id, "error": error},
         )
+        await stage_runs.fail(db, video_id, "summary", error)
         await db.commit()
 
 
@@ -801,6 +821,7 @@ async def fail_mindmap_stage(db: AsyncSession, video_id: str, error: str | None 
             text("UPDATE subtitles_formatted SET mindmap_status = 'failed', mindmap_error = :error WHERE id = :id"),
             {"id": fmt_id, "error": error},
         )
+        await stage_runs.fail(db, video_id, "mindmap", error)
         await db.commit()
 
 

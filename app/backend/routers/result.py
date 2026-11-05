@@ -120,8 +120,8 @@ async def trigger_cleanup(
     _CANCEL_SET.discard(video_id)  # clear any stale cancel flag before starting
     # queue first: if the database is busy nothing has changed (503); the status is set right after, and again by the
     # stage itself when it starts
-    await retry_locked(lambda: enqueue_stage(db, video_id, "cleanup"), db, "cleanup: queue")
-    await set_cleanup_processing(db, video_id, model=stage.get("model"))
+    item_id = await retry_locked(lambda: enqueue_stage(db, video_id, "cleanup"), db, "cleanup: queue")
+    await set_cleanup_processing(db, video_id, model=stage.get("model"), queue_item_id=item_id)
     return {"status": "processing"}
 
 
@@ -346,8 +346,8 @@ async def trigger_summary(
     _SUMMARY_CANCEL_SET.discard(video_id)
     # queue first: if the database is busy nothing has changed (503); the status is set right after, and again by the
     # stage itself when it starts
-    await retry_locked(lambda: enqueue_stage(db, video_id, "summary"), db, "summary: queue")
-    await set_summary_processing(db, video_id, model=stage.get("model"))
+    item_id = await retry_locked(lambda: enqueue_stage(db, video_id, "summary"), db, "summary: queue")
+    await set_summary_processing(db, video_id, model=stage.get("model"), queue_item_id=item_id)
     return {"status": "processing"}
 
 
@@ -396,8 +396,8 @@ async def trigger_mindmap(
     _MINDMAP_CANCEL_SET.discard(video_id)
     # queue first: if the database is busy nothing has changed; the status is set right after (and again by the stage
     # itself when it starts), so a queued item never has a stale "idle" status for more than a moment
-    await retry_locked(lambda: enqueue_stage(db, video_id, "mindmap"), db, "mindmap: queue")
-    await start_mindmap_generation(db, video_id)
+    item_id = await retry_locked(lambda: enqueue_stage(db, video_id, "mindmap"), db, "mindmap: queue")
+    await start_mindmap_generation(db, video_id, queue_item_id=item_id)
     return {"status": "processing"}
 
 

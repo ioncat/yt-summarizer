@@ -101,6 +101,10 @@ async def _reset_stale_statuses() -> None:
                     "startup: reset %d row(s) with stale 'processing' status in subtitles_formatted",
                     result.rowcount,
                 )
+            from services.stage_runs import close_stale
+            closed = await close_stale(db)  # the same for the per-stage table (NS-25)
+            if closed:
+                logging.getLogger("api").warning("startup: closed %d stale 'processing' run(s) in processing_stages", closed)
             await db.commit()
     except Exception as exc:
         logging.getLogger("api").warning("startup: stale-status reset failed: %s", exc)

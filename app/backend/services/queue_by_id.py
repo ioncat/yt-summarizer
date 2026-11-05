@@ -10,6 +10,8 @@ import json
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services import stage_runs
+
 # Stages that work on a result that is already extracted / transcribed
 RESULT_STAGES = ("cleanup", "summary", "mindmap")
 
@@ -144,6 +146,11 @@ async def release_stage_status(db: AsyncSession, video_id: str, stage: str,
              "WHERE v.video_id = :v AND v.url NOT LIKE '__pending__%' ORDER BY sf.created_at DESC LIMIT 1)"),
         {"status": status, "error": error, "v": video_id},
     )
+    if res.rowcount == 1:
+        if status == "failed":
+            await stage_runs.fail(db, video_id, stage, error)
+        else:
+            await stage_runs.cancel(db, video_id, stage)
     await db.commit()
     return res.rowcount == 1
 
