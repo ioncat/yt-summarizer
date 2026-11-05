@@ -322,7 +322,8 @@ async def delete_stt_model(
 # ---------------------------------------------------------------------------
 
 class BulkQueueRequest(BaseModel):
-    urls: list[str]
+    urls: list[str] = []
+    video_ids: list[str] = []  # results already in History (also local files), queued by id; LLM stages only
     pipeline_stages: list[str] | None = None  # defaults to app_settings queue_default_pipeline
     force: bool = False  # skip dedup check (e.g. re-run stages on already-processed videos)
     language: str | None = None  # subtitle language; None → "auto" (auto-detect)
@@ -333,12 +334,22 @@ async def queue_bulk_add(
     body: BulkQueueRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Add multiple URLs to the processing queue. Skips duplicates (already processed or in queue)."""
+    """Add multiple URLs to the processing queue. Skips duplicates (already processed or in queue).
+
+    `video_ids` queues results that are already in History by id (the only way to queue a local file);
+    they can only run the LLM stages (cleanup, summary, mindmap).
+    """
     from services.queue_service import add_items, get_duplicate_video_ids
+    from services.queue_by_id import RESULT_STAGES, add_by_video_ids
     import json as _json
 
-    if not body.urls:
+    if not body.urls and not body.video_ids:
         raise HTTPException(status_code=400, detail="No URLs provided")
+    if body.video_ids:
+        by_id_stages = body.pipeline_stages
+        if not by_id_stages or any(s not in RESULT_STAGES for s in by_id_stages):
+            raise HTTPException(status_code=400, detail={
+                "message": "Results already in History can only run: " + ", ".join(RESULT_STAGES)})
 
     # Step 1: validate + deduplicate within batch
     seen_video_ids: set[str] = set()
@@ -362,7 +373,7 @@ async def queue_bulk_add(
             valid_urls.append(url)
             valid_vid_ids.append(vid)
 
-    if not valid_urls:
+    if body.urls and not valid_urls and not body.video_ids:
         raise HTTPException(status_code=400, detail={"message": "No valid YouTube URLs", "invalid": invalid})
 
     # Step 2: check against DB (skip if force=True — re-run mode from History)
@@ -390,7 +401,14 @@ async def queue_bulk_add(
     if new_urls:
         ids = await add_items(db, new_urls, stages, language=body.language or None)
 
-    return {"added": len(ids), "ids": ids, "invalid": invalid, "duplicates": duplicates}
+    missing: list[str] = []
+    if body.video_ids:
+        by_id = await add_by_video_ids(db, body.video_ids, body.pipeline_stages)
+        ids += by_id["ids"]
+        duplicates += by_id["duplicates"]
+        missing = by_id["missing"]
+
+    return {"added": len(ids), "ids": ids, "invalid": invalid, "duplicates": duplicates, "missing": missing}
 
 
 @router.get("/queue")

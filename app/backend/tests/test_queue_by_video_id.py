@@ -101,3 +101,57 @@ async def test_worker_still_derives_the_id_from_the_url_for_items_without_a_vide
         item = await _run_worker(item_id)
     assert item["video_id"] == "oldItem0001"  # set from the URL, not 'cannot extract video_id'
     assert item["status"] in ("done", "failed")
+
+
+# --- the endpoint: video_ids ---------------------------------------------------
+
+async def test_bulk_add_queues_a_local_file_by_video_id(client, local_video):
+    r = await client.post("/api/queue/bulk", json={"video_ids": [LOCAL_ID], "pipeline_stages": ["cleanup", "summary"]})
+    assert r.status_code == 200
+    assert r.json() == {"added": 1, "ids": r.json()["ids"], "invalid": [], "duplicates": [], "missing": []}
+    item = (await client.get("/api/queue")).json()["items"][0]
+    assert item["video_id"] == LOCAL_ID and item["url"] == LOCAL_URL and item["db_video_id"] == local_video["db_id"]
+    assert item["pipeline_stages"] == ["cleanup", "summary"] and item["status"] == "pending"
+
+
+async def test_bulk_add_by_id_reports_missing_and_pending_duplicates(client, local_video):
+    body = {"video_ids": [LOCAL_ID, "file-nosuchfile", LOCAL_ID], "pipeline_stages": ["cleanup"]}
+    first = (await client.post("/api/queue/bulk", json=body)).json()
+    assert first["added"] == 1 and first["missing"] == ["file-nosuchfile"] and first["duplicates"] == []  # id twice -> once
+    again = (await client.post("/api/queue/bulk", json=body)).json()
+    assert again["added"] == 0 and again["duplicates"] == [LOCAL_ID] and again["missing"] == ["file-nosuchfile"]
+
+
+async def test_bulk_add_by_id_refuses_stages_that_need_the_source(client, local_video):
+    for stages in (["extract"], ["transcribe", "cleanup"], ["cleanup", "nonsense"], [], None):
+        r = await client.post("/api/queue/bulk", json={"video_ids": [LOCAL_ID], "pipeline_stages": stages})
+        assert r.status_code == 400, stages
+        assert "cleanup, summary, mindmap" in r.json()["detail"]["message"]
+    assert (await client.get("/api/queue")).json()["items"] == []
+
+
+async def test_bulk_add_by_id_keeps_the_order_and_mixes_with_urls(client, local_video, seeded_video):
+    r = await client.post("/api/queue/bulk", json={
+        "urls": ["https://www.youtube.com/watch?v=mixedUrl001"], "video_ids": [LOCAL_ID, seeded_video["video_id"]],
+        "pipeline_stages": ["summary"]})
+    assert r.status_code == 200 and r.json()["added"] == 3
+    items = (await client.get("/api/queue")).json()["items"]
+    assert [i["video_id"] for i in items] == ["mixedUrl001", LOCAL_ID, seeded_video["video_id"]]
+
+
+async def test_bulk_add_with_neither_urls_nor_ids_is_400_and_bad_urls_still_400(client):
+    assert (await client.post("/api/queue/bulk", json={})).status_code == 400
+    r = await client.post("/api/queue/bulk", json={"urls": ["https://example.com/x"]})
+    assert r.status_code == 400 and r.json()["detail"]["message"] == "No valid YouTube URLs"
+
+
+async def test_a_local_file_queued_through_the_endpoint_is_processed_end_to_end(client, local_video):
+    async def fake_clean(text_, **kw):
+        return "Cleaned local text."
+
+    item_id = (await client.post("/api/queue/bulk", json={
+        "video_ids": [LOCAL_ID], "pipeline_stages": ["cleanup"]})).json()["ids"][0]
+    with patch("services.text_cleaner.clean_text", fake_clean):
+        item = await _run_worker(item_id)
+    assert item["status"] == "done" and item["video_id"] == LOCAL_ID
+    assert (await fmt_row(LOCAL_ID))["cleaned_text"] == "Cleaned local text."

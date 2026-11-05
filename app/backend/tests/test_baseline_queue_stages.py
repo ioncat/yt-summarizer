@@ -425,9 +425,9 @@ async def test_bulk_add_pending_duplicate_and_same_url_twice_in_one_batch(client
     assert r2.json()["added"] == 0 and r2.json()["duplicates"] == [url]  # already pending
 
 
-async def test_bulk_add_rejects_local_file_urls_so_local_items_cannot_use_the_queue(client, seeded_video):
-    # BASELINE: known gap — local:// results (file-*) can only be processed by the BackgroundTasks copy
-    # correct: the queue accepts local items by video_id
+async def test_bulk_add_rejects_local_file_urls(client, seeded_video):
+    # `urls` stays YouTube-only; since NS-11 stage 1 a local result is queued by `video_ids`
+    # (see test_queue_by_video_id.py)
     r = await client.post("/api/queue/bulk", json={"urls": ["local://talk.m4a"], "pipeline_stages": ["cleanup"], "force": True})
     assert r.status_code == 400
     assert r.json()["detail"]["message"] == "No valid YouTube URLs"
