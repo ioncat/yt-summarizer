@@ -26,7 +26,7 @@ async def _setup(client):
 
 
 def test_only_the_stages_whose_status_the_endpoint_sets_are_known():
-    assert set(STAGE_COLUMNS) == {"summary", "mindmap"}
+    assert set(STAGE_COLUMNS) == {"cleanup", "summary", "mindmap"}
 
 
 async def test_remove_on_the_queue_page_resets_a_summary_status_and_keeps_the_saved_summary(client, seeded_video):

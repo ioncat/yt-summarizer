@@ -341,7 +341,7 @@ async def _set_done(item_id: int, video_id: str | None, db_video_id: str | None)
         await db.commit()
 
 
-_STAGE_LABELS = {"summary": "Summary", "mindmap": "Mind map"}
+_STAGE_LABELS = {"cleanup": "Cleanup", "summary": "Summary", "mindmap": "Mind map"}
 
 
 async def _release_unrun_stages(video_id: str | None, url: str, stages: list[str], reason: str) -> None:

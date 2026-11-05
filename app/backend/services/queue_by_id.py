@@ -113,6 +113,7 @@ async def has_processing_item(db: AsyncSession, video_id: str) -> bool:
 
 # stage -> (status column, error column) of subtitles_formatted for the stages whose status the endpoint sets at once
 STAGE_COLUMNS = {
+    "cleanup": ("cleanup_status", "cleanup_error"),
     "mindmap": ("mindmap_status", "mindmap_error"),
     "summary": ("summary_status", "summary_error"),
 }
@@ -149,6 +150,10 @@ async def release_stage_status(db: AsyncSession, video_id: str, stage: str,
 
 async def release_mindmap_status(db: AsyncSession, video_id: str, status: str | None = None, error: str | None = None) -> bool:
     return await release_stage_status(db, video_id, "mindmap", status, error)
+
+
+async def release_cleanup_status(db: AsyncSession, video_id: str, status: str | None = None, error: str | None = None) -> bool:
+    return await release_stage_status(db, video_id, "cleanup", status, error)
 
 
 async def release_summary_status(db: AsyncSession, video_id: str, status: str | None = None, error: str | None = None) -> bool:
