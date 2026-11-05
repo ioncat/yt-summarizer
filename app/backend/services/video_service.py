@@ -722,7 +722,8 @@ async def start_mindmap_generation(db: AsyncSession, video_id: str) -> None:
 
 
 async def finish_mindmap(db: AsyncSession, video_id: str, mindmap_text: str | None, error: str | None = None) -> None:
-    """Save mindmap result."""
+    """Save mindmap result. A failed run keeps the map that was saved before (NS-11 decision 4: the saved map is what
+    the user gets until a regeneration succeeds); only a successful one replaces it."""
     fmt_id = await _get_fmt_id(db, video_id)
     if not fmt_id:
         return
@@ -730,7 +731,7 @@ async def finish_mindmap(db: AsyncSession, video_id: str, mindmap_text: str | No
     await db.execute(
         text("""
             UPDATE subtitles_formatted
-            SET mindmap_status = :status, mindmap_text = :mindmap, mindmap_error = :error
+            SET mindmap_status = :status, mindmap_text = COALESCE(:mindmap, mindmap_text), mindmap_error = :error
             WHERE id = :id
         """),
         {"status": status, "mindmap": mindmap_text, "error": None if status == "done" else error, "id": fmt_id},
