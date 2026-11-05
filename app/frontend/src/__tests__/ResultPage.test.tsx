@@ -27,6 +27,7 @@ vi.mock('../api', () => ({
   saveAppSettings: vi.fn(),
   getSttModels: vi.fn(),
   queueBulkAdd: vi.fn(),
+  queueBulkAddByIds: vi.fn(),
   toggleFavorite: vi.fn(),
   downloadVideo: vi.fn(),
 }))
@@ -207,6 +208,46 @@ describe('ResultPage', () => {
     fireEvent.click(btn(/Summarize/))
     await waitFor(() => expect(m.startSummary).toHaveBeenCalledWith(base.video_id))
     expect(m.queueBulkAdd).not.toHaveBeenCalledWith(expect.anything(), ['summary'], expect.anything())  // not the URL queue path
+  })
+
+  it('Summarize before any cleanup: after the confirm ONE item with both stages is queued by the video id', async () => {
+    m.queueBulkAddByIds.mockResolvedValue({ added: 1, ids: [5], invalid: [], duplicates: [], missing: [] })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await renderPage()                                             // base: no cleanup yet
+    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summarize/))
+    await waitFor(() => expect(m.queueBulkAddByIds).toHaveBeenCalledWith([base.video_id], ['cleanup', 'summary']))
+    expect(m.startCleanup).not.toHaveBeenCalled()                  // no client-side chain any more
+    expect(m.queueBulkAdd).not.toHaveBeenCalled()
+    expect(await screen.findByText(/cleanup → summary/)).toBeTruthy()
+  })
+
+  it('Summarize before any cleanup: a local file takes the same path (no URL needed)', async () => {
+    m.queueBulkAddByIds.mockResolvedValue({ added: 1, ids: [5], invalid: [], duplicates: [], missing: [] })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    setResult({ video_id: 'file-1234', url: 'local://talk.mp3', subtitle_source: 'transcript', subtitles_type: null })
+    await renderPage()
+    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summarize/))
+    await waitFor(() => expect(m.queueBulkAddByIds).toHaveBeenCalledWith([base.video_id], ['cleanup', 'summary']))
+  })
+
+  it('Summarize before any cleanup: declining the confirm queues nothing', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await renderPage()
+    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summarize/))
+    expect(m.queueBulkAddByIds).not.toHaveBeenCalled()
+  })
+
+  it('Summarize before any cleanup: a video that already has a queue item says so instead of showing "queued"', async () => {
+    m.queueBulkAddByIds.mockResolvedValue({ added: 0, ids: [], invalid: [], duplicates: [base.video_id], missing: [] })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await renderPage()
+    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summarize/))
+    expect((await screen.findAllByText(/already has an item in the queue/)).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/cleanup → summary/)).toBeNull()
   })
 
   it('Summary: a local file uses the same endpoint', async () => {

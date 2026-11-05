@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
-  getResult, startSummary,
+  getResult,
   getSettings, getModels,
   getSttModels,
   downloadVideo,
@@ -54,7 +54,6 @@ export default function ResultPage() {
   const [downloadError, setDownloadError] = useState('')
 
   const [ollamaUrl, setOllamaUrl]   = useState('')
-  const autoSummarizeAfterCleanupRef = useRef(false)
   const [queuedMsg, setQueuedMsg] = useState<string | null>(null)
 
   const {
@@ -179,18 +178,7 @@ export default function ResultPage() {
         } else {
           if (prevCleanup === 'processing' && data.cleanup_status === 'done') {
             notify('AI Cleanup complete', data.title ?? undefined)
-            if (autoSummarizeAfterCleanupRef.current) {
-              autoSummarizeAfterCleanupRef.current = false
-              startSummary(videoId!).then(() => {
-                prevSummaryStatusRef.current = 'processing'
-                startSummaryTimer()
-                setResult(d => d ? { ...d, summary_status: 'processing', summary_duration_seconds: null } : d)
-                stopSummaryPolling()
-                summaryPollRef.current = setInterval(() => loadResult(false), 3000)
-              }).catch(() => {})
-            } else {
-              setActiveTab('cleaned')
-            }
+            setActiveTab('cleaned')
           }
           if (prevSummary === 'processing' && data.summary_status === 'done') {
             setActiveTab('summary')
@@ -310,7 +298,7 @@ export default function ResultPage() {
     isLocalFile, reextractLang, sttModel, setReextractError, loadResult,
     setCleanupModel, cleanupPromptsRef, setSummaryModel, summaryPromptsRef, setChatModel,
     requestNotifyPermission, setCleanupError, setSummaryError, setMindmapError, setQueuedMsg,
-    pollRef, summaryPollRef, mindmapPollRef, autoSummarizeAfterCleanupRef,
+    pollRef, summaryPollRef, mindmapPollRef,
   })
 
   // ── Error / loading states ──────────────────────────────────────────────────

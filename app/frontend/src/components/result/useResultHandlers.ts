@@ -2,7 +2,7 @@ import { MutableRefObject } from 'react'
 import type { NavigateFunction } from 'react-router-dom'
 import {
   deleteResult, startCleanup, cancelCleanup, startSummary, cancelSummary,
-  startMindmap, reextractSubtitles, saveSettings, queueBulkAdd, downloadVideo,
+  startMindmap, reextractSubtitles, saveSettings, queueBulkAddByIds, downloadVideo,
   ResultResponse,
 } from '../../api'
 import { Setter } from './helpers'
@@ -50,7 +50,6 @@ interface UseResultHandlersParams {
   pollRef: Interval
   summaryPollRef: Interval
   mindmapPollRef: Interval
-  autoSummarizeAfterCleanupRef: MutableRefObject<boolean>
 }
 
 export function useResultHandlers({
@@ -62,7 +61,7 @@ export function useResultHandlers({
   isLocalFile, reextractLang, sttModel, setReextractError, loadResult,
   setCleanupModel, cleanupPromptsRef, setSummaryModel, summaryPromptsRef, setChatModel,
   requestNotifyPermission, setCleanupError, setSummaryError, setMindmapError, setQueuedMsg,
-  pollRef, summaryPollRef, mindmapPollRef, autoSummarizeAfterCleanupRef,
+  pollRef, summaryPollRef, mindmapPollRef,
 }: UseResultHandlersParams) {
   async function handleCopy() {
     if (!displayText) return
@@ -193,11 +192,14 @@ export function useResultHandlers({
       if (!confirmed) return
       try {
         setSummaryError('')
-        if (result.url?.startsWith('local://')) {
-          await startCleanup(videoId)
-          autoSummarizeAfterCleanupRef.current = true
-        } else {
-          await queueBulkAdd([result.url], ['cleanup', 'summary'], true)
+        // One queue item for both stages, queued by the video's id: it works for local files too (no URL needed) and the
+        // server runs summary right after cleanup even if this page is closed (no client-side chain; NS-11 stage 4a)
+        const res = await queueBulkAddByIds([videoId], ['cleanup', 'summary'])
+        if (res.added === 0) {
+          setSummaryError(res.missing.length
+            ? 'This video was not found in History.'
+            : 'This video already has an item in the queue: wait for it or remove it on the Queue page.')
+          return
         }
         setQueuedMsg('cleanup+summary')
         stopPolling()
