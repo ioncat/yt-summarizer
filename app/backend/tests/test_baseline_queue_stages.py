@@ -652,29 +652,24 @@ async def test_process_file_rejects_unsupported_extension(client):
 
 async def test_process_file_transcribes_and_stores_model_device_and_deletes_upload(client, tmp_path, monkeypatch):
     import routers.process as proc
-    fake_py = tmp_path / "app" / "backend" / "routers" / "process.py"
-    fake_py.parent.mkdir(parents=True)
-    monkeypatch.setattr(proc, "__file__", str(fake_py))  # uploads dir -> tmp_path/app/data/uploads
+    import services.file_stt as fs
+    target = tmp_path / "app" / "data" / "uploads"
+    monkeypatch.setattr(fs, "uploads_dir", lambda: str(target))   # NS-11 stage 5: the router saves, the queue worker finds it
+    monkeypatch.setattr(proc, "uploads_dir", lambda: str(target))
     await client.put("/api/settings/app", json={"stt_model": "base", "stt_device": "cpu",
                                                 "upload_auto_delete": "true", "upload_auto_delete_mode": "immediate"})
     from services.transcriber import TranscriptionResult
-    release = threading.Event()
-    started = threading.Event()
 
     def fake_transcribe(path, language, model, device, cache_path, on_progress):
-        started.set()
         on_progress(2, 5.0, 10.0)
-        release.wait(5)
         return TranscriptionResult(segments=[{"start": 0.0, "end": 4.0, "text": "Hello there."}],
                                    detected_language="en", success=True, device_used="cpu")
 
     with patch("services.transcriber.transcribe", fake_transcribe):
-        post = asyncio.create_task(client.post(
-            "/api/process/file", files={"file": ("talk.m4a", b"fakeaudio", "audio/mp4")}, data={"language": "auto"}))
-        await asyncio.get_running_loop().run_in_executor(None, started.wait, 5)
-        # the BackgroundTasks run inside the request, so the POST only returns when STT is done
-        release.set()
-        r = await post
+        r = await client.post("/api/process/file", files={"file": ("talk.m4a", b"fakeaudio", "audio/mp4")}, data={"language": "auto"})
+        # the upload is a queue item now: the POST answers at once and the worker transcribes it in its turn
+        item = next(i for i in (await client.get("/api/queue")).json()["items"] if i["video_id"] == r.json()["video_id"])
+        await _run_worker([item["id"]])
     assert r.status_code == 200
     body = r.json()
     assert body["video_id"].startswith("file-")
@@ -683,8 +678,7 @@ async def test_process_file_transcribes_and_stores_model_device_and_deletes_uplo
     row = await fmt_row(body["video_id"])
     assert row["subtitle_source"] == "transcript" and row["language"] == "en"
     assert row["transcription_model"] == "base" and row["transcription_device"] == "cpu"
-    uploads = tmp_path / "app" / "data" / "uploads"
-    assert list(uploads.iterdir()) == []  # immediate auto-delete
+    assert list(target.iterdir()) == []  # immediate auto-delete
     await client.put("/api/settings/app", json={"upload_auto_delete": "false"})
     async with AsyncSessionLocal() as db:
         vid = body["video_id"]

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import get_db
-from services.file_stt import _FILE_TASK_PROGRESS, run_file_transcription
+from services.file_stt import _FILE_TASK_PROGRESS, enqueue_local_file, uploads_dir
 from services.subtitle_extractor import extract_subtitles, extract_video_id, validate_youtube_url
 from services.text_formatter import format_subtitles
 from services.video_service import (
@@ -93,24 +93,24 @@ async def process_video(
 
 @router.post("/process/file")
 async def process_file(
-    background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
     file: UploadFile = File(...),
     language: str = Form("auto"),
 ):
-    """Upload a local audio/video file for transcription."""
+    """Upload a local audio/video file for transcription. The upload is saved and queued (NS-11 stage 5): the answer comes at
+    once, the queue worker transcribes it in its turn; /api/status/{task_id} follows it."""
     from uuid import uuid4
 
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in _SUPPORTED_AUDIO_EXTENSIONS:
         raise HTTPException(status_code=400, detail=f"Unsupported file type '{ext}'. Supported: {', '.join(sorted(_SUPPORTED_AUDIO_EXTENSIONS))}")
 
-    uploads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/uploads"))
-    os.makedirs(uploads_dir, exist_ok=True)
+    target_dir = uploads_dir()
+    os.makedirs(target_dir, exist_ok=True)
 
     file_uuid = uuid4().hex[:12]
     save_filename = f"{file_uuid}{ext}"
-    save_path = os.path.join(uploads_dir, save_filename)
+    save_path = os.path.join(target_dir, save_filename)
 
     content = await file.read()
     with open(save_path, "wb") as f:
@@ -120,7 +120,7 @@ async def process_file(
     local_video_id = f"file-{file_uuid[:8]}"
 
     task = await create_pending_task(db, f"local://{original_filename}", local_video_id)
-    background_tasks.add_task(run_file_transcription, task.id, local_video_id, save_path, original_filename, language)
+    await enqueue_local_file(db, local_video_id, task.video_id, original_filename, language)
     return {"task_id": task.id, "video_id": local_video_id}
 
 

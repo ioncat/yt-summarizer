@@ -12,17 +12,18 @@ from sqlalchemy import text
 
 from models.database import AsyncSessionLocal
 from services.transcriber import TranscriptionResult
-from tests.baseline_helpers import fmt_row
+from tests.baseline_helpers import fmt_row, reset_queue, run_worker
 
 
 @pytest.fixture
 def uploads(tmp_path, monkeypatch):
-    """Point the upload directory of routers/process.py at tmp_path/app/data/uploads."""
+    """Point the upload directory at tmp_path/app/data/uploads (the router saves there, the queue worker finds the file there)."""
     import routers.process as proc
-    fake_py = tmp_path / "app" / "backend" / "routers" / "process.py"
-    fake_py.parent.mkdir(parents=True)
-    monkeypatch.setattr(proc, "__file__", str(fake_py))
-    return tmp_path / "app" / "data" / "uploads"
+    import services.file_stt as fs
+    target = tmp_path / "app" / "data" / "uploads"
+    monkeypatch.setattr(fs, "uploads_dir", lambda: str(target))
+    monkeypatch.setattr(proc, "uploads_dir", lambda: str(target))
+    return target
 
 
 async def _forget(video_id: str) -> None:
@@ -30,6 +31,7 @@ async def _forget(video_id: str) -> None:
         for t in ("subtitles_raw", "subtitles_formatted", "processing_tasks"):
             await db.execute(text(f"DELETE FROM {t} WHERE video_id IN (SELECT id FROM videos WHERE video_id=:v)"), {"v": video_id})
         await db.execute(text("DELETE FROM videos WHERE video_id=:v"), {"v": video_id})
+        await db.execute(text("DELETE FROM processing_queue WHERE video_id = :v"), {"v": video_id})
         await db.commit()
 
 
@@ -37,14 +39,34 @@ async def _upload(client, name="talk.m4a", language="auto"):
     return await client.post("/api/process/file", files={"file": (name, b"fakeaudio", "audio/mp4")}, data={"language": language})
 
 
+async def _item(client, video_id):
+    return next(i for i in (await client.get("/api/queue")).json()["items"] if i["video_id"] == video_id)
+
+
+async def _upload_and_run(client, **kw):
+    """Upload, then let the queue worker transcribe it. Returns (response body, queue item as the worker left it)."""
+    body = (await _upload(client, **kw)).json()
+    queued = await _item(client, body["video_id"])
+    await run_worker([queued["id"]])
+    return body, await _item(client, body["video_id"])
+
+
+@pytest.fixture(autouse=True)
+async def _empty_queue(client):
+    await reset_queue()
+    yield
+    await reset_queue()
+
+
 async def test_a_failed_transcription_fails_the_task_with_the_message_and_saves_nothing(client, uploads):
     def failing(path, language, model, device, cache_path, on_progress):
         return TranscriptionResult(segments=[], detected_language="", success=False, error_message="model files are missing")
 
     with patch("services.transcriber.transcribe", failing):
-        body = (await _upload(client)).json()
+        body, item = await _upload_and_run(client)
     st = (await client.get(f"/api/status/{body['task_id']}")).json()
     assert st["status"] == "failed" and st["error_message"] == "model files are missing"
+    assert item["status"] == "failed" and item["error_message"] == "model files are missing"      # the queue item says so too
     assert await fmt_row(body["video_id"]) is None                       # nothing was saved as a result
     await _forget(body["video_id"])
 
@@ -54,7 +76,8 @@ async def test_an_exception_in_the_transcriber_fails_the_task_with_its_text(clie
         raise RuntimeError("cuda out of memory")
 
     with patch("services.transcriber.transcribe", exploding):
-        body = (await _upload(client)).json()
+        body, item = await _upload_and_run(client)
+    assert item["status"] == "failed" and item["error_message"] == "cuda out of memory"
     st = (await client.get(f"/api/status/{body['task_id']}")).json()
     assert st["status"] == "failed" and st["error_message"] == "cuda out of memory"
     await _forget(body["video_id"])
@@ -70,13 +93,12 @@ async def test_the_status_shows_the_live_segment_text_while_it_runs_and_none_aft
         return TranscriptionResult(segments=[{"start": 0.0, "end": 4.0, "text": "Hi."}], detected_language="en", success=True, device_used="cpu")
 
     with patch("services.transcriber.transcribe", slow):
-        post = asyncio.create_task(_upload(client))
+        body = (await _upload(client)).json()
+        worker = asyncio.create_task(run_worker([(await _item(client, body["video_id"]))["id"]]))
         await asyncio.get_running_loop().run_in_executor(None, started.wait, 5)
-        async with AsyncSessionLocal() as db:
-            task_id = (await db.execute(text("SELECT id FROM processing_tasks ORDER BY started_at DESC LIMIT 1"))).scalar()
-        assert (await client.get(f"/api/status/{task_id}")).json()["progress_text"] == "segment 3 · 50%"
+        assert (await client.get(f"/api/status/{body['task_id']}")).json()["progress_text"] == "segment 3 · 50%"
         release.set()
-        body = (await post).json()
+        await worker
     assert (await client.get(f"/api/status/{body['task_id']}")).json()["progress_text"] is None
     await _forget(body["video_id"])
 
@@ -88,7 +110,7 @@ async def test_an_empty_transcript_is_saved_as_a_result_today(client, uploads):
         return TranscriptionResult(segments=[], detected_language="en", success=True, device_used="cpu")
 
     with patch("services.transcriber.transcribe", silent):
-        body = (await _upload(client)).json()
+        body, item = await _upload_and_run(client)
     st = (await client.get(f"/api/status/{body['task_id']}")).json()
     assert st["status"] == "completed"
     row = await fmt_row(body["video_id"])
@@ -103,13 +125,13 @@ async def test_the_upload_is_kept_after_a_failure_and_after_a_success_when_auto_
         return TranscriptionResult(segments=[], detected_language="", success=False, error_message="x")
 
     with patch("services.transcriber.transcribe", failing):
-        body = (await _upload(client)).json()
+        body, item = await _upload_and_run(client)
     assert len(list(uploads.iterdir())) == 1
     await _forget(body["video_id"])
 
 
-async def test_post_runs_the_transcription_inside_the_request_so_it_answers_only_when_done(client, uploads):
-    # BASELINE: changes in stage 5 — the POST will answer at once and the work waits its turn in the queue.
+async def test_the_post_answers_at_once_and_the_work_waits_for_the_queue_worker(client, uploads):
+    # NS-11 stage 5 (decision 6): the upload is a normal queue item; nothing is transcribed until the worker gets to it.
     seen = {}
 
     def quick(path, language, model, device, cache_path, on_progress):
@@ -117,7 +139,14 @@ async def test_post_runs_the_transcription_inside_the_request_so_it_answers_only
         return TranscriptionResult(segments=[{"start": 0.0, "end": 1.0, "text": "Ok."}], detected_language="en", success=True, device_used="cpu")
 
     with patch("services.transcriber.transcribe", quick):
-        body = (await _upload(client)).json()
-    assert seen == {"ran": True}                                          # already ran when the response arrived
+        body = (await _upload(client, language="ru")).json()
+        assert seen == {}                                                  # the response came before any transcription
+        queued = await _item(client, body["video_id"])
+        assert (queued["status"], queued["url"], queued["pipeline_stages"]) == ("pending", "local://talk.m4a", ["transcribe"])
+        assert (await client.get(f"/api/status/{body['task_id']}")).json()["status"] == "pending"
+        await run_worker([queued["id"]])
+    assert seen == {"ran": True}
     assert (await client.get(f"/api/status/{body['task_id']}")).json()["status"] == "completed"
+    done = await _item(client, body["video_id"])
+    assert done["status"] == "done" and done["video_id"] == body["video_id"]
     await _forget(body["video_id"])
