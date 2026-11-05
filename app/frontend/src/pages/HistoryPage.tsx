@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { queueAddMessage } from '../utils/queueMessage'
 import { getHistory, deleteResult, deleteResultsBulk, queueBulkAddByIds, toggleFavorite, HistoryItem } from '../api'
 import { classifyVideo, VideoType } from '../utils/videoType'
 
@@ -146,9 +147,7 @@ export default function HistoryPage() {
     // By id, not by URL: a local file has no YouTube URL (its id used to be cut short and the item did nothing)
     try {
       const res = await queueBulkAddByIds(ids, stages)
-      const skipped = res.duplicates.length ? ` (${res.duplicates.length} already in the queue)` : ''
-      const gone = res.missing.length ? ` (${res.missing.length} not found)` : ''
-      setQueueMsg(`Added ${res.added} video${res.added !== 1 ? 's' : ''} to queue${skipped}${gone}`)
+      setQueueMsg(queueAddMessage(res))
       setSelected(new Set())
       setSelectMode(false)
     } catch {
