@@ -81,7 +81,7 @@ def llm_failure_reason() -> str | None:
 def empty_answer_message(has_thinking: bool) -> str:
     if has_thinking:
         return ("model returned no answer (thinking used the whole context) — "
-                "raise llm_max_num_ctx or use a model without thinking")
+                "use a model without thinking (or raise llm_max_num_ctx if the input is very long)")
     return "model returned nothing"
 
 

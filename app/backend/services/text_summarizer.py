@@ -197,7 +197,7 @@ async def _call_ollama(
             return None
         if data.get("done_reason") == "length":
             logger.warning("_call_ollama: the answer was cut off (done_reason=length, model=%s) — "
-                           "raise llm_max_num_ctx or use a model without thinking", model)
+                           "use a model without thinking (or raise llm_max_num_ctx if the input is very long)", model)
         return content
     except Exception as exc:
         logger.warning("_call_ollama failed: [%s] %s", type(exc).__name__, exc)

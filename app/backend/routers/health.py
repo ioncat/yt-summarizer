@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import get_db
-from services.ollama_options import MAX_NUM_CTX, build_options
+from services.ollama_options import build_options, parse_max_num_ctx
 from services.video_service import get_app_setting
 
 from services.mcp_connect import (
@@ -74,14 +74,15 @@ async def chat_proxy(body: ChatRequest, db: Annotated[AsyncSession, Depends(get_
     if not ollama_url:
         raise HTTPException(status_code=400, detail="Ollama URL not configured")
 
+    # chat_num_ctx is the floor; the window grows with the chat up to max(chat_num_ctx, llm_max_num_ctx)
+    chat_floor = parse_max_num_ctx(await get_app_setting(db, "chat_num_ctx"))
+    llm_cap = parse_max_num_ctx(await get_app_setting(db, "llm_max_num_ctx"))
     payload = {
         "model": body.model,
         "stream": True,
         "messages": [{"role": m.role, "content": m.content} for m in body.messages],
-        "options": {"num_ctx": max(
-            int(await get_app_setting(db, "chat_num_ctx") or 32768),
-            build_options(*(m.content for m in body.messages), max_ctx=MAX_NUM_CTX)["num_ctx"],
-        )},
+        "options": {"num_ctx": max(chat_floor, build_options(
+            *(m.content for m in body.messages), max_ctx=max(chat_floor, llm_cap))["num_ctx"])},
     }
 
     async def stream_ollama():

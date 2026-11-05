@@ -12,7 +12,7 @@ OLLAMA = "http://localhost:11434"
 TAGS = f"{OLLAMA}/api/tags"
 CHAT = f"{OLLAMA}/api/chat"
 THINKING_MSG = ("model returned no answer (thinking used the whole context) — "
-                "raise llm_max_num_ctx or use a model without thinking")
+                "use a model without thinking (or raise llm_max_num_ctx if the input is very long)")
 NOTHING_MSG = "model returned nothing"
 
 
@@ -172,6 +172,33 @@ async def test_cleanup_run_stores_the_reason_and_the_result_exposes_it(client, s
     row = await fmt_row()
     assert row["cleanup_status"] == "failed" and row["cleanup_error"] == THINKING_MSG
     assert (await client.get(f"/api/result/{VIDEO_ID}")).json()["cleanup_error"] == THINKING_MSG
+
+
+@respx.mock
+async def test_a_successful_second_cleanup_clears_cleanup_error(client, seeded_video):
+    await client.put("/api/settings/cleanup", json={"model": "m"})
+    respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
+    route = respx.post(CHAT).mock(side_effect=_all_empty)
+    await client.post(f"/api/result/{VIDEO_ID}/cleanup")
+    assert (await fmt_row())["cleanup_error"] == THINKING_MSG
+    route.mock(return_value=_chat_answer("Очищенный абзац."))
+    await client.post(f"/api/result/{VIDEO_ID}/cleanup")
+    row = await fmt_row()
+    assert row["cleanup_status"] == "done" and row["cleanup_error"] is None
+    assert (await client.get(f"/api/result/{VIDEO_ID}")).json()["cleanup_error"] is None
+
+
+@respx.mock
+async def test_truncated_cleanup_paragraph_is_logged_but_still_used(monkeypatch):
+    from services.text_cleaner import clean_text
+    begin_llm_run(None)
+    respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
+    respx.post(CHAT).mock(return_value=httpx.Response(200, json={
+        "message": {"role": "assistant", "content": "Half a paragr"}, "done": True, "done_reason": "length"}))
+    logged = _collect_warnings(monkeypatch, "services.text_cleaner")
+    out = await clean_text("Исходный абзац.", model="m", ollama_url=OLLAMA)
+    assert out == "Half a paragr" and llm_failure_reason() is None
+    assert any("cut" in m and "done_reason=length" in m for m in logged)
 
 
 @respx.mock

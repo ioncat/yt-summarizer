@@ -115,7 +115,7 @@ async def generate_mindmap(
                 return None
             if done_reason == "length":
                 logger.warning("[mindmapper] the answer was cut off (done_reason=length) — "
-                               "raise llm_max_num_ctx or use a model without thinking")
+                               "use a model without thinking (or raise llm_max_num_ctx if the input is very long)")
             return content
     except Exception as e:
         logger.error("[mindmapper] exception: %s", e, exc_info=True)

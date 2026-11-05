@@ -136,7 +136,7 @@ async def test_mindmap_stream_request_sends_num_ctx():
 
 
 @respx.mock
-async def test_chat_proxy_keeps_chat_num_ctx_as_a_floor_and_only_grows_above_it(client):
+async def test_chat_proxy_floor_is_chat_num_ctx_and_cap_is_the_larger_of_it_and_llm_max_num_ctx(client):
     seen = []
 
     def handler(request):
@@ -146,20 +146,46 @@ async def test_chat_proxy_keeps_chat_num_ctx_as_a_floor_and_only_grows_above_it(
     respx.post(CHAT).mock(side_effect=handler)
     short = [{"role": "user", "content": "Привет"}]
     long_ = [{"role": "user", "content": LONG_TEXT}]          # computed size 16384
-    huge = [{"role": "user", "content": "x" * 120_000}]       # computed size 65536
-    await client.put("/api/settings/app", json={"chat_num_ctx": "32768"})
-    await client.post("/api/chat", json={"model": "m", "messages": short})
-    assert seen[-1]["options"]["num_ctx"] == 32768              # short chat: the old fixed value
-    await client.post("/api/chat", json={"model": "m", "messages": long_})
-    assert seen[-1]["options"]["num_ctx"] == 32768              # bucket changes inside the floor: no reload
-    await client.post("/api/chat", json={"model": "m", "messages": huge})
-    assert seen[-1]["options"]["num_ctx"] == 65536              # grows above the floor
-    await client.put("/api/settings/app", json={"chat_num_ctx": "8192"})
-    await client.post("/api/chat", json={"model": "m", "messages": short})
-    assert seen[-1]["options"]["num_ctx"] == 8192
-    await client.post("/api/chat", json={"model": "m", "messages": long_})
-    assert seen[-1]["options"]["num_ctx"] == 16384              # computed value above a small floor
-    await client.put("/api/settings/app", json={"chat_num_ctx": "32768"})
+    huge = [{"role": "user", "content": "x" * 120_000}]       # computed size 65536 if allowed
+
+    async def chat(messages, chat_ctx, llm_ctx):
+        await client.put("/api/settings/app", json={"chat_num_ctx": chat_ctx, "llm_max_num_ctx": llm_ctx})
+        r = await client.post("/api/chat", json={"model": "m", "messages": messages})
+        assert r.status_code == 200
+        return seen[-1]["options"]["num_ctx"]
+
+    try:
+        assert await chat(short, "32768", "32768") == 32768    # short chat: the old fixed value
+        assert await chat(long_, "32768", "32768") == 32768    # bucket changes inside the floor: no reload
+        assert await chat(huge, "32768", "32768") == 32768     # cap = max(32768, 32768): no growth beyond it
+        assert await chat(huge, "32768", "65536") == 65536     # llm_max_num_ctx raises the cap above the floor
+        assert await chat(long_, "8192", "32768") == 16384     # computed value above a small floor
+        assert await chat(huge, "8192", "32768") == 32768      # llm_max_num_ctx is the cap
+        assert await chat(long_, "4096", "8192") == 8192       # ... also when it is small
+        assert await chat(short, "8192", "4096") == 8192       # floor never lowered by a small llm cap
+        assert await chat(huge, "8192", "4096") == 8192        # cap = max(chat, llm)
+    finally:
+        await client.put("/api/settings/app", json={"chat_num_ctx": "32768", "llm_max_num_ctx": "32768"})
+
+
+@respx.mock
+async def test_chat_proxy_validates_chat_num_ctx(client):
+    seen = []
+
+    def handler(request):
+        seen.append(json.loads(request.content))
+        return httpx.Response(200, content=b'{"message":{"content":"hi"},"done":true}\n')
+
+    respx.post(CHAT).mock(side_effect=handler)
+    short = [{"role": "user", "content": "Привет"}]
+    try:
+        for value, expected in (("abc", 32768), ("", 32768), ("999999", 65536), ("100", 8192))  # tiny floor: the computed size for a short chat (8192) wins:
+            await client.put("/api/settings/app", json={"chat_num_ctx": value, "llm_max_num_ctx": "32768"})
+            r = await client.post("/api/chat", json={"model": "m", "messages": short})
+            assert r.status_code == 200, value                 # never a 500
+            assert seen[-1]["options"]["num_ctx"] == expected, value
+    finally:
+        await client.put("/api/settings/app", json={"chat_num_ctx": "32768"})
 
 
 async def test_cap_setting_is_stored_and_read_through_the_settings_api(client):
