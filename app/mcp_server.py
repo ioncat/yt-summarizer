@@ -74,7 +74,10 @@ async def _poll_summary(client: httpx.AsyncClient, video_id: str) -> dict:
             raise RuntimeError("Summarization failed — check model settings")
         await asyncio.sleep(POLL_INTERVAL)
         elapsed += POLL_INTERVAL
-    raise TimeoutError(f"Summarization timed out after {POLL_TIMEOUT}s")
+    raise TimeoutError(
+        f"Summarization is still not finished after {POLL_TIMEOUT}s. It is queued or running in the app and may be "
+        f"waiting behind other work: it is not lost. Check later with get_result(video_id='{video_id}', parts=['status']) "
+        f"and read it with get_result(video_id='{video_id}', parts=['summary'])")
 
 
 def _channel(item: dict) -> str:
@@ -399,7 +402,9 @@ async def run_cleanup(video_id: str) -> str:
 @mcp.tool()
 async def run_summary(video_id: str) -> str:
     """Run summarization on a video. Uses cleaned text if available, otherwise raw transcript.
-    Waits until complete (up to 5 min).
+    The summary is put into the app's queue, so it may wait behind other jobs (cleanups, other summaries);
+    this call polls for up to 5 minutes (300 s). If it times out the job is NOT lost: it keeps its place in the queue.
+    Check it later with get_result(video_id, parts=["status"]) and read it with get_result(video_id, parts=["summary"]).
     Requires Ollama to be running with a model configured in Settings.
 
     Args:

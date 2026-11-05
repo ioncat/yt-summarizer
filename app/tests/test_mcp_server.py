@@ -528,3 +528,27 @@ async def test_a_very_long_query_is_a_clear_error_line_without_a_request():
             assert out == "ERROR: query is too long (5000 chars, at most 200)"
         ok = await search_history(query="я" * 200, in_text=True)
     assert not hist.called and text.called and not ok.startswith("ERROR: query")
+
+
+# ─── run_summary waits behind the queue (NS-11 stage 3 note) ────────────────────
+
+@pytest.mark.asyncio
+async def test_run_summary_tool_text_says_it_may_wait_behind_the_queue_for_300_s():
+    import mcp_server
+    tools = await mcp_server.mcp.list_tools()
+    text = next(t for t in tools if t.name == "run_summary").description
+    assert "queue" in text and "300 s" in text and "NOT lost" in text
+    assert 'get_result(video_id, parts=["status"])' in text
+
+
+@pytest.mark.asyncio
+async def test_run_summary_timeout_says_the_job_is_not_lost_and_how_to_check_it():
+    with respx.mock(assert_all_called=False) as mock, patch("asyncio.sleep", _noop_sleep):
+        mock.get(f"{BASE}/api/health").mock(return_value=httpx.Response(200, json={"backend": True, "ollama": True}))
+        mock.post(f"{BASE}/api/result/vidQ/summary").mock(return_value=httpx.Response(200, json={"status": "processing"}))
+        mock.get(f"{BASE}/api/result/vidQ").mock(
+            return_value=httpx.Response(200, json={"summary_status": "processing", "summary_text": None}))
+        result = await run_summary("vidQ")
+    assert result.startswith("ERROR: Summarization is still not finished after 300s")
+    assert "not lost" in result
+    assert "get_result(video_id='vidQ', parts=['status'])" in result and "parts=['summary']" in result
