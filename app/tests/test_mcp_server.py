@@ -358,7 +358,7 @@ async def test_unknown_part_is_an_error_that_lists_the_allowed_ones_and_makes_no
     with respx.mock(assert_all_called=False) as mock:
         route = mock.get(f"{BASE}/api/result/vidP").mock(return_value=httpx.Response(200, json=FULL))
         result = await get_result("vidP", parts=["summary", "bogus"])
-    assert result == "ERROR: unknown part 'bogus'. Allowed: summary, transcript, cleaned, mindmap"
+    assert result == "ERROR: unknown part 'bogus'. Allowed: summary, transcript, cleaned, mindmap, status"
     assert not route.called
 
 
@@ -382,3 +382,36 @@ async def test_limit_applies_to_summary_too_and_no_limit_means_all_of_it():
 async def test_parts_line_shows_what_exists():
     result = await _get({**FULL, "cleaned_text": None, "mindmap_text": None})
     assert "Parts (chars): summary 14 · cleaned none · transcript 30k · mindmap none" in result
+
+
+# ─── get_result: the status part (NS-29) ───────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_status_part_shows_stage_states_models_and_error_reasons():
+    data = {
+        **FULL,
+        "cleanup_status": "done", "cleanup_model": "gemma4:e4b", "cleanup_duration_seconds": 42.4,
+        "summary_status": "failed", "summary_model": "gemma4:e4b", "summary_mode": "map_reduce",
+        "summary_chunks_count": 5,
+        "summary_error": "model returned no answer (thinking used the whole context) — raise llm_max_num_ctx",
+        "mindmap_status": "failed", "mindmap_error": "model returned nothing",
+    }
+    result = await _get(data, parts=["status"])
+    assert "## Status" in result
+    assert "- cleanup: done · model gemma4:e4b · 42s" in result
+    assert "- summary: failed · model gemma4:e4b · map_reduce (5 chunks) · error: model returned no answer" in result
+    assert "- mindmap: failed · error: model returned nothing" in result
+    assert "## Summary" not in result  # only status was asked for
+
+
+@pytest.mark.asyncio
+async def test_status_part_for_a_video_where_nothing_ran_and_mixed_with_text():
+    result = await _get({"video_id": "vidP", "title": "T", "formatted_text": "abc"}, parts=["status", "transcript"])
+    assert "- cleanup: not run" in result and "- summary: not run" in result and "- mindmap: not run" in result
+    assert result.index("## Status") < result.index("## Transcript (chars 0–3 of 3) · end")
+
+
+@pytest.mark.asyncio
+async def test_offset_and_limit_do_not_touch_the_status_part():
+    result = await _get({**FULL, "cleanup_status": "done"}, parts=["status"], offset=50, limit=5)
+    assert "- cleanup: done" in result

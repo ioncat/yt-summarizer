@@ -18,6 +18,7 @@ TEXT_PARTS = {
     "cleaned": "cleaned_text",
     "mindmap": "mindmap_text",
 }
+ALL_PARTS = (*TEXT_PARTS, "status")  # status: stage states and error reasons, no text
 DEFAULT_TEXT_LIMIT = 20_000  # chars of transcript / cleaned returned when the agent gives no limit
 
 mcp = FastMCP(
@@ -110,10 +111,38 @@ def _format_part(name: str, text: str | None, offset: int, limit: int | None) ->
     return [f"## {title} (chars {offset}–{end} of {total}) · {nxt}", chunk, ""]
 
 
+def _format_status(data: dict) -> list[str]:
+    """State of the three LLM stages, with the reason when one failed."""
+    def line(stage: str, extra: list[str]) -> str:
+        status = data.get(f"{stage}_status") or "not run"
+        bits = [status] + [e for e in extra if e]
+        if data.get(f"{stage}_error"):
+            bits.append(f"error: {data[f'{stage}_error']}")
+        return f"- {stage}: " + " · ".join(bits)
+
+    def secs(key: str) -> str:
+        return f"{int(data[key])}s" if data.get(key) else ""
+
+    summary_mode = data.get("summary_mode") or ""
+    if summary_mode and data.get("summary_chunks_count"):
+        summary_mode += f" ({data['summary_chunks_count']} chunks)"
+    return [
+        "## Status",
+        line("cleanup", [f"model {data['cleanup_model']}" if data.get("cleanup_model") else "", secs("cleanup_duration_seconds")]),
+        line("summary", [f"model {data['summary_model']}" if data.get("summary_model") else "", summary_mode,
+                         secs("summary_duration_seconds")]),
+        line("mindmap", []),
+        "",
+    ]
+
+
 def _format_parts(data: dict, parts: list[str], offset: int, limit: int | None) -> str:
     lines: list[str] = _header_lines(data)
     for name in dict.fromkeys(parts):  # in the order asked, each once
-        lines.extend(_format_part(name, data.get(TEXT_PARTS[name]), offset, limit))
+        if name == "status":
+            lines.extend(_format_status(data))
+        else:
+            lines.extend(_format_part(name, data.get(TEXT_PARTS[name]), offset, limit))
     lines.append(f"video_id: {data.get('video_id', '')}")
     return "\n".join(lines)
 
@@ -214,7 +243,8 @@ async def get_result(
 
     Args:
         video_id: the video ID (11-char YouTube ID or 'file-...' for local files)
-        parts: what to return, any of: summary, transcript (raw), cleaned, mindmap
+        parts: what to return, any of: summary, transcript (raw), cleaned, mindmap, status
+            (status: state, model, time and the error reason of cleanup, summary and mindmap)
         offset: first character to return of each text part (default 0)
         limit: how many characters of each text part (default: 20000 for transcript and cleaned,
             all of summary and mindmap). Every part shows "chars A–B of TOTAL" and "next: offset=B"
@@ -222,9 +252,9 @@ async def get_result(
         include_text: old switch: with no summary, show the transcript (ignored when parts is given)
     """
     if parts:
-        unknown = [p for p in parts if p not in TEXT_PARTS]
+        unknown = [p for p in parts if p not in ALL_PARTS]
         if unknown:
-            return f"ERROR: unknown part '{unknown[0]}'. Allowed: {', '.join(TEXT_PARTS)}"
+            return f"ERROR: unknown part '{unknown[0]}'. Allowed: {', '.join(ALL_PARTS)}"
     if offset < 0 or (limit is not None and limit <= 0):
         return "ERROR: offset must be >= 0 and limit must be > 0"
     async with _client() as client:
