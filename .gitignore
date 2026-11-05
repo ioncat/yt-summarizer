@@ -21,6 +21,13 @@ app/data/uploads/
 
 # Database directory and SQLite files
 app/data/db/
+# WAL mode side files (next to the database; also for a database kept elsewhere)
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+*.db-wal
+*.db-shm
 app/data/*.sqlite
 app/data/backend.pid
 

@@ -1,11 +1,49 @@
+import logging
+
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from config import settings
 
+logger = logging.getLogger("api")
+
 DATABASE_URL = f"sqlite+aiosqlite:///{settings.database_path}"
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+BUSY_TIMEOUT_MS = 30_000
+
+
+def _apply_sqlite_pragmas(dbapi_connection, _record=None) -> None:
+    """Per-connection SQLite settings (NS-28 item 1). Idempotent: it runs on every new connection.
+
+    journal_mode=WAL    readers no longer block the writer (and the writer no longer blocks readers); the mode is
+                        stored in the database file, so setting it again on a WAL file changes nothing. Creates the
+                        side files <db>-wal and <db>-shm next to the database.
+    busy_timeout        a writer waits up to 30 s for the lock instead of 5 s before "database is locked".
+    synchronous=NORMAL  with WAL, a commit is not fsynced on every transaction (a crash can lose the last commits of the
+                        last moments, never corrupt the file).
+    One failing pragma (e.g. WAL cannot be switched while another program has the file open) is logged and skipped.
+    """
+    cursor = dbapi_connection.cursor()
+    try:
+        for pragma in ("PRAGMA journal_mode=WAL", f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}", "PRAGMA synchronous=NORMAL"):
+            try:
+                cursor.execute(pragma)
+                cursor.fetchall()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("sqlite: %s failed: %s", pragma, exc)
+    finally:
+        cursor.close()
+
+
+def create_engine_for(url: str):
+    """The app's async engine for `url` with the SQLite settings applied to every connection."""
+    new_engine = create_async_engine(url, echo=False, connect_args={"timeout": BUSY_TIMEOUT_MS / 1000})
+    event.listen(new_engine.sync_engine, "connect", _apply_sqlite_pragmas)
+    return new_engine
+
+
+engine = create_engine_for(DATABASE_URL)
 
 AsyncSessionLocal = sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False

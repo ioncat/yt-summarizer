@@ -51,6 +51,7 @@ for _name in ("sqlalchemy.engine", "sqlalchemy.engine.Engine", "sqlalchemy.pool"
 async def lifespan(app: FastAPI):
     from services.queue_service import queue_worker
     await init_db()
+    await _log_sqlite_mode()
     await asyncio.to_thread(ssl_context)  # build the shared SSL context off the event loop (NS-28 item 3)
     await _reset_stale_statuses()
     await _cleanup_uploads_on_start()
@@ -61,6 +62,20 @@ async def lifespan(app: FastAPI):
         await worker_task
     except asyncio.CancelledError:
         pass
+
+
+async def _log_sqlite_mode() -> None:
+    """One line at startup: which journal mode / busy timeout the database really runs with."""
+    try:
+        from models.database import AsyncSessionLocal
+        from sqlalchemy import text
+        async with AsyncSessionLocal() as db:
+            mode = (await db.execute(text("PRAGMA journal_mode"))).scalar()
+            busy = (await db.execute(text("PRAGMA busy_timeout"))).scalar()
+            sync = (await db.execute(text("PRAGMA synchronous"))).scalar()
+        logging.getLogger("api").info("startup: sqlite journal_mode=%s busy_timeout=%s ms synchronous=%s", mode, busy, sync)
+    except Exception as exc:
+        logging.getLogger("api").warning("startup: could not read sqlite settings: %s", exc)
 
 
 async def _reset_stale_statuses() -> None:
