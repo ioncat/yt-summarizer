@@ -271,22 +271,65 @@ async def get_result(
         return _format_result(r.json(), include_text=include_text)
 
 
-@mcp.tool()
-async def search_history(query: str = "", limit: int = 20) -> str:
-    """Search processed videos by title or channel name.
-    Returns the most recent videos if query is empty.
+HISTORY_PAGE_SIZE = 20  # the backend's page size
 
-    Args:
-        query: text to search in video titles and channel names
-        limit: maximum number of results to return (default 20)
-    """
+
+async def _search_in_texts(query: str, limit: int) -> str:
+    """Words inside the transcript / cleaned text / summary / mind map of every video."""
+    if len(query.strip()) < 3:
+        return "ERROR: in_text needs a query of at least 3 characters"
     async with _client() as client:
         try:
-            r = await client.get("/api/history", params={"page": 1})
+            r = await client.get("/api/history/text-search", params={"q": query.strip(), "limit": limit})
         except httpx.ConnectError:
             return f"ERROR: Cannot connect to YT Summarizer at {BASE_URL}"
+    if r.status_code != 200:
+        return f"ERROR {r.status_code}: {r.text[:300]}"
+    videos = r.json().get("videos", [])
+    if not videos:
+        return f"No videos contain '{query}'."
+    lines = [f"Found {len(videos)} video(s) with '{query}' in their text:"]
+    for v in videos:
+        lines.append(f"- {v.get('title') or 'Unknown'}{f' — {_channel(v)}' if _channel(v) else ''}  (video_id: {v['video_id']})")
+        for m in v.get("matches", []):
+            n = v.get("counts", {}).get(m["part"], 1)
+            lines.append(f"  - {m['part']} ×{n}, first at char {m['position']}: {m['snippet']}")
+    lines.append("Read around a hit: get_result(video_id, parts=[<part>], offset=<char - 300>, limit=2000)")
+    return "\n".join(lines)
 
-        items = r.json().get("items", [])
+
+@mcp.tool()
+async def search_history(query: str = "", limit: int = 20, in_text: bool = False) -> str:
+    """Search processed videos by title or channel name (the whole history).
+    Returns the most recent videos if query is empty.
+    With in_text=True, search the words inside the texts instead (transcript, cleaned text,
+    summary, mind map): the answer gives, per video and part, how many hits there are and the
+    character position of the first one with a snippet, to read on with get_result(offset=...).
+
+    Args:
+        query: text to search in video titles and channel names (in_text: the words to find, 3+ chars)
+        limit: maximum number of videos to return (default 20)
+        in_text: search inside the texts instead of titles and channels
+    """
+    if in_text:
+        return await _search_in_texts(query, limit)
+
+    items: list[dict] = []
+    async with _client() as client:
+        page = 1
+        while True:
+            params: dict = {"page": page}
+            if query:
+                params["search"] = query
+            try:
+                r = await client.get("/api/history", params=params)
+            except httpx.ConnectError:
+                return f"ERROR: Cannot connect to YT Summarizer at {BASE_URL}"
+            got = r.json().get("items", [])
+            items.extend(got)
+            if len(got) < HISTORY_PAGE_SIZE or len(items) >= limit:
+                break
+            page += 1
 
     if query:
         q = query.lower()

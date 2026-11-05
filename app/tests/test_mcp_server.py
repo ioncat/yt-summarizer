@@ -145,8 +145,8 @@ async def test_search_history_with_query():
         {"video_id": "v3", "title": "Another Python Video", "channel": "Fireship", "has_summary": False, "has_cleaned": False},
     ]
     with respx.mock(assert_all_called=False) as mock:
-        # The endpoint is called with ?page=1 query param.
-        mock.get(f"{BASE}/api/history?page=1").mock(
+        # The endpoint is called with ?page=1&search=<query>.
+        mock.get(f"{BASE}/api/history").mock(
             return_value=httpx.Response(200, json={"items": items, "total": 3})
         )
 
@@ -161,7 +161,7 @@ async def test_search_history_with_query():
 async def test_search_history_empty():
     """No matching items → returns 'No videos found.'"""
     with respx.mock(assert_all_called=False) as mock:
-        mock.get(f"{BASE}/api/history?page=1").mock(
+        mock.get(f"{BASE}/api/history").mock(
             return_value=httpx.Response(200, json={"items": [], "total": 0})
         )
 
@@ -261,7 +261,7 @@ async def test_search_history_uses_author_for_filter_and_listing():
         {"video_id": "v2", "title": "Two", "author": "Other", "has_summary": False},
     ]
     with respx.mock(assert_all_called=False) as mock:
-        mock.get(f"{BASE}/api/history?page=1").mock(return_value=httpx.Response(200, json={"items": items}))
+        mock.get(f"{BASE}/api/history").mock(return_value=httpx.Response(200, json={"items": items}))
         result = await search_history(query="corey")
     assert "One — Corey Schafer" in result and "Two" not in result
 
@@ -415,3 +415,102 @@ async def test_status_part_for_a_video_where_nothing_ran_and_mixed_with_text():
 async def test_offset_and_limit_do_not_touch_the_status_part():
     result = await _get({**FULL, "cleanup_status": "done"}, parts=["status"], offset=50, limit=5)
     assert "- cleanup: done" in result
+
+
+# ─── search_history: the whole history, and inside the texts (NS-29) ───────────
+
+def _page(start, n):
+    return [{"video_id": f"v{i:03d}", "title": f"Video {i}", "author": "Chan", "has_summary": False}
+            for i in range(start, start + n)]
+
+
+@pytest.mark.asyncio
+async def test_search_history_reads_every_page_not_just_the_first():
+    def handler(request):
+        page = int(request.url.params["page"])
+        return httpx.Response(200, json={"items": {1: _page(0, 20), 2: _page(20, 20), 3: _page(40, 5)}[page]})
+
+    with respx.mock(assert_all_called=False) as mock:
+        route = mock.get(f"{BASE}/api/history").mock(side_effect=handler)
+        result = await search_history(limit=100)
+    assert "Found 45 video(s):" in result and "v044" in result
+    assert route.call_count == 3  # a short third page ends it
+
+
+@pytest.mark.asyncio
+async def test_search_history_stops_paging_once_it_has_enough():
+    def handler(request):
+        page = int(request.url.params["page"])
+        return httpx.Response(200, json={"items": _page((page - 1) * 20, 20)})
+
+    with respx.mock(assert_all_called=False) as mock:
+        route = mock.get(f"{BASE}/api/history").mock(side_effect=handler)
+        result = await search_history(limit=25)
+    assert "Found 25 video(s):" in result and route.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_search_history_passes_the_query_to_the_server_and_still_filters():
+    seen = []
+
+    def handler(request):
+        seen.append(dict(request.url.params))
+        return httpx.Response(200, json={"items": [
+            {"video_id": "a", "title": "Привет мир", "author": "X"},
+            {"video_id": "b", "title": "Совсем другое", "author": "Y"}]})
+
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(f"{BASE}/api/history").mock(side_effect=handler)
+        result = await search_history(query="ПРИВЕТ")
+    assert seen[0]["search"] == "ПРИВЕТ" and seen[0]["page"] == "1"
+    assert "Привет мир" in result and "Совсем другое" not in result
+
+
+TEXT_HITS = {"query": "зиррокс", "videos": [{
+    "video_id": "vidT", "title": "Лекция", "author": "Канал",
+    "counts": {"transcript": 14, "summary": 1},
+    "matches": [
+        {"part": "summary", "position": 120, "snippet": "…про Зиррокс в начале…"},
+        {"part": "transcript", "position": 41230, "snippet": "…и тут Зиррокс снова…"},
+    ]}]}
+
+
+@pytest.mark.asyncio
+async def test_search_in_text_lists_parts_counts_positions_and_snippets():
+    seen = []
+
+    def handler(request):
+        seen.append(dict(request.url.params))
+        return httpx.Response(200, json=TEXT_HITS)
+
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(f"{BASE}/api/history/text-search").mock(side_effect=handler)
+        result = await search_history(query="зиррокс", limit=5, in_text=True)
+    assert seen == [{"q": "зиррокс", "limit": "5"}]
+    assert "Found 1 video(s) with 'зиррокс' in their text:" in result
+    assert "- Лекция — Канал  (video_id: vidT)" in result
+    assert "  - transcript ×14, first at char 41230: …и тут Зиррокс снова…" in result
+    assert "  - summary ×1, first at char 120: …про Зиррокс в начале…" in result
+    assert "get_result(video_id, parts=[<part>], offset=" in result
+
+
+@pytest.mark.asyncio
+async def test_search_in_text_needs_three_characters_and_makes_no_request():
+    with respx.mock(assert_all_called=False) as mock:
+        route = mock.get(f"{BASE}/api/history/text-search").mock(return_value=httpx.Response(200, json=TEXT_HITS))
+        for q in ("", "  ab "):
+            assert (await search_history(query=q, in_text=True)).startswith("ERROR: in_text needs")
+    assert not route.called
+
+
+@pytest.mark.asyncio
+async def test_search_in_text_no_match_backend_error_and_no_backend():
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(f"{BASE}/api/history/text-search").mock(return_value=httpx.Response(200, json={"videos": []}))
+        assert await search_history(query="nothing", in_text=True) == "No videos contain 'nothing'."
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(f"{BASE}/api/history/text-search").mock(return_value=httpx.Response(500, text="boom"))
+        assert (await search_history(query="nothing", in_text=True)).startswith("ERROR 500")
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(f"{BASE}/api/history/text-search").mock(side_effect=httpx.ConnectError("down"))
+        assert "Cannot connect" in await search_history(query="nothing", in_text=True)

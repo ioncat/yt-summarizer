@@ -23,6 +23,7 @@ def test_mcp_server_calls_only_these_endpoints():
         "/api/result/{id}/cleanup",
         "/api/result/{id}/summary",
         "/api/history",
+        "/api/history/text-search",
         "/api/health",
     }
 
