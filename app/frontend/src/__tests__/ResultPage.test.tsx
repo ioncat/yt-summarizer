@@ -178,12 +178,50 @@ describe('ResultPage', () => {
     await waitFor(() => expect(m.queueBulkAdd).toHaveBeenCalledWith([base.url], ['summary'], true))
   })
 
-  it('Mind Map tab: empty state and Generate queues mindmap', async () => {
+  it('Mind Map tab: empty state and Generate queues the mind map through the endpoint (one path, NS-11 stage 2)', async () => {
+    m.startMindmap.mockResolvedValue({ status: 'processing' } as never)
     await renderPage()
     fireEvent.click(btn('Mind Map'))
     expect(screen.getByText(/No mind map yet/)).toBeTruthy()
     fireEvent.click(btn(/Generate mind map/))
-    await waitFor(() => expect(m.queueBulkAdd).toHaveBeenCalledWith([base.url], ['mindmap'], true))
+    await waitFor(() => expect(m.startMindmap).toHaveBeenCalledWith(base.video_id, false))
+    expect(m.queueBulkAdd).not.toHaveBeenCalledWith(expect.anything(), ['mindmap'], expect.anything())  // not the URL queue path
+  })
+
+  it('Mind Map: a local file uses the same endpoint', async () => {
+    m.startMindmap.mockResolvedValue({ status: 'processing' } as never)
+    setResult({ video_id: 'file-1234', url: 'local://talk.mp3', subtitle_source: 'transcript', subtitles_type: null })
+    await renderPage()
+    fireEvent.click(btn('Mind Map'))
+    fireEvent.click(btn(/Generate mind map/))
+    await waitFor(() => expect(m.startMindmap).toHaveBeenCalledWith(base.video_id, false))  // the page's route id
+    expect(m.queueBulkAdd).not.toHaveBeenCalledWith(expect.anything(), ['mindmap'], expect.anything())
+  })
+
+  it('Mind Map: Regenerate sends force=true', async () => {
+    m.startMindmap.mockResolvedValue({ status: 'processing' } as never)
+    setResult({ mindmap_text: '# Root', mindmap_status: 'done' })
+    await renderPage()
+    fireEvent.click(btn(/Regenerate mind map/))
+    await waitFor(() => expect(m.startMindmap).toHaveBeenCalledWith(base.video_id, true))
+  })
+
+  it('Mind Map: when the server hands back the saved map it is shown and nothing is polled', async () => {
+    m.startMindmap.mockResolvedValue({ status: 'done', mindmap_text: '# Saved map' } as never)
+    setResult({ mindmap_text: null, mindmap_status: null })
+    await renderPage()
+    fireEvent.click(btn('Mind Map'))
+    fireEvent.click(btn(/Generate mind map/))
+    expect((await screen.findByTestId('mindmap-view')).textContent).toBe('# Saved map')
+    expect(screen.queryByText(/queued/i)).toBeNull()
+  })
+
+  it('Mind Map: a failure to queue shows the reason', async () => {
+    m.startMindmap.mockRejectedValue(new Error('database busy, try again'))
+    await renderPage()
+    fireEvent.click(btn('Mind Map'))
+    fireEvent.click(btn(/Generate mind map/))
+    expect((await screen.findAllByText(/database busy, try again/)).length).toBeGreaterThan(0)
   })
 
   it('Mind Map tab: shows mindmap view when text exists', async () => {

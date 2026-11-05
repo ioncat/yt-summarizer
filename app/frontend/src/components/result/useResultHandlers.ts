@@ -233,10 +233,12 @@ export function useResultHandlers({
     try {
       setMindmapError('')
       if (force) setResult(r => r ? { ...r, mindmap_text: null, mindmap_status: null } : r)
-      if (result.url?.startsWith('local://')) {
-        await startMindmap(videoId, force)
-      } else {
-        await queueBulkAdd([result.url], ['mindmap'], true)
+      // One path for every video, local files too: the endpoint queues the work (NS-11 stage 2), sets the status at once
+      // and hands back the saved map when there is one and this is not a Regenerate.
+      const res = await startMindmap(videoId, force)
+      if (res?.status === 'done' && res.mindmap_text) {
+        setResult(r => r ? { ...r, mindmap_text: res.mindmap_text!, mindmap_status: 'done' } : r)
+        return
       }
       setQueuedMsg('mindmap')
       stopMindmapPolling()

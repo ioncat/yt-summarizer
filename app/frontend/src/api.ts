@@ -221,7 +221,8 @@ export async function cancelSummary(videoId: string): Promise<void> {
   await fetch(`${BASE}/result/${encodeURIComponent(videoId)}/summary`, { method: 'DELETE' })
 }
 
-export async function startMindmap(videoId: string, force = false): Promise<void> {
+/** Queue the mind map. {status:'done', mindmap_text} = the saved map (nothing queued, unless force); {status:'processing'} = queued. */
+export async function startMindmap(videoId: string, force = false): Promise<{ status: string; mindmap_text?: string }> {
   const url = force
     ? `${BASE}/result/${encodeURIComponent(videoId)}/mindmap?force=true`
     : `${BASE}/result/${encodeURIComponent(videoId)}/mindmap`
@@ -230,6 +231,7 @@ export async function startMindmap(videoId: string, force = false): Promise<void
     const body = await res.json().catch(() => ({}))
     throw new Error(errorText(body, 'Failed to start mindmap generation'))
   }
+  return res.json()
 }
 
 export async function cancelMindmap(videoId: string): Promise<void> {
