@@ -7,6 +7,8 @@ from typing import Callable, Optional
 
 import httpx
 
+from .ollama_options import build_options
+
 logger = logging.getLogger(__name__)
 
 # Default prompts — source of truth for text_cleaner defaults.
@@ -92,11 +94,14 @@ async def _clean_paragraph(
                     {"role": "user", "content": user_prompt_template.format(text=text)},
                 ],
                 "stream": False,
-                # num_ctx 4K: cleanup paragraphs are ~500 chars (~150 tokens)
-                # — large default context (128K on some models) inflates per-slot
-                # KV-cache memory ~25× and pushes weights to CPU on consumer GPUs.
-                # See open-questions: parallel speedup test (19.05.2026).
-                "options": {"temperature": 0.1, "num_ctx": 4096},
+                # Cleanup paragraphs are ~500 chars (~150 tokens): the small reserve keeps
+                # num_ctx at 4K for them — a large context (128K on some models) inflates
+                # per-slot KV-cache memory ~25× and pushes weights to CPU on consumer GPUs.
+                # See open-questions: parallel speedup test (19.05.2026). A huge paragraph grows it.
+                "options": build_options(
+                    system_prompt, user_prompt_template.format(text=text),
+                    reserve_tokens=2048, temperature=0.1,
+                ),
             },
         )
         response.raise_for_status()

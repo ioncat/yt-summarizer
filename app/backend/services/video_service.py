@@ -859,7 +859,7 @@ APP_SETTING_KEYS = (
     "force_map_reduce", "parallel_workers", "queue_default_pipeline",
     "stt_engine", "stt_model", "stt_device", "stt_cache_path",
     "upload_auto_delete", "upload_auto_delete_mode", "upload_auto_delete_days",
-    "chat_num_ctx",
+    "chat_num_ctx", "llm_max_num_ctx",
     "download_default_format", "download_default_quality",
 )
 

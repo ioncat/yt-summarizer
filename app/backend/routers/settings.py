@@ -52,6 +52,7 @@ class AppSettingsRequest(BaseModel):
     upload_auto_delete_mode: str | None = None
     upload_auto_delete_days: str | None = None
     chat_num_ctx: str | None = None
+    llm_max_num_ctx: str | None = None
     download_default_format: str | None = None
     download_default_quality: str | None = None
 

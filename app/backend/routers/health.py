@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import get_db
+from services.ollama_options import build_options
 from services.video_service import get_app_setting
 
 from services.mcp_connect import (
@@ -77,7 +78,10 @@ async def chat_proxy(body: ChatRequest, db: Annotated[AsyncSession, Depends(get_
         "model": body.model,
         "stream": True,
         "messages": [{"role": m.role, "content": m.content} for m in body.messages],
-        "options": {"num_ctx": int(await get_app_setting(db, "chat_num_ctx") or 32768)},
+        "options": build_options(
+            *(m.content for m in body.messages),
+            max_ctx=int(await get_app_setting(db, "chat_num_ctx") or 32768),
+        ),
     }
 
     async def stream_ollama():

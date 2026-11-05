@@ -6,6 +6,7 @@ from typing import Callable, Optional
 
 import httpx
 
+from .ollama_options import build_options
 from .text_utils import normalize_chapter_headings
 
 logger = logging.getLogger(__name__)
@@ -181,7 +182,7 @@ async def _call_ollama(
                     {"role": "user", "content": user_prompt},
                 ],
                 "stream": False,
-                "options": {"temperature": 0.2},
+                "options": build_options(system_prompt, user_prompt, temperature=0.2),
             },
             timeout=timeout,
         )

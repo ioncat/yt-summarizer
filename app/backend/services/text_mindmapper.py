@@ -8,6 +8,8 @@ import logging
 
 import httpx
 
+from .ollama_options import build_options
+
 logger = logging.getLogger("mindmapper")
 
 DEFAULT_SYSTEM_PROMPT = """You are a mindmap structure generator.
@@ -54,7 +56,7 @@ async def generate_mindmap(
     payload = {
         "model": model,
         "stream": True,
-        "options": {"temperature": 0.3},
+        "options": build_options(sys_prompt, user_msg, temperature=0.3),
         "messages": [
             {"role": "system", "content": sys_prompt},
             {"role": "user", "content": user_msg},
