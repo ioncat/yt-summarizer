@@ -191,6 +191,27 @@ Owner's idea 2026-11-04: maybe adding links through the UI one at a time is slow
 Not found: any cap. The failure the owner saw is not reproduced yet; to do (0, first): quick one-by-one add: paste a link, Enter, the field clears, the page stays, a short line "added (n in queue)" or the reason for a skip, and every add goes through the queue, never the direct path; then: (1) reproduce with 20-30 distinct URLs through the UI and read the report the page shows and `data/logs/backend.log`; (2) if links vanish, find where (frontend report, backend dedup, worker); (3) make the skip reasons explicit per URL (new / already processed / already in queue / duplicate in the list / not a YouTube link); (4) make the bulk window the main add form (a textarea, one URL per line, pipeline choice, one "Add all" button); (5) a test that adds 50 URLs and gets 50 rows back in order
 Labels: `by-backend`, `by-frontend` | Status: 🔵 Planned | Depends on: NS-11, NS-17 item 4 (same form)
 
+**NS-26 — Empty answers from the model: send `num_ctx`, report the real reason** (bug, small, urgent; start now, before NS-11 stage 1)
+Origin: Owner, 2026-11-05 (video `jZ0pSd8iw3U`: summary and mindmap `failed`); CTO root-cause check, see NS-17 item 14
+Value: summary, mindmap and the other LLM stages stop failing on long videos; when they do fail the page says why
+Cause: no `num_ctx` is sent to Ollama, default context 4096; gemma4 spends the tokens left on `message.thinking`, `done_reason: length`, `message.content` empty; the app reads only `content` and ends the stage as `failed` with a generic text. Test 2026-11-05: 3,851-token prompt, default context → empty content; `num_ctx: 16384` → 1,658 chars, 25 s
+Fix: (1) every Ollama chat call (summary single and sectioned, mindmap, cleanup, chat) sends `num_ctx` sized to the input (prompt estimate plus room for thinking and the answer, with a cap from a setting; one helper, not five copies); (2) an empty `content` is a distinct error with its own message: "model returned no answer (thinking used the whole context)" when `thinking` is non-empty, "model returned nothing" otherwise; the stage ends `failed` with that text on the result page instead of "Check Ollama and model settings" (the full per-stage table is NS-25); (3) tests with the Ollama call mocked: long input gets a larger `num_ctx`, empty content with thinking gives the specific message; (4) after it, QA re-runs summary and mindmap on `jZ0pSd8iw3U` and `1C3Aj50pcnc` (both failed before) and S1-S4
+Not in scope: the per-stage status table (NS-25), the queue showing `done` after failed stages (NS-25), any change of models or prompts
+Labels: `by-backend` | Status: 🟡 In progress · sent to Developer 2026-11-05 | Depends on: nothing
+
+**NS-25 — Per-stage status table and an honest queue status** (after NS-26, inside or right after NS-11)
+Origin: Owner, 2026-11-05 ("a table for the four stages: type, status, failure reason, to diagnose quickly"); CTO check of `jZ0pSd8iw3U`
+Value: any failed stage is visible at a glance with its reason; a queue item is `done` only when every chosen stage succeeded
+Today: queue items 208 and 210 are `done` with no error although summary and mindmap failed; stage data sits in different columns of `subtitles_formatted` (cleanup has status, times, model; summary has status, times, model, mode; mindmap only a status; only extraction has an error text); no reason is stored for cleanup, summary or mindmap
+Plan: one table `processing_stages` (video id, stage: extract/transcribe/cleanup/summary/mindmap, status, started, finished, model, error code, error text, attempt, queue item id), one row per run, history kept; reason codes `empty_answer`, `context_too_small`, `model_missing`, `timeout`, `no_subtitles`, `ollama_down`, `cancelled`, `unexpected`; the result page shows the four stages as a small table; the queue item ends `done` only when all chosen stages are `done`, otherwise `partial` with the failed stage named; the old columns are filled from the table or dropped in one reviewed migration (back up first, rule 11)
+Labels: `by-backend`, `by-frontend` | Status: 🔵 Planned | Depends on: NS-26; fits NS-11 (state in the DB, not in module dicts)
+
+**NS-27 — Error monitoring** (idea, after NS-25; groundwork for a multi-user service)
+Origin: Owner, 2026-11-05 ("if this becomes a multi-user service we must know where things fail and why")
+Value: failures can be counted and traced instead of read out of a log
+Plan (to refine): a summary page over `processing_stages` (failures per stage, per model, per reason, per day); structured logs (one JSON line per stage event with request id, video id, stage, reason code) in place of text lines; request and user ids carried in every record once there are users; metrics export (for example Prometheus) only when a second user exists
+Labels: `by-backend`, `by-frontend` | Status: 🔵 Idea | Depends on: NS-25
+
 **NS-18 — Finish splitting the routers** (after NS-11)
 Origin: CTO, 2026-11-01; NS-12 review ("`result.py` 665 and `process.py` 459 lines, over the 400-line limit")
 Value: the rule "a file over about 400 lines is split" holds for the backend too
