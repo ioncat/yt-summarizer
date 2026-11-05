@@ -5,10 +5,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from models.database import init_db
+from services.db_retry import BUSY_MESSAGE, is_locked
 from services.http_client import ssl_context
 from models import models  # noqa: F401 — registers models with Base.metadata
 from routers.api import router as api_router
@@ -122,6 +124,15 @@ async def _log_unhandled_exception(request: Request, exc: Exception) -> JSONResp
     """uvicorn prints a crashed request to the console only; put it into backend.log with its traceback."""
     logging.getLogger("api").error("unhandled error in %s %s", request.method, request.url.path, exc_info=exc)
     return JSONResponse({"detail": "Internal Server Error"}, status_code=500)
+
+
+@app.exception_handler(OperationalError)
+async def _database_error(request: Request, exc: OperationalError) -> JSONResponse:
+    """A locked database is "busy, try again" (503), not a crash; any other database error is logged and a 500."""
+    if is_locked(exc):
+        logging.getLogger("api").warning("database is locked: %s %s -> 503", request.method, request.url.path)
+        return JSONResponse({"detail": BUSY_MESSAGE}, status_code=503, headers={"Retry-After": "2"})
+    return await _log_unhandled_exception(request, exc)
 
 
 app.add_middleware(

@@ -349,6 +349,7 @@ async def queue_bulk_add(
     """
     from services.queue_service import add_items, get_duplicate_reasons
     from services.queue_by_id import RESULT_STAGES, add_by_video_ids
+    from services.db_retry import retry_locked
     import json as _json
 
     if not body.urls and not body.video_ids:
@@ -393,7 +394,7 @@ async def queue_bulk_add(
     if body.force:
         new_urls = valid_urls  # no dedup — user explicitly re-queuing
     else:
-        duplicate_vids = await get_duplicate_reasons(db, valid_vid_ids)
+        duplicate_vids = await retry_locked(lambda: get_duplicate_reasons(db, valid_vid_ids), db, "queue add: duplicate check")
         for url, vid in zip(valid_urls, valid_vid_ids):
             if vid in duplicate_vids:
                 duplicates.append(url)
@@ -405,17 +406,19 @@ async def queue_bulk_add(
     if body.pipeline_stages is not None:
         stages = body.pipeline_stages
     else:
-        raw = await get_app_setting(db, "queue_default_pipeline")
+        raw = await retry_locked(lambda: get_app_setting(db, "queue_default_pipeline"), db, "queue add: default pipeline")
         stages = _json.loads(raw) if raw else ["extract"]
 
     # Step 4: add only new
     ids: list[int] = []
     if new_urls:
-        ids = await add_items(db, new_urls, stages, language=body.language or None)
+        ids = await retry_locked(
+            lambda: add_items(db, new_urls, stages, language=body.language or None), db, "queue add: insert")
 
     missing: list[str] = []
     if body.video_ids:
-        by_id = await add_by_video_ids(db, body.video_ids, body.pipeline_stages)
+        by_id = await retry_locked(
+            lambda: add_by_video_ids(db, body.video_ids, body.pipeline_stages), db, "queue add: insert by id")
         ids += by_id["ids"]
         duplicates += by_id["duplicates"]
         duplicate_details += [{"url": None, "video_id": v, "reason": "in_queue"} for v in by_id["duplicates"]]
