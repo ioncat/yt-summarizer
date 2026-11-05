@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import get_db
-from services.text_search import MIN_QUERY_LEN, search_texts
+from services.text_search import MAX_QUERY_LEN, MIN_QUERY_LEN, search_texts
 from services.video_service import delete_video, get_history
 
 router = APIRouter()
@@ -33,6 +33,8 @@ async def search_history_texts(
     q = q.strip()
     if len(q) < MIN_QUERY_LEN:
         raise HTTPException(status_code=400, detail=f"Query must be at least {MIN_QUERY_LEN} characters")
+    if len(q) > MAX_QUERY_LEN:
+        raise HTTPException(status_code=400, detail=f"Query must be at most {MAX_QUERY_LEN} characters")
     return await search_texts(db, q, limit=max(1, min(limit, 50)))
 
 

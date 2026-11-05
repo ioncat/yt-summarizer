@@ -272,6 +272,7 @@ async def get_result(
 
 
 HISTORY_PAGE_SIZE = 20  # the backend's page size
+MAX_QUERY_LEN = 200  # the backend refuses longer text-search queries; a longer one would also overflow the URL
 
 
 async def _search_in_texts(query: str, limit: int) -> str:
@@ -311,6 +312,8 @@ async def search_history(query: str = "", limit: int = 20, in_text: bool = False
         limit: maximum number of videos to return (default 20)
         in_text: search inside the texts instead of titles and channels
     """
+    if len(query.strip()) > MAX_QUERY_LEN:
+        return f"ERROR: query is too long ({len(query.strip())} chars, at most {MAX_QUERY_LEN})"
     if in_text:
         return await _search_in_texts(query, limit)
 

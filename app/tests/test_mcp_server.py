@@ -514,3 +514,15 @@ async def test_search_in_text_no_match_backend_error_and_no_backend():
     with respx.mock(assert_all_called=False) as mock:
         mock.get(f"{BASE}/api/history/text-search").mock(side_effect=httpx.ConnectError("down"))
         assert "Cannot connect" in await search_history(query="nothing", in_text=True)
+
+
+@pytest.mark.asyncio
+async def test_a_very_long_query_is_a_clear_error_line_without_a_request():
+    with respx.mock(assert_all_called=False) as mock:
+        hist = mock.get(f"{BASE}/api/history").mock(return_value=httpx.Response(200, json={"items": []}))
+        text = mock.get(f"{BASE}/api/history/text-search").mock(return_value=httpx.Response(200, json={"videos": []}))
+        for in_text in (False, True):
+            out = await search_history(query="x" * 5000, in_text=in_text)
+            assert out == "ERROR: query is too long (5000 chars, at most 200)"
+        ok = await search_history(query="я" * 200, in_text=True)
+    assert not hist.called and text.called and not ok.startswith("ERROR: query")

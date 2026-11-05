@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.models import SubtitleFormatted, Video
 
 MIN_QUERY_LEN = 3
+MAX_QUERY_LEN = 200
 SNIPPET_RADIUS = 80
 # part name (as in get_result) -> column of subtitles_formatted
 PART_COLUMNS = {

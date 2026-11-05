@@ -148,3 +148,8 @@ async def test_history_search_pages_and_keeps_newest_first_and_the_favorites_fil
     assert await _titles(client, search="пагинация", page=3) == []
     assert await _titles(client, search="пагинация", favorites_only="true") == []
     assert len(await _titles(client)) >= 20  # no search: the old path still pages
+
+
+async def test_text_search_query_longer_than_200_chars_is_400_and_200_is_fine(client):
+    assert (await client.get("/api/history/text-search", params={"q": "я" * 201})).status_code == 400
+    assert (await client.get("/api/history/text-search", params={"q": "я" * 200})).status_code == 200
