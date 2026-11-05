@@ -499,6 +499,27 @@ describe('ResultPage', () => {
     expect(screen.getByText('good')).toBeTruthy()
   })
 
+  describe('Stop keeps the saved text (NS-11 decision 1)', () => {
+    it('Stop on a cleanup re-run: the cleaned text and its time stay on the page', async () => {
+      setResult({ cleanup_status: 'processing', cleaned_text: 'Earlier cleaned text', cleanup_duration_seconds: 42, cleanup_model: 'llama3' })
+      await renderPage()
+      fireEvent.click(btn(/Cleaned/))
+      fireEvent.click(await screen.findByRole('button', { name: /Stop/ }))
+      await waitFor(() => expect(m.cancelCleanup).toHaveBeenCalledWith('abc123'))
+      expect(await screen.findByText('Earlier cleaned text')).toBeTruthy()
+      expect(screen.getByText(/Cleaned in 0:42/)).toBeTruthy()
+    })
+
+    it('Stop on a summary re-run: the summary and its time stay on the page', async () => {
+      setResult({ summary_status: 'processing', summary_text: 'Earlier summary body', summary_duration_seconds: 17, summary_mode: 'single' })
+      await renderPage()
+      fireEvent.click(btn(/Summary/))
+      fireEvent.click(await screen.findByRole('button', { name: /Stop/ }))
+      await waitFor(() => expect(m.cancelSummary).toHaveBeenCalledWith('abc123'))
+      expect(await screen.findByText('Earlier summary body')).toBeTruthy()
+    })
+  })
+
   describe('Stop updates the steps table at once (NS-25 QA)', () => {
     const running = (model: string) => ({
       attempt: 1, status: 'processing', queue_item_id: 1, model, started_at: '2026-11-01T10:00:00', finished_at: null,

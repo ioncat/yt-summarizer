@@ -75,7 +75,8 @@ export function useResultHandlers({
     stopPolling(); stopCleanupTimer()
     try { await cancelCleanup(videoId) } catch (err) { console.error('[Result] cancelCleanup failed:', err) }
     setCleanupElapsedSeconds(null); cleanupElapsedRef.current = null; setLocalCleanupDuration(null)
-    setResult(prev => prev ? withStageStopped({ ...prev, cleanup_status: null, cleaned_text: null, cleanup_duration_seconds: null }, 'cleanup') : prev)
+    // the saved cleaned text (and its time) stays: Stop ends the run, not the result of an earlier one (NS-11 decision 1)
+    setResult(prev => prev ? withStageStopped({ ...prev, cleanup_status: null }, 'cleanup') : prev)
   }
 
   async function handleCancelSummary() {
@@ -83,7 +84,8 @@ export function useResultHandlers({
     stopSummaryPolling(); stopSummaryTimer()
     try { await cancelSummary(videoId) } catch (err) { console.error('[Result] cancelSummary failed:', err) }
     setSummaryElapsedSeconds(null); summaryElapsedRef.current = null; setLocalSummaryDuration(null)
-    setResult(prev => prev ? withStageStopped({ ...prev, summary_status: null, summary_text: null, summary_duration_seconds: null }, 'summary') : prev)
+    // the saved summary (and its time) stays, as above
+    setResult(prev => prev ? withStageStopped({ ...prev, summary_status: null }, 'summary') : prev)
   }
 
   async function handleDelete() {
