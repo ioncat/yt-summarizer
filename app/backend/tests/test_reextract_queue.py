@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import text
 
 from models.database import AsyncSessionLocal
-from tests.baseline_helpers import VIDEO_ID, reset_queue, run_reextract_items
+from tests.baseline_helpers import VIDEO_ID, fmt_row, reset_queue, run_reextract_items
 from tests.test_baseline_reextract import LOCAL_ID, local_video, stt, yt, youtube_video  # noqa: F401  (fixtures and fakes)
 
 
@@ -115,3 +115,90 @@ async def test_a_youtube_reextract_opens_an_extract_run_without_a_model(client, 
     (run,) = await runs_of(VIDEO_ID, "extract")
     assert (run["status"], run["model"]) == ("processing", None)
     assert await runs_of(VIDEO_ID, "transcribe") == []
+
+
+# --- the end of the run row and its reason codes ------------------------------------------------------------------
+
+async def test_a_good_retranscription_closes_its_run_done_with_model_device_and_time(client, local_video):
+    await client.put("/api/settings/app", json={"stt_device": "cpu"})
+    with patch("services.transcriber.transcribe", stt()):
+        await client.post(f"/api/result/{LOCAL_ID}/reextract", json={"model": "small"})
+        await run_reextract_items(LOCAL_ID)
+    runs = await runs_of(LOCAL_ID, "transcribe")
+    run = runs[-1]
+    assert (run["status"], run["model"], run["error_code"]) == ("done", "small", None)
+    assert json.loads(run["meta"]) == {"device": "cpu"} and run["started_at"] and run["finished_at"]
+    assert len([r for r in runs if r["status"] == "processing"]) == 0          # no run left open
+
+
+async def test_what_was_made_from_the_old_text_loses_its_runs_but_the_transcribe_runs_stay(client, local_video):
+    async with AsyncSessionLocal() as db:
+        await db.execute(text("INSERT INTO processing_stages (video_id, stage, status, attempt, created_at) "
+                              "VALUES (:v, 'cleanup', 'done', 1, datetime('now')), (:v, 'summary', 'done', 1, datetime('now'))"), {"v": LOCAL_ID})
+        await db.commit()
+    with patch("services.transcriber.transcribe", stt()):
+        await client.post(f"/api/result/{LOCAL_ID}/reextract", json={})
+        await run_reextract_items(LOCAL_ID)
+    assert await runs_of(LOCAL_ID, "cleanup") == [] and await runs_of(LOCAL_ID, "summary") == []
+    assert [r["status"] for r in await runs_of(LOCAL_ID, "transcribe")] == ["done"]
+
+
+@pytest.mark.parametrize("make,message,code", [
+    (lambda: stt(segments=[]), "No speech was found in the file", "no_speech"),
+    (lambda: stt(segments=[], ok=False, error="faster-whisper is not installed. Run: pip install faster-whisper"), "faster-whisper is not installed", "model_missing"),
+    (lambda: stt(segments=[], ok=False, error="CUDA out of memory"), "CUDA out of memory", "unexpected"),
+])
+async def test_a_failed_retranscription_keeps_the_message_and_gets_a_reason_code(client, local_video, make, message, code):
+    with patch("services.transcriber.transcribe", make()):
+        await client.post(f"/api/result/{LOCAL_ID}/reextract", json={})
+        await run_reextract_items(LOCAL_ID)
+    (run,) = await runs_of(LOCAL_ID, "transcribe")
+    assert run["status"] == "failed" and message in run["error_text"] and run["error_code"] == code
+    stages = (await client.get(f"/api/result/{LOCAL_ID}")).json()["stages"]["transcribe"]
+    assert stages["status"] == "failed" and stages["error_code"] == code      # the page's steps table gets it
+
+
+async def test_a_vanished_file_is_file_missing_and_a_failed_extraction_gets_its_own_code(client, local_video, youtube_video):
+    real_glob = __import__("glob").glob
+    calls = {"n": 0}
+
+    def vanishing(pattern, *a, **k):
+        calls["n"] += 1
+        return real_glob(pattern, *a, **k) if calls["n"] == 1 else []
+
+    with patch("glob.glob", vanishing), patch("services.transcriber.transcribe", stt()):
+        await client.post(f"/api/result/{LOCAL_ID}/reextract", json={})
+        await run_reextract_items(LOCAL_ID)
+    assert (await runs_of(LOCAL_ID, "transcribe"))[-1]["error_code"] == "file_missing"
+    with patch("services.reextract.extract_subtitles", return_value=yt(ok=False, error="This video has no subtitles available.")):
+        await client.post(f"/api/result/{VIDEO_ID}/reextract", json={})
+        await run_reextract_items(VIDEO_ID)
+    (run,) = await runs_of(VIDEO_ID, "extract")
+    assert (run["status"], run["error_code"]) == ("failed", "no_subtitles")
+
+
+async def test_retry_of_a_failed_reextract_is_a_second_run_that_ends_done(client, local_video):
+    calls = {"n": 0}
+
+    def flaky(path, language, model, device, cache_path, on_progress):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return stt(segments=[], ok=False, error="GPU busy")(path, language, model, device, cache_path, on_progress)
+        return stt()(path, language, model, device, cache_path, on_progress)
+
+    with patch("services.transcriber.transcribe", flaky):
+        await client.post(f"/api/result/{LOCAL_ID}/reextract", json={})
+        (item,) = await run_reextract_items(LOCAL_ID)
+        assert item["status"] == "failed"
+        assert (await client.post(f"/api/queue/{item['id']}/retry")).status_code == 200
+        (again,) = [i for i in await _items_after_retry(client)]
+    assert again["status"] == "done"
+    assert [(r["attempt"], r["status"]) for r in await runs_of(LOCAL_ID, "transcribe")] == [(1, "failed"), (2, "done")]
+    assert "NEW TRANSCRIPT" in (await fmt_row(LOCAL_ID))["formatted_text"]
+
+
+async def _items_after_retry(client):
+    from tests.baseline_helpers import run_worker
+    (item,) = await items_of(client, LOCAL_ID)
+    await run_worker([item["id"]])
+    return await items_of(client, LOCAL_ID)

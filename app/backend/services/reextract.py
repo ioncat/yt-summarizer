@@ -57,6 +57,7 @@ async def reextract_queued(db, video_id: str) -> bool:
 async def run_queued_reextract(item: dict) -> dict:
     """Run one queued re-extract (called by the queue worker). Returns {"video_id", "db_video_id"}; raises ReextractFailed."""
     from models.database import AsyncSessionLocal
+    from services import stage_runs
     video_id = item["video_id"]
     async with AsyncSessionLocal() as db:
         fmt = await get_result(db, video_id)
@@ -65,8 +66,36 @@ async def run_queued_reextract(item: dict) -> dict:
             text("SELECT model FROM processing_stages WHERE video_id = :v AND stage = :s AND status = 'processing' "
                  "ORDER BY id DESC LIMIT 1"), {"v": video_id, "s": stage},
         )).scalar()
-    await run_reextract(video_id, item.get("language") or "auto", model)
+    async with AsyncSessionLocal() as db:
+        if model is None and stage == "transcribe":
+            model = await get_app_setting(db, "stt_model") or "base"
+        await stage_runs.begin(db, video_id, stage, model, item["id"])      # a retried item gets its new run here
+        await db.commit()
+    try:
+        outcome = await run_reextract(video_id, item.get("language") or "auto", model)
+    except ReextractFailed as exc:
+        await _record(video_id, stage, "failed", error=str(exc), model=model)
+        raise
+    await _record(video_id, stage, "done", model=outcome.get("model"), device=outcome.get("device"), started_at=outcome.get("started_at"))
     return {"video_id": video_id, "db_video_id": item.get("db_video_id")}
+
+
+async def _record(video_id: str, stage: str, how: str, **kw) -> None:
+    """Write the end of the run row: how = "done" | "failed" | "cancelled". A failure to write must not hide the real outcome."""
+    from models.database import AsyncSessionLocal
+    from services import stage_runs
+    try:
+        async with AsyncSessionLocal() as db:
+            if how == "done":
+                await stage_runs.finish(db, video_id, stage, model=kw.get("model"), started_at=kw.get("started_at"),
+                                        meta={"device": kw["device"]} if kw.get("device") else None)
+            elif how == "failed":
+                await stage_runs.fail(db, video_id, stage, kw.get("error"), model=kw.get("model"))
+            else:
+                await stage_runs.cancel(db, video_id, stage)
+            await db.commit()
+    except Exception:  # noqa: BLE001
+        _reextract_logger.exception("could not record the %s of the re-extract of %s", how, video_id)
 
 _reextract_logger = logging.getLogger("api.reextract")
 
@@ -76,10 +105,10 @@ _REEXTRACT_SET: set[str] = set()
 _RETRANSCRIBE_PROGRESS: dict[str, str] = {}
 
 
-async def run_reextract(video_id: str, language: str = "auto", model: str | None = None) -> None:
-    """Background task: re-extract subtitles for an existing video.
-    For local:// URLs, re-runs Whisper transcription.
-    Overwrites formatted_text + chapters, invalidates cleanup/summary."""
+async def run_reextract(video_id: str, language: str = "auto", model: str | None = None) -> dict:
+    """Re-extract subtitles for an existing video (for local:// URLs: re-run the speech-to-text on the saved upload).
+    Overwrites formatted_text + chapters in place and invalidates what was made from the old text - only when it worked; any failure
+    raises ReextractFailed and replaces nothing. Returns {"model", "device", "started_at"} for a transcription, {} for an extraction."""
     import glob as _glob
     from models.database import AsyncSessionLocal
 
@@ -188,7 +217,7 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
                 "retranscribe: success video_id=%s entries=%d lang=%s",
                 video_id, len(entries), detected_language,
             )
-            return
+            return {"model": stt_model, "device": actual_device, "started_at": transcription_started_at}
 
         # YouTube / standard yt-dlp path
         async with AsyncSessionLocal() as db:
@@ -215,6 +244,7 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
         )
         async with AsyncSessionLocal() as db:
             await replace_subtitles_after_reextract(db, video_id, extraction, formatted)
+        return {}
     except ReextractFailed:
         raise
     except Exception as exc:
