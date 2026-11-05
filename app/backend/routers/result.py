@@ -40,9 +40,8 @@ from services.video_service import (
 )
 from routers.download import _mp4_format_spec
 from routers.settings import _uploads_dir
-from services import reextract as reextract_service
 from services.queue_by_id import RESULT_STAGES, queued_stages_of
-from services.reextract import enqueue_reextract, reextract_queued, stop_reextract
+from services.reextract import enqueue_reextract, reextract_progress_text, reextract_queued, stop_reextract
 
 logger = logging.getLogger("api")
 
@@ -53,9 +52,6 @@ _CANCEL_SET = CLEANUP_CANCEL  # the cleanup flag, shared with the queue worker (
 _SUMMARY_CANCEL_SET = SUMMARY_CANCEL  # shared with the queue worker (services/stage_control.py)
 _MINDMAP_CANCEL_SET = MINDMAP_CANCEL  # shared with the queue worker (services/stage_control.py): the same set object
 
-# Videos currently being re-extracted / live re-transcription progress: the same objects as in services/reextract.py
-_REEXTRACT_SET = reextract_service._REEXTRACT_SET
-_RETRANSCRIBE_PROGRESS = reextract_service._RETRANSCRIBE_PROGRESS
 
 
 @router.get("/result/{video_id}")
@@ -65,11 +61,10 @@ async def get_video_result(video_id: str, db: Annotated[AsyncSession, Depends(ge
         raise HTTPException(status_code=404, detail="Result not found")
     # (the live cleanup / summary counters come with the result: get_result reads them from the stage's run row)
     # Flag if a re-extract / re-transcription is currently running
-    if video_id in _REEXTRACT_SET or await reextract_queued(db, video_id):
+    progress = await reextract_progress_text(db, video_id)      # from the queue item and the stage's run row (NS-11 stage 6)
+    if progress is not None:
         result["reextract_in_progress"] = True
-        retranscribe_progress = _RETRANSCRIBE_PROGRESS.get(video_id)
-        if retranscribe_progress:
-            result["retranscribe_progress"] = retranscribe_progress
+        result["retranscribe_progress"] = progress
     return result
 
 
@@ -156,7 +151,7 @@ async def trigger_reextract(
         raise HTTPException(status_code=409, detail="Cleanup is in progress — cancel first")
     if fmt.get("summary_status") == "processing":
         raise HTTPException(status_code=409, detail="Summarization is in progress — cancel first")
-    if video_id in _REEXTRACT_SET or await reextract_queued(db, video_id):
+    if await reextract_queued(db, video_id):
         raise HTTPException(status_code=409, detail="Re-extract already in progress")
     queued = await queued_stages_of(db, video_id)
     if queued & set(RESULT_STAGES):

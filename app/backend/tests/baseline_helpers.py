@@ -114,10 +114,8 @@ class Gate:
 
 def clear_router_state() -> None:
     from routers import result as r
-    for s in (r._CANCEL_SET, r._SUMMARY_CANCEL_SET, r._MINDMAP_CANCEL_SET, r._REEXTRACT_SET):
+    for s in (r._CANCEL_SET, r._SUMMARY_CANCEL_SET, r._MINDMAP_CANCEL_SET):
         s.clear()
-    for d in (r._RETRANSCRIBE_PROGRESS,):
-        d.clear()
     from services import queue_service as q
     q._QUEUE_PROGRESS.clear()
 

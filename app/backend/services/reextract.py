@@ -13,6 +13,7 @@ import os
 
 from services import file_stt
 from services.stage_control import TRANSCRIBE_CANCEL, StageCancelled
+from services.stage_progress import ProgressWriter
 from services.subtitle_extractor import extract_subtitles
 from sqlalchemy import text
 
@@ -83,6 +84,31 @@ async def stop_reextract(db, video_id: str) -> str:
     return "stopping"
 
 
+async def reextract_progress_text(db, video_id: str) -> str | None:
+    """The page's "retranscribe_progress" while a re-extract is queued or running: "waiting in the queue", "starting…", or the live
+    "segment 12 · 40%" from the run row's counters. None when no re-extract is queued or running."""
+    import json
+    row = (await db.execute(
+        text("SELECT status, url FROM processing_queue WHERE video_id = :v AND status IN ('pending', 'processing') "
+             "AND pipeline_stages LIKE '%\"reextract\"%' ORDER BY id DESC LIMIT 1"), {"v": video_id},
+    )).first()
+    if row is None:
+        return None
+    if row[0] == "pending":
+        return "waiting in the queue"
+    run = (await db.execute(
+        text("SELECT progress_done, progress_total, meta FROM processing_stages WHERE video_id = :v AND stage = :s "
+             "AND status = 'processing' ORDER BY id DESC LIMIT 1"), {"v": video_id, "s": run_stage_of(row[1])},
+    )).first()
+    if run is None or not run[1]:
+        return "starting…"
+    try:
+        segments = (json.loads(run[2]) if run[2] else {}).get("segments")
+    except (TypeError, ValueError):
+        segments = None
+    return file_stt.transcribe_text(run[0], run[1], segments)
+
+
 async def run_queued_reextract(item: dict) -> dict:
     """Run one queued re-extract (called by the queue worker). Returns {"video_id", "db_video_id"}; raises ReextractFailed."""
     from models.database import AsyncSessionLocal
@@ -133,10 +159,6 @@ async def _record(video_id: str, stage: str, how: str, **kw) -> None:
 
 _reextract_logger = logging.getLogger("api.reextract")
 
-# Videos currently being re-extracted (set of video_id)
-_REEXTRACT_SET: set[str] = set()
-# Live re-transcription progress: {video_id: progress_text}
-_RETRANSCRIBE_PROGRESS: dict[str, str] = {}
 
 
 async def run_reextract(video_id: str, language: str = "auto", model: str | None = None) -> dict:
@@ -146,7 +168,7 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
     import glob as _glob
     from models.database import AsyncSessionLocal
 
-    _REEXTRACT_SET.add(video_id)
+    writer: ProgressWriter | None = None
     try:
         if video_id in TRANSCRIBE_CANCEL:
             TRANSCRIBE_CANCEL.discard(video_id)
@@ -188,13 +210,12 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
             )
             from datetime import datetime as _dt
             transcription_started_at = _dt.utcnow()
-            _RETRANSCRIBE_PROGRESS[video_id] = "starting…"
+            writer = ProgressWriter(video_id, "transcribe", "s")     # seconds done / total, on the stage's run row (decision 2)
 
             def _on_retranscribe_progress(n: int, cur_s: float = 0.0, tot_s: float = 0.0) -> None:
                 if video_id in TRANSCRIBE_CANCEL:
                     raise file_stt.TranscriptionStopped(STOPPED_MESSAGE)   # Stop: the engine ends after the segment in hand
-                pct = f" · {int(cur_s / tot_s * 100)}%" if tot_s > 0 else ""
-                _RETRANSCRIBE_PROGRESS[video_id] = f"segment {n}{pct}"
+                writer.update(int(cur_s), int(tot_s), {"segments": n})
 
             transcription = await asyncio.to_thread(
                 _transcribe, audio_path,
@@ -204,7 +225,7 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
                 cache_path=stt_cache_path,
                 on_progress=_on_retranscribe_progress,
             )
-            _RETRANSCRIBE_PROGRESS.pop(video_id, None)
+            await writer.close()                                   # the last counters are on the row before the run ends
             if video_id in TRANSCRIBE_CANCEL:
                 TRANSCRIBE_CANCEL.discard(video_id)
                 raise StageCancelled(STOPPED_MESSAGE)        # Stop pressed (decision 1): nothing is replaced
@@ -296,5 +317,5 @@ async def run_reextract(video_id: str, language: str = "auto", model: str | None
         _reextract_logger.exception("reextract: unexpected error video_id=%s", video_id)
         raise ReextractFailed(str(exc)[:500]) from exc
     finally:
-        _REEXTRACT_SET.discard(video_id)
-        _RETRANSCRIBE_PROGRESS.pop(video_id, None)
+        if writer is not None:
+            await writer.close()                             # on every way out: no write after the run is over

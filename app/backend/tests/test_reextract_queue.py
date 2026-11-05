@@ -202,3 +202,55 @@ async def _items_after_retry(client):
     (item,) = await items_of(client, LOCAL_ID)
     await run_worker([item["id"]])
     return await items_of(client, LOCAL_ID)
+
+
+# --- progress from the queue item and the run row (NS-11 decision 2) -------------------------------------------------------
+
+async def test_the_page_text_is_waiting_then_starting_then_the_live_segments_then_nothing(client, local_video):
+    import asyncio
+    import threading
+    release, started = threading.Event(), threading.Event()
+
+    def slow(path, language, model, device, cache_path, on_progress):
+        on_progress(9, 15.0, 60.0)
+        started.set()
+        release.wait(5)
+        return stt()(path, language, model, device, cache_path, on_progress)
+
+    async def text_now():
+        return (await client.get(f"/api/result/{LOCAL_ID}")).json().get("retranscribe_progress")
+
+    with patch("services.transcriber.transcribe", slow):
+        await client.post(f"/api/result/{LOCAL_ID}/reextract", json={})
+        assert await text_now() == "waiting in the queue"
+        worker = asyncio.create_task(run_reextract_items(LOCAL_ID))
+        await asyncio.get_running_loop().run_in_executor(None, started.wait, 5)
+        seen = None
+        for _ in range(100):
+            seen = await text_now()
+            if seen and seen.startswith("segment"):
+                break
+            await asyncio.sleep(0.02)
+        assert seen == "segment 9 · 25%"
+        release.set()
+        await worker
+    assert await text_now() is None
+    (run,) = await runs_of(LOCAL_ID, "transcribe")
+    assert (run["status"], run["progress_done"], run["progress_total"]) == ("done", 1, 2)       # the last counters stay on the finished run
+
+
+async def test_a_running_reextract_without_counters_yet_says_starting(client, local_video):
+    from services import queue_service as q
+    await client.post(f"/api/result/{LOCAL_ID}/reextract", json={})
+    (item,) = await items_of(client, LOCAL_ID)
+    await q._set_processing(item["id"])
+    got = (await client.get(f"/api/result/{LOCAL_ID}")).json()
+    assert got["reextract_in_progress"] is True and got["retranscribe_progress"] == "starting…"
+
+
+def test_the_in_memory_copies_of_the_background_task_are_gone():
+    import routers.result as r
+    import services.reextract as rx
+    for module in (r, rx):
+        assert not hasattr(module, "_REEXTRACT_SET") and not hasattr(module, "_RETRANSCRIBE_PROGRESS")
+    assert not hasattr(r, "run_reextract")                       # the router no longer starts the work itself

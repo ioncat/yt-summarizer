@@ -137,7 +137,11 @@ async def test_the_page_sees_a_running_retranscription_and_its_segments(client, 
         await client.post(f"/api/result/{LOCAL_ID}/reextract", json={})
         post = asyncio.create_task(run_reextract_items(LOCAL_ID))
         await asyncio.get_running_loop().run_in_executor(None, started.wait, 5)
-        got = (await client.get(f"/api/result/{LOCAL_ID}")).json()
+        for _ in range(100):                          # the counters are written a moment after the callback (NS-11 decision 2)
+            got = (await client.get(f"/api/result/{LOCAL_ID}")).json()
+            if str(got.get("retranscribe_progress", "")).startswith("segment"):
+                break
+            await asyncio.sleep(0.02)
         assert got["reextract_in_progress"] is True and got["retranscribe_progress"] == "segment 4 · 50%"
         second = await client.post(f"/api/result/{LOCAL_ID}/reextract", json={})
         assert second.status_code == 409 and "already in progress" in second.json()["detail"]
