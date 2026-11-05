@@ -92,21 +92,67 @@ describe('QueuePage "New" (NS-24a)', () => {
       added: 0, ids: [], invalid: [], duplicates: ['x'],
       duplicate_details: [{ url: 'x', video_id: 'v', reason: 'in_queue' }],
     })
+    fireEvent.change(screen.getByLabelText('New video link'), { target: { value: 'https://youtu.be/alreadyQueued' } })
     fireEvent.submit(screen.getByLabelText('New video link').closest('form')!)
     expect(await screen.findByText('Already in the queue.')).toBeTruthy()
 
     vi.mocked(api.queueBulkAdd).mockResolvedValueOnce({ added: 0, ids: [], invalid: ['nope'], duplicates: [] })
+    fireEvent.change(screen.getByLabelText('New video link'), { target: { value: 'not a link' } })
     fireEvent.submit(screen.getByLabelText('New video link').closest('form')!)
     expect(await screen.findByText('Not a YouTube link.')).toBeTruthy()
   })
 
-  it('a failed add stays visible as a row with the reason and a Retry; what was typed is kept', async () => {
+  it('a failed add stays visible as a row with the reason and a Retry; the link lives in that row, the field is free', async () => {
     vi.mocked(api.queueBulkAdd).mockRejectedValue(new Error('boom'))
     renderQueue()
     await openAndSubmit('https://youtu.be/newVideo001')
     expect(await screen.findByText('Not added: boom')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
-    expect((screen.getByLabelText('New video link') as HTMLInputElement).value).toBe('https://youtu.be/newVideo001')
+    expect(screen.getByTestId('adding-row').textContent).toContain('newVideo001')
+    expect((screen.getByLabelText('New video link') as HTMLInputElement).value).toBe('')
+  })
+
+  it('five links submitted in quick succession are all sent, none lost, whatever order the answers come in', async () => {
+    const answers: Array<(v: api.QueueAddResult) => void> = []
+    vi.mocked(api.queueBulkAdd).mockImplementation(() => new Promise(res => { answers.push(res) }))
+    renderQueue()
+    fireEvent.click(await screen.findByRole('button', { name: /New/ }))
+    const input = screen.getByLabelText('New video link') as HTMLInputElement
+    const links = [1, 2, 3, 4, 5].map(i => `https://youtu.be/rapidLink0${i}`)
+    for (const link of links) {                               // type + Enter, one after the other, nothing awaited
+      fireEvent.change(input, { target: { value: link } })
+      fireEvent.submit(input.closest('form')!)
+      expect(input.value).toBe('')                            // the field is free again at once
+    }
+    expect(vi.mocked(api.queueBulkAdd).mock.calls.map(c => c[0][0])).toEqual(links)
+    expect(screen.getAllByTestId('adding-row')).toHaveLength(5)
+    for (const i of [2, 0, 4, 1, 3]) answers[i]({ added: 1, ids: [i], invalid: [], duplicates: [] })  // answers out of order
+    await waitFor(() => expect(screen.queryAllByTestId('adding-row')).toHaveLength(0))
+    expect(input.value).toBe('')
+    expect(api.queueBulkAdd).toHaveBeenCalledTimes(5)
+  })
+
+  it('what is typed while the previous link is still being added is not wiped when that request finishes', async () => {
+    let answerFirst!: (v: api.QueueAddResult) => void
+    vi.mocked(api.queueBulkAdd).mockReturnValueOnce(new Promise(res => { answerFirst = res }))
+    vi.mocked(api.queueBulkAdd).mockReturnValue(new Promise(() => {}))
+    renderQueue()
+    await openAndSubmit('https://youtu.be/firstTyped01')
+    const input = screen.getByLabelText('New video link') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'https://youtu.be/typedAfter01' } })   // ~20 ms after Enter
+    answerFirst({ added: 1, ids: [1], invalid: [], duplicates: [] })
+    await screen.findByText('Added to the queue.')
+    expect(input.value).toBe('https://youtu.be/typedAfter01')   // still there
+    fireEvent.submit(input.closest('form')!)
+    expect(vi.mocked(api.queueBulkAdd).mock.calls[1][0]).toEqual(['https://youtu.be/typedAfter01'])  // and it is sent, not an empty box
+  })
+
+  it('a link the server calls invalid comes back to the field for editing, unless something else was typed', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValueOnce({ added: 0, ids: [], invalid: ['nope'], duplicates: [] })
+    renderQueue()
+    await openAndSubmit('htp://typo.example/watch?v=1')
+    expect(await screen.findByText('Not a YouTube link.')).toBeTruthy()
+    await waitFor(() => expect((screen.getByLabelText('New video link') as HTMLInputElement).value).toBe('htp://typo.example/watch?v=1'))
   })
 
   it('shows an "Adding..." row at once, before the server has answered, and drops it when the add succeeded', async () => {

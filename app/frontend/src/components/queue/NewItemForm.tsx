@@ -6,7 +6,9 @@ function shortLink(url: string) {
   return url.length > 70 ? url.slice(0, 67) + '…' : url
 }
 
-/** One link, the default pipeline (the Home page's choice), Enter adds it; the page stays where it is. */
+/** One link, the default pipeline (the Home page's choice), Enter adds it; the page stays where it is.
+ *  Enter takes the text out of the field at once and sends it as its own "Adding..." row, so links typed in quick
+ *  succession are all sent and a finishing request never wipes what has been typed since. */
 export default function NewItemForm({ add, rows, isAdding, onRetry, onDismiss, onClose }: {
   add: (url: string) => Promise<AddOutcome | null>
   rows: AddRow[]
@@ -24,11 +26,13 @@ export default function NewItemForm({ add, rows, isAdding, onRetry, onDismiss, o
     e.preventDefault()
     const link = url.trim()
     if (!link || isAdding(link)) return
+    setUrl('')                                    // the link now lives in its own row; the field is free for the next one
     setOutcome(null)
     const result = await add(link)
     if (result === null) return  // already being sent (a second Enter before the first row was drawn)
     setOutcome(result.kind === 'error' ? null : result)  // an error stays visible in its own row, with Retry
-    if (result.kind === 'added') setUrl('')
+    // a link that is not a link comes back to the field for editing, unless something new was typed meanwhile
+    if (result.kind === 'invalid') setUrl(cur => (cur === '' ? link : cur))
   }
 
   return (
