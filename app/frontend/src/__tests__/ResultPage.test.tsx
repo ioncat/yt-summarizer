@@ -497,4 +497,41 @@ describe('ResultPage', () => {
     expect(screen.getByText('timed out')).toBeTruthy()
     expect(screen.getByText('good')).toBeTruthy()
   })
+
+  describe('Stop updates the steps table at once (NS-25 QA)', () => {
+    const running = (model: string) => ({
+      attempt: 1, status: 'processing', queue_item_id: 1, model, started_at: '2026-11-01T10:00:00', finished_at: null,
+      error_code: null, error_text: null, meta: {}, progress_done: null, progress_total: null, runs: 1, last_done: null,
+    })
+
+    it('Stop on cleanup: the row says stopped, not running', async () => {
+      setResult({ cleanup_status: 'processing', stages: { cleanup: running('llama3') } })
+      await renderPage()
+      expect(screen.getByText('running')).toBeTruthy()
+      fireEvent.click(btn(/Cleaned/))
+      fireEvent.click(await screen.findByRole('button', { name: /Stop/ }))
+      await waitFor(() => expect(m.cancelCleanup).toHaveBeenCalledWith('abc123'))
+      await waitFor(() => expect(screen.queryByText('running')).toBeNull())
+      expect(screen.getByText('stopped')).toBeTruthy()
+    })
+
+    it('Stop on summary: the row says stopped, not running', async () => {
+      setResult({ summary_status: 'processing', stages: { summary: running('llama3') } })
+      await renderPage()
+      fireEvent.click(btn(/Summary/))
+      fireEvent.click(await screen.findByRole('button', { name: /Stop/ }))
+      await waitFor(() => expect(m.cancelSummary).toHaveBeenCalledWith('abc123'))
+      await waitFor(() => expect(screen.queryByText('running')).toBeNull())
+      expect(screen.getByText('stopped')).toBeTruthy()
+    })
+
+    it('Stop on the mind map: the row says stopped, not running', async () => {
+      setResult({ mindmap_text: '# Saved map', mindmap_status: 'processing', stages: { mindmap: running('llama3') } })
+      await renderPage()
+      fireEvent.click(btn(/Stop/))
+      await waitFor(() => expect(m.cancelMindmap).toHaveBeenCalledWith('abc123'))
+      await waitFor(() => expect(screen.queryByText('running')).toBeNull())
+      expect(screen.getByText('stopped')).toBeTruthy()
+    })
+  })
 })

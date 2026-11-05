@@ -5,7 +5,7 @@ import {
   startMindmap, reextractSubtitles, saveSettings, queueBulkAddByIds, downloadVideo,
   ResultResponse,
 } from '../../api'
-import { Setter } from './helpers'
+import { Setter, withStageStopped } from './helpers'
 
 type Interval = MutableRefObject<ReturnType<typeof setInterval> | null>
 type Prompts = MutableRefObject<{ system_prompt: string | null; user_prompt_template: string | null }>
@@ -75,7 +75,7 @@ export function useResultHandlers({
     stopPolling(); stopCleanupTimer()
     try { await cancelCleanup(videoId) } catch (err) { console.error('[Result] cancelCleanup failed:', err) }
     setCleanupElapsedSeconds(null); cleanupElapsedRef.current = null; setLocalCleanupDuration(null)
-    setResult(prev => prev ? { ...prev, cleanup_status: null, cleaned_text: null, cleanup_duration_seconds: null } : prev)
+    setResult(prev => prev ? withStageStopped({ ...prev, cleanup_status: null, cleaned_text: null, cleanup_duration_seconds: null }, 'cleanup') : prev)
   }
 
   async function handleCancelSummary() {
@@ -83,7 +83,7 @@ export function useResultHandlers({
     stopSummaryPolling(); stopSummaryTimer()
     try { await cancelSummary(videoId) } catch (err) { console.error('[Result] cancelSummary failed:', err) }
     setSummaryElapsedSeconds(null); summaryElapsedRef.current = null; setLocalSummaryDuration(null)
-    setResult(prev => prev ? { ...prev, summary_status: null, summary_text: null, summary_duration_seconds: null } : prev)
+    setResult(prev => prev ? withStageStopped({ ...prev, summary_status: null, summary_text: null, summary_duration_seconds: null }, 'summary') : prev)
   }
 
   async function handleDelete() {

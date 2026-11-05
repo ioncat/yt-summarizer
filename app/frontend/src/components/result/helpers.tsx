@@ -1,6 +1,16 @@
 import type { Dispatch, SetStateAction } from 'react'
 import ReactMarkdown from 'react-markdown'
 
+import type { ResultResponse, StageName } from '../../api'
+
+/** After Stop the page shows the stage as stopped at once (the poll is off, and the server ends the run a moment later):
+ *  a "running" row in the steps table must not outlive the Stop. Only a running stage changes; its last_done stays. */
+export function withStageStopped(prev: ResultResponse, stage: StageName): ResultResponse {
+  const run = prev.stages?.[stage]
+  if (!run || run.status !== 'processing') return prev
+  return { ...prev, stages: { ...prev.stages, [stage]: { ...run, status: 'cancelled', error_code: 'cancelled', error_text: null } } }
+}
+
 export type Setter<T> = Dispatch<SetStateAction<T>>
 export type Tab = 'subtitles' | 'cleaned' | 'summary' | 'mindmap' | 'chat'
 export type ChatMsg = { role: 'user' | 'assistant'; content: string }

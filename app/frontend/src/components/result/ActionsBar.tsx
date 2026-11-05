@@ -1,5 +1,5 @@
 import { cancelMindmap, saveAppSettings, ResultResponse, SttModelInfo } from '../../api'
-import { Setter, Tab, ChatMsg, selectCls, btnSecondary, btnDanger, btnAi } from './helpers'
+import { Setter, Tab, ChatMsg, selectCls, btnSecondary, btnDanger, btnAi, withStageStopped } from './helpers'
 
 interface ActionsBarProps {
   activeTab: Tab
@@ -156,7 +156,7 @@ export function ActionsBar({ activeTab, result, videoId, isLocalFile, sttModel, 
               {/* Mindmap tab controls */}
               {activeTab === 'mindmap' && (
                 result.mindmap_status === 'processing' ? (
-                  <button onClick={async () => { await cancelMindmap(videoId!); stopMindmapPolling(); setResult(r => r ? { ...r, mindmap_status: null } : r) }} className={btnSecondary}>
+                  <button onClick={async () => { await cancelMindmap(videoId!); stopMindmapPolling(); setResult(r => r ? withStageStopped({ ...r, mindmap_status: null }, 'mindmap') : r) }} className={btnSecondary}>
                     <span className="material-symbols-outlined text-[18px]">stop_circle</span>Stop
                   </button>
                 ) : (
