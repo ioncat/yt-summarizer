@@ -1,17 +1,24 @@
 const BASE = '/api'
 
-export const ADD_TIMEOUT_MS = 15_000   // adding to the queue: a busy server must not leave the page waiting forever
+// Adding to the queue: longer than the server's own ceiling for a locked database (about 30 s for one step, see
+// services/db_retry.py), so a busy database normally ends in the server's 503 "database busy" and not in a client timeout.
+export const ADD_TIMEOUT_MS = 40_000
 export const POLL_TIMEOUT_MS = 10_000  // one poll of the queue list
 
+export const ADD_TIMEOUT_HINT = 'The link may have been added: check the queue before retrying.'
+const POLL_TIMEOUT_HINT = 'The server may be busy or not running.'
+
 /** fetch that gives up after `ms` (NS-28): a hung request becomes an error the page can show, with a Retry. */
-export async function fetchWithTimeout(input: string, init: RequestInit = {}, ms = ADD_TIMEOUT_MS): Promise<Response> {
+export async function fetchWithTimeout(
+  input: string, init: RequestInit = {}, ms = ADD_TIMEOUT_MS, hint = ADD_TIMEOUT_HINT,
+): Promise<Response> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), ms)
   try {
     return await fetch(input, { ...init, signal: controller.signal })
   } catch (err) {
     if (controller.signal.aborted) {
-      throw new Error(`No answer from the server in ${Math.round(ms / 1000)} s - it may be busy or not running. Try again.`)
+      throw new Error(`No answer from the server in ${Math.round(ms / 1000)} s. ${hint}`)
     }
     if (err instanceof TypeError) throw new Error('Cannot reach the server. Is the backend running?')
     throw err
@@ -573,7 +580,7 @@ export async function queueBulkAddByIds(
 }
 
 export async function getQueue(): Promise<{ items: QueueItem[]; count: number }> {
-  const res = await fetchWithTimeout(`${BASE}/queue`, {}, POLL_TIMEOUT_MS)
+  const res = await fetchWithTimeout(`${BASE}/queue`, {}, POLL_TIMEOUT_MS, POLL_TIMEOUT_HINT)
   if (!res.ok) throw new Error('Failed to load queue')
   return res.json()
 }

@@ -15,6 +15,7 @@ import {
   startMindmap,
   getStatus,
   getQueue,
+  ADD_TIMEOUT_MS,
 } from '../api'
 
 function makeResponse(body: unknown, status = 200): Response {
@@ -224,14 +225,15 @@ describe('add and poll calls give up instead of hanging (NS-28)', () => {
     }))
   }
 
-  it('queueBulkAdd and queueBulkAddByIds fail after 15 s with a message that says what to do', async () => {
+  it('queueBulkAdd and queueBulkAddByIds fail after 40 s and tell the user the link may have been added', async () => {
     vi.useFakeTimers()
     const fetchMock = hangingFetch()
     vi.stubGlobal('fetch', fetchMock)
-    const a = expect(queueBulkAdd(['x'])).rejects.toThrow('No answer from the server in 15 s - it may be busy or not running. Try again.')
-    const b = expect(queueBulkAddByIds(['file-1'], ['cleanup'])).rejects.toThrow('No answer from the server in 15 s')
-    await vi.advanceTimersByTimeAsync(14_999)
-    expect(fetchMock.mock.calls.every(c => c[1]?.signal?.aborted === false)).toBe(true)  // not before 15 s
+    const a = expect(queueBulkAdd(['x'])).rejects.toThrow(
+      'No answer from the server in 40 s. The link may have been added: check the queue before retrying.')
+    const b = expect(queueBulkAddByIds(['file-1'], ['cleanup'])).rejects.toThrow('No answer from the server in 40 s. The link may')
+    await vi.advanceTimersByTimeAsync(39_999)
+    expect(fetchMock.mock.calls.every(c => c[1]?.signal?.aborted === false)).toBe(true)  // not before 40 s
     await vi.advanceTimersByTimeAsync(2)
     await a
     await b
@@ -240,7 +242,7 @@ describe('add and poll calls give up instead of hanging (NS-28)', () => {
   it('getQueue fails after 10 s, so a hung poll cannot stop the polling for good', async () => {
     vi.useFakeTimers()
     vi.stubGlobal('fetch', hangingFetch())
-    const p = expect(getQueue()).rejects.toThrow('No answer from the server in 10 s')
+    const p = expect(getQueue()).rejects.toThrow('No answer from the server in 10 s. The server may be busy or not running.')
     await vi.advanceTimersByTimeAsync(10_001)
     await p
   })
@@ -253,6 +255,10 @@ describe('add and poll calls give up instead of hanging (NS-28)', () => {
   it('a 503 "database busy" is shown as that text', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({ detail: 'database busy, try again' }, 503)))
     await expect(queueBulkAdd(['x'])).rejects.toThrow('database busy, try again')
+  })
+
+  it('the client waits longer than the server does for a locked database, so its 503 can arrive first', () => {
+    expect(ADD_TIMEOUT_MS).toBeGreaterThan(35_000)  // db_retry.DEADLINE_S is 35 s
   })
 
   it('a fast answer clears the timer and returns normally', async () => {

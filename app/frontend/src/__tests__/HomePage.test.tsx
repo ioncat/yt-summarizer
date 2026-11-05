@@ -148,10 +148,10 @@ describe('HomePage: a failed or slow add (NS-28)', () => {
   })
 
   it('a failed add shows the reason and a Retry that sends the same link again', async () => {
-    vi.mocked(api.queueBulkAdd).mockRejectedValueOnce(new Error('No answer from the server in 15 s - it may be busy or not running. Try again.'))
+    vi.mocked(api.queueBulkAdd).mockRejectedValueOnce(new Error('No answer from the server in 40 s. The link may have been added: check the queue before retrying.'))
     await submitUrl('https://youtu.be/retryHome001')
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain('No answer from the server in 15 s')
+    expect(alert.textContent).toContain('The link may have been added: check the queue before retrying.')
     vi.mocked(api.queueBulkAdd).mockResolvedValueOnce({ added: 1, ids: [2], invalid: [], duplicates: [] })
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByText(/Added to the queue/)).toBeTruthy()
