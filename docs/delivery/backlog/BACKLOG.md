@@ -73,6 +73,8 @@ Labels: `by-backend` | Commit: `c9b0a92`
 
 0 NS-29 (now) + small stage 1 findings (cap on `video_ids`/`urls`, `force` note); 1 NS-24a (duplicate-id bug, New button, stay on page) and NS-28 research (read-only) next to it; 2 NS-11 stages 2, 3, then NS-25; 3 NS-11 stages 4, 5, 6, then 7 (after NS-29); 4 NS-16, NS-24b, NS-28 fix; 5 NS-18, NS-22, NS-21, then NS-17; 6 autotests (Playwright, API); 7 ideas NS-23, NS-19, NS-27. One Developer session: waves run one after another unless the owner approves a second writer session.
 
+Owner 2026-11-05 (night): no second Developer for now (revisit after NS-11 stage 7). Automated tests (Playwright and API, folder `e2e/`) are QA's task: the plan and the build both start after NS-11 stage 7 is accepted; until then QA keeps checking stages. Row for QA in `docs/delivery/AGENT_RULES.md` already lists `e2e/` (581cef9).
+
 ### Step 3 — Restructure, no new features (after step 2 is merged)
 
 **NS-12 — Split api.py into modules (1,644 lines)**
