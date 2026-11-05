@@ -108,7 +108,8 @@ async def _mark_queued(db: AsyncSession, video_id: str, stages: list[str], item_
         model = (await vs.get_stage_settings(db, "summarization")).get("model")
         await vs.set_summary_processing(db, video_id, model=model, queue_item_id=item_id)
     if "mindmap" in todo:
-        await vs.start_mindmap_generation(db, video_id, queue_item_id=item_id)
+        model = (await vs.get_stage_settings(db, "summarization")).get("model")      # the mind map uses the summary model
+        await vs.start_mindmap_generation(db, video_id, queue_item_id=item_id, model=model)
 
 
 # --- one stage of one video (the result page's mind map button) --------------------------------------------

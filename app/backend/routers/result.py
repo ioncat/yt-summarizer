@@ -397,7 +397,8 @@ async def trigger_mindmap(
     # queue first: if the database is busy nothing has changed; the status is set right after (and again by the stage
     # itself when it starts), so a queued item never has a stale "idle" status for more than a moment
     item_id = await retry_locked(lambda: enqueue_stage(db, video_id, "mindmap"), db, "mindmap: queue")
-    await start_mindmap_generation(db, video_id, queue_item_id=item_id)
+    model = (await get_stage_settings(db, "summarization")).get("model")      # the mind map uses the summary model
+    await start_mindmap_generation(db, video_id, queue_item_id=item_id, model=model)
     return {"status": "processing"}
 
 

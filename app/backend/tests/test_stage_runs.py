@@ -243,3 +243,30 @@ async def test_only_the_open_run_insert_may_be_ignored_other_constraint_failures
         with pytest.raises(IntegrityError):
             await stage_runs._insert(db, None, "cleanup", "done")                 # video_id is NOT NULL
         await db.rollback()
+
+
+async def test_a_mind_map_run_records_the_model_it_used(client, seeded_video, monkeypatch):
+    async def a_map(**kwargs):
+        return "# Map"
+    monkeypatch.setattr("services.text_mindmapper.generate_mindmap", a_map)
+    await client.put("/api/settings/summarization", json={"model": "map-model"})
+    await client.post(f"/api/result/{VIDEO_ID}/mindmap")
+    assert [(r["status"], r["model"]) for r in await rows("mindmap")] == [("processing", "map-model")]   # at enqueue
+    await run_queued_stage(VIDEO_ID, "mindmap")
+    (r,) = await rows("mindmap")
+    assert (r["status"], r["model"]) == ("done", "map-model")
+    got = (await client.get(f"/api/result/{VIDEO_ID}")).json()["stages"]["mindmap"]
+    assert got["model"] == "map-model" and got["last_done"]["model"] == "map-model"
+
+
+async def test_a_failed_mind_map_run_and_a_mind_map_queued_by_id_keep_the_model_too(client, seeded_video, monkeypatch):
+    async def nothing(**kwargs):
+        return None
+    monkeypatch.setattr("services.text_mindmapper.generate_mindmap", nothing)
+    await client.put("/api/settings/summarization", json={"model": "map-model"})
+    res = await client.post("/api/queue/bulk", json={"video_ids": [VIDEO_ID], "pipeline_stages": ["mindmap"]})
+    assert res.status_code == 200
+    assert [r["model"] for r in await rows("mindmap")] == ["map-model"]
+    await run_queued_stage(VIDEO_ID, "mindmap")
+    (r,) = await rows("mindmap")
+    assert (r["status"], r["model"]) == ("failed", "map-model")

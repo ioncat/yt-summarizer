@@ -801,7 +801,7 @@ async def _run_mindmap_stage(yt_video_id: str, item_id: int) -> None:
             lang_map = {"ru": "Russian", "en": "English", "uk": "Ukrainian", "de": "German",
                         "fr": "French", "es": "Spanish", "zh": "Chinese", "ja": "Japanese"}
             language = lang_map.get(lang_code.lower(), lang_code)
-            await start_mindmap_generation(db, yt_video_id, queue_item_id=item_id)
+            await start_mindmap_generation(db, yt_video_id, queue_item_id=item_id, model=model)
 
         MINDMAP_CANCEL.discard(yt_video_id)  # a flag left over from an earlier run must not stop this one
         _QUEUE_PROGRESS[item_id] = "mindmap: generating…"
@@ -824,6 +824,7 @@ async def _run_mindmap_stage(yt_video_id: str, item_id: int) -> None:
             await finish_mindmap(
                 db, yt_video_id, mindmap_md,
                 error=llm_failure_reason() or (None if mindmap_md else "No mind map was produced: Ollama may be unreachable, or the model returned nothing"),
+                model=model,
             )
     except StageCancelled:
         raise

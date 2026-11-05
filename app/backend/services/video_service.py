@@ -752,8 +752,9 @@ async def replace_subtitles_after_reextract(
     await db.commit()
 
 
-async def start_mindmap_generation(db: AsyncSession, video_id: str, queue_item_id: int | None = None) -> None:
-    """Mark mindmap as processing."""
+async def start_mindmap_generation(db: AsyncSession, video_id: str, queue_item_id: int | None = None,
+                                   model: str | None = None) -> None:
+    """Mark mindmap as processing. `model` (the summarization model, which the mind map uses) is recorded on the run."""
     fmt_id = await _get_fmt_id(db, video_id)
     if not fmt_id:
         return
@@ -761,11 +762,12 @@ async def start_mindmap_generation(db: AsyncSession, video_id: str, queue_item_i
         text("UPDATE subtitles_formatted SET mindmap_status = 'processing', mindmap_error = NULL WHERE id = :id"),
         {"id": fmt_id},
     )
-    await stage_runs.begin(db, video_id, "mindmap", None, queue_item_id)
+    await stage_runs.begin(db, video_id, "mindmap", model, queue_item_id)
     await db.commit()
 
 
-async def finish_mindmap(db: AsyncSession, video_id: str, mindmap_text: str | None, error: str | None = None) -> None:
+async def finish_mindmap(db: AsyncSession, video_id: str, mindmap_text: str | None, error: str | None = None,
+                         model: str | None = None) -> None:
     """Save mindmap result. A failed run keeps the map that was saved before (NS-11 decision 4: the saved map is what
     the user gets until a regeneration succeeds); only a successful one replaces it."""
     fmt_id = await _get_fmt_id(db, video_id)
@@ -781,9 +783,9 @@ async def finish_mindmap(db: AsyncSession, video_id: str, mindmap_text: str | No
         {"status": status, "mindmap": mindmap_text, "error": None if status == "done" else error, "id": fmt_id},
     )
     if status == "done":
-        await stage_runs.finish(db, video_id, "mindmap")
+        await stage_runs.finish(db, video_id, "mindmap", model=model)
     else:
-        await stage_runs.fail(db, video_id, "mindmap", error)
+        await stage_runs.fail(db, video_id, "mindmap", error, model=model)
     await db.commit()
 
 
