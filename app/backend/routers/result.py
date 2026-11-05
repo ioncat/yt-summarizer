@@ -169,7 +169,8 @@ async def trigger_reextract(
                 status_code=422,
                 detail="Original file not found — it was deleted after transcription. Upload the file again to re-transcribe.",
             )
-    await enqueue_reextract(db, video_id, await _db_id(db, video_id), url, body.language, body.model)
+    if await enqueue_reextract(db, video_id, await _db_id(db, video_id), url, body.language, body.model) is None:
+        raise HTTPException(status_code=409, detail="Re-extract already in progress")   # another request queued it a moment ago
     return {"status": "reextracting"}
 
 

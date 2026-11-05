@@ -254,3 +254,59 @@ def test_the_in_memory_copies_of_the_background_task_are_gone():
     for module in (r, rx):
         assert not hasattr(module, "_REEXTRACT_SET") and not hasattr(module, "_RETRANSCRIBE_PROGRESS")
     assert not hasattr(r, "run_reextract")                       # the router no longer starts the work itself
+
+
+# --- simultaneous requests give one item (review of stage 6) --------------------------------------------------------------
+
+async def test_simultaneous_reextract_requests_get_one_200_and_the_rest_409(client, local_video):
+    """Through the API. (The shared in-memory test connection cannot show how many ITEMS exist after a burst: a refused request's
+    session close rolls the shared connection back. The item count is proved on a file database below.)"""
+    import asyncio
+    answers = await asyncio.gather(*[client.post(f"/api/result/{LOCAL_ID}/reextract", json={}) for _ in range(8)])
+    assert sorted(a.status_code for a in answers) == [200] + [409] * 7
+    assert all("already in progress" in a.json()["detail"] for a in answers if a.status_code == 409)
+
+
+async def test_simultaneous_requests_for_a_youtube_video_too(client, youtube_video):
+    import asyncio
+    answers = await asyncio.gather(*[client.post(f"/api/result/{VIDEO_ID}/reextract", json={}) for _ in range(5)])
+    assert sorted(a.status_code for a in answers) == [200] + [409] * 4
+
+
+async def test_a_burst_of_enqueue_calls_on_a_file_database_inserts_exactly_one_item_and_one_run(tmp_path):
+    """Real concurrency: separate connections to a database file."""
+    import asyncio
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.orm import sessionmaker
+    from models.database import create_engine_for
+    from models.models import ProcessingQueueItem, ProcessingStage
+    from services.reextract import enqueue_reextract
+
+    engine = create_engine_for(f"sqlite+aiosqlite:///{tmp_path / 'burst.sqlite'}")
+    async with engine.begin() as conn:
+        await conn.run_sync(lambda c: ProcessingQueueItem.__table__.create(c))
+        await conn.run_sync(lambda c: ProcessingStage.__table__.create(c))
+    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async def one():
+        async with factory() as db:
+            return await enqueue_reextract(db, "file-burst001", "db-id", "local://talk.m4a", "auto", "base")
+
+    results = await asyncio.gather(*[one() for _ in range(10)])
+    assert len([r for r in results if r is not None]) == 1 and results.count(None) == 9
+    async with factory() as db:
+        assert (await db.execute(text("SELECT COUNT(*) FROM processing_queue"))).scalar() == 1
+        assert (await db.execute(text("SELECT COUNT(*) FROM processing_stages WHERE status = 'processing'"))).scalar() == 1
+    # once the item is over, a new request is accepted again
+    async with factory() as db:
+        await db.execute(text("UPDATE processing_queue SET status = 'done'"))
+        await db.commit()
+    assert await one() is not None
+    await engine.dispose()
+
+
+async def test_a_new_request_is_accepted_again_once_the_item_is_over(client, local_video):
+    with patch("services.transcriber.transcribe", stt()):
+        assert (await client.post(f"/api/result/{LOCAL_ID}/reextract", json={})).status_code == 200
+        await run_reextract_items(LOCAL_ID)
+        assert (await client.post(f"/api/result/{LOCAL_ID}/reextract", json={})).status_code == 200

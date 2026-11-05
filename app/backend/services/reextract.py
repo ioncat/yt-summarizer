@@ -33,16 +33,21 @@ def run_stage_of(url: str | None) -> str:
     return "transcribe" if (url or "").startswith(file_stt.LOCAL_PREFIX) else "extract"
 
 
-async def enqueue_reextract(db, video_id: str, db_video_id: str, url: str, language: str, model: str | None) -> int:
-    """Queue the re-extract of a video that is in History. Returns the queue item's id. The stage's run opens at once (status
-    "processing" on the request, decision 3); it carries the speech-to-text model that was asked for."""
+async def enqueue_reextract(db, video_id: str, db_video_id: str, url: str, language: str, model: str | None) -> int | None:
+    """Queue the re-extract of a video that is in History. Returns the queue item's id, or None when a re-extract of this video is
+    already queued or running (nothing is added). One statement checks and inserts, so simultaneous requests give one item. The
+    stage's run opens at once (status "processing" on the request, decision 3); it carries the speech-to-text model asked for."""
     from services import stage_runs
     res = await db.execute(
         text("INSERT INTO processing_queue (url, video_id, db_video_id, status, pipeline_stages, language, added_at, sort_order) "
-             "VALUES (:url, :vid, :dbid, 'pending', :stages, :lang, datetime('now'), "
-             "(SELECT COALESCE(MAX(sort_order), 0) + 1 FROM processing_queue))"),
+             "SELECT :url, :vid, :dbid, 'pending', :stages, :lang, datetime('now'), "
+             "(SELECT COALESCE(MAX(sort_order), 0) + 1 FROM processing_queue) "
+             "WHERE NOT EXISTS (SELECT 1 FROM processing_queue WHERE video_id = :vid AND status IN ('pending', 'processing') "
+             "AND pipeline_stages LIKE '%\"reextract\"%')"),
         {"url": url, "vid": video_id, "dbid": db_video_id, "stages": '["reextract"]', "lang": language},
     )
+    if res.rowcount != 1:
+        return None                         # nothing was inserted, so there is nothing to roll back
     run_model = model or (await get_app_setting(db, "stt_model") or "base" if run_stage_of(url) == "transcribe" else None)
     await stage_runs.begin(db, video_id, run_stage_of(url), run_model, res.lastrowid)
     await db.commit()
