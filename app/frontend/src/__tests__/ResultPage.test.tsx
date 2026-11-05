@@ -169,13 +169,44 @@ describe('ResultPage', () => {
     await waitFor(() => expect(m.cancelSummary).toHaveBeenCalledWith('abc123'))
   })
 
-  it('Summary tab: Summarize with cleanup done queues summary', async () => {
+  it('Summary tab: Summarize with cleanup done queues the summary through the endpoint (one path, NS-11 stage 3)', async () => {
+    m.startSummary.mockResolvedValue(undefined as never)
     setResult({ cleanup_status: 'done', cleaned_text: 'c' })
     await renderPage()
     fireEvent.click(btn('Summary'))
     expect(screen.getByText(/No summary yet/)).toBeTruthy()
     fireEvent.click(btn(/Summarize/))
-    await waitFor(() => expect(m.queueBulkAdd).toHaveBeenCalledWith([base.url], ['summary'], true))
+    await waitFor(() => expect(m.startSummary).toHaveBeenCalledWith(base.video_id))
+    expect(m.queueBulkAdd).not.toHaveBeenCalledWith(expect.anything(), ['summary'], expect.anything())  // not the URL queue path
+  })
+
+  it('Summary: a local file uses the same endpoint', async () => {
+    m.startSummary.mockResolvedValue(undefined as never)
+    setResult({ video_id: 'file-1234', url: 'local://talk.mp3', subtitle_source: 'transcript', subtitles_type: null,
+                cleanup_status: 'done', cleaned_text: 'c' })
+    await renderPage()
+    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summarize/))
+    await waitFor(() => expect(m.startSummary).toHaveBeenCalledWith(base.video_id))   // the page's route id
+    expect(m.queueBulkAdd).not.toHaveBeenCalledWith(expect.anything(), ['summary'], expect.anything())
+  })
+
+  it('Summary: Re-run summary uses the endpoint too', async () => {
+    m.startSummary.mockResolvedValue(undefined as never)
+    setResult({ cleanup_status: 'done', cleaned_text: 'c', summary_status: 'done', summary_text: 'old summary' })
+    await renderPage()
+    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Re-run summary/))
+    await waitFor(() => expect(m.startSummary).toHaveBeenCalledWith(base.video_id))
+  })
+
+  it('Summary: the endpoint\'s refusal (no model configured) is shown with its reason', async () => {
+    m.startSummary.mockRejectedValue(new Error('No summarization model configured. Please select one in Settings → Summarization.'))
+    setResult({ cleanup_status: 'done', cleaned_text: 'c' })
+    await renderPage()
+    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summarize/))
+    expect((await screen.findAllByText(/No summarization model configured/)).length).toBeGreaterThan(0)
   })
 
   it('Mind Map tab: empty state and Generate queues the mind map through the endpoint (one path, NS-11 stage 2)', async () => {
