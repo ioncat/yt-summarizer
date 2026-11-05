@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.database import AsyncSessionLocal
 from services.ollama_options import begin_llm_run, llm_failure_reason
 from services import stage_runs
+from services.stage_progress import ProgressWriter
 from services.queue_by_id import STAGE_COLUMNS, release_stage_status
 from services.stage_control import (
     CLEANUP_CANCEL, CLEANUP_PROGRESS, MINDMAP_CANCEL, SUMMARY_CANCEL, SUMMARY_PROGRESS, StageCancelled,
@@ -515,6 +516,7 @@ async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
         set_cleanup_processing, finish_cleanup, fail_cleanup_stage, reset_cleanup_status,
     )
 
+    writer = ProgressWriter(yt_video_id, "cleanup", "paragraph")   # the counters on the stage's run row (NS-25 stage 4b)
     try:
         async with AsyncSessionLocal() as db:
             fmt = await get_result(db, yt_video_id)
@@ -535,6 +537,7 @@ async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
         def on_cleanup_progress(done: int, total: int) -> None:
             _QUEUE_PROGRESS[item_id] = f"cleanup: paragraph {done}/{total}"
             CLEANUP_PROGRESS[yt_video_id] = {"done": done, "total": total}  # what the result page shows
+            writer.update(done, total)
 
         CLEANUP_CANCEL.discard(yt_video_id)  # a flag left over from an earlier run must not stop this one
         started_at = _dt.utcnow()
@@ -549,6 +552,7 @@ async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
             parallel_workers=parallel_workers,
         )
 
+        await writer.close()  # the last counters are on the row before it is finished / cancelled below
         CLEANUP_PROGRESS.pop(yt_video_id, None)
         if yt_video_id in CLEANUP_CANCEL:
             # Stop pressed (NS-11 decision 1, as in the background copy): the status is reset, the previous cleaned text
@@ -574,6 +578,7 @@ async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
             await fail_cleanup_stage(db, yt_video_id, error=reason)
         raise
     finally:
+        await writer.close()                      # on every way out: no write after the run is over
         CLEANUP_PROGRESS.pop(yt_video_id, None)  # on every way out: the page must not show a finished run's counters
 
 
@@ -586,6 +591,7 @@ async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
         set_summary_processing, finish_summary, fail_summary_stage, reset_summary_status,
     )
 
+    writer: ProgressWriter | None = None
     try:
         async with AsyncSessionLocal() as db:
             fmt = await get_result(db, yt_video_id)
@@ -613,10 +619,13 @@ async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
             and len(source_text) >= MAP_REDUCE_THRESHOLD
         )
 
+        writer = ProgressWriter(yt_video_id, "summary", "chapter" if use_full_extract else "chunk")
+
         def on_summary_progress(done: int, total: int) -> None:
             label = "chapter" if use_full_extract else "chunk"
             _QUEUE_PROGRESS[item_id] = f"summary: {label} {done}/{total}"
             SUMMARY_PROGRESS[yt_video_id] = {"done": done, "total": total}  # what the result page shows
+            writer.update(done, total)
 
         SUMMARY_CANCEL.discard(yt_video_id)  # a flag left over from an earlier run must not stop this one
         started_at = _dt.utcnow()
@@ -646,6 +655,7 @@ async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
                 parallel_workers=parallel_workers,
             )
 
+        await writer.close()  # the last counters are on the row before it is finished / cancelled below
         SUMMARY_PROGRESS.pop(yt_video_id, None)
         if yt_video_id in SUMMARY_CANCEL:
             # Stop pressed (NS-11 decision 1, as in the background copy): the status is reset, the previous summary and
@@ -671,6 +681,8 @@ async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
             await fail_summary_stage(db, yt_video_id, error=reason)
         raise
     finally:
+        if writer is not None:
+            await writer.close()                  # on every way out: no write after the run is over
         SUMMARY_PROGRESS.pop(yt_video_id, None)  # on every way out: the page must not show a finished run's counters
 
 
