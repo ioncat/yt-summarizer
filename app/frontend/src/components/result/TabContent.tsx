@@ -55,14 +55,16 @@ export function TabContent({ result, activeTab, markdownEnabled, setMarkdownEnab
                   <span className="material-symbols-outlined pulse-dot">account_tree</span>
                   Generating mind map…
                 </div>
+              ) : result.mindmap_text ? (
+                // The saved map is shown whatever the last run did: after a failed regeneration the error banner above
+                // (ErrorBanners) says why and the old map stays (NS-11 decision 4)
+                <Suspense fallback={<div className="py-8 text-center text-secondary text-body-md">Loading…</div>}>
+                  <MindmapView text={result.mindmap_text} title={result.title ?? undefined} onRegenerate={() => handleMindmap(true)} />
+                </Suspense>
               ) : result.mindmap_status === 'failed' || mindmapError ? (
                 <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3 text-on-error-container text-body-sm">
                   {mindmapError || result.mindmap_error || 'Mind map generation failed. Check Ollama and model settings.'}
                 </div>
-              ) : result.mindmap_text ? (
-                <Suspense fallback={<div className="py-8 text-center text-secondary text-body-md">Loading…</div>}>
-                  <MindmapView text={result.mindmap_text} title={result.title ?? undefined} onRegenerate={() => handleMindmap(true)} />
-                </Suspense>
               ) : (
                 <div className="py-16 text-center text-secondary text-body-md">
                   <span className="material-symbols-outlined text-[48px] block mb-4 text-outline-variant">account_tree</span>

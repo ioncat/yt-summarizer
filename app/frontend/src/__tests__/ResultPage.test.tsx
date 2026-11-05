@@ -216,6 +216,44 @@ describe('ResultPage', () => {
     expect(screen.queryByText(/queued/i)).toBeNull()
   })
 
+  it('Mind Map: after a failed regeneration the saved map is shown with the error above it', async () => {
+    setResult({ mindmap_text: '# Saved map', mindmap_status: 'failed', mindmap_error: 'model returned nothing' })
+    await renderPage()
+    fireEvent.click(btn('Mind Map'))
+    expect((await screen.findByTestId('mindmap-view')).textContent).toBe('# Saved map')
+    expect(screen.getAllByText(/model returned nothing/).length).toBeGreaterThan(0)
+    expect(btn(/Regenerate mind map/)).toBeTruthy()
+  })
+
+  it('Mind Map: a failed first run (no saved map) shows only the error', async () => {
+    setResult({ mindmap_text: null, mindmap_status: 'failed', mindmap_error: 'model returned nothing' })
+    await renderPage()
+    fireEvent.click(btn('Mind Map'))
+    expect(screen.getAllByText(/model returned nothing/).length).toBeGreaterThan(0)
+    expect(screen.queryByTestId('mindmap-view')).toBeNull()
+  })
+
+  it('Mind Map: Regenerate does not clear the map before the server has accepted the request', async () => {
+    let answer!: (v: { status: string }) => void
+    m.startMindmap.mockReturnValue(new Promise(res => { answer = res }) as never)
+    setResult({ mindmap_text: '# Saved map', mindmap_status: 'done' })
+    await renderPage()
+    fireEvent.click(btn(/Regenerate mind map/))
+    await waitFor(() => expect(m.startMindmap).toHaveBeenCalledWith(base.video_id, true))
+    expect(screen.getByTestId('mindmap-view').textContent).toBe('# Saved map')     // still there while the request is out
+    answer({ status: 'processing' })
+    expect(await screen.findByText(/Generating mind map/)).toBeTruthy()            // accepted: now the page says generating
+  })
+
+  it('Mind Map: a refused Regenerate (503) leaves the saved map in place with the reason', async () => {
+    m.startMindmap.mockRejectedValue(new Error('database busy, try again'))
+    setResult({ mindmap_text: '# Saved map', mindmap_status: 'done' })
+    await renderPage()
+    fireEvent.click(btn(/Regenerate mind map/))
+    expect((await screen.findAllByText(/database busy, try again/)).length).toBeGreaterThan(0)
+    expect(screen.getByTestId('mindmap-view').textContent).toBe('# Saved map')
+  })
+
   it('Mind Map: a failure to queue shows the reason', async () => {
     m.startMindmap.mockRejectedValue(new Error('database busy, try again'))
     await renderPage()

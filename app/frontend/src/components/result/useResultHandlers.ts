@@ -232,7 +232,6 @@ export function useResultHandlers({
     if (!videoId || !result) return
     try {
       setMindmapError('')
-      if (force) setResult(r => r ? { ...r, mindmap_text: null, mindmap_status: null } : r)
       // One path for every video, local files too: the endpoint queues the work (NS-11 stage 2), sets the status at once
       // and hands back the saved map when there is one and this is not a Regenerate.
       const res = await startMindmap(videoId, force)
@@ -240,6 +239,9 @@ export function useResultHandlers({
         setResult(r => r ? { ...r, mindmap_text: res.mindmap_text!, mindmap_status: 'done' } : r)
         return
       }
+      // queued: show "generating" but KEEP the saved map in state until the new one arrives (a refused request or a
+      // failed run must not leave the page without it)
+      setResult(r => r ? { ...r, mindmap_status: 'processing' } : r)
       setQueuedMsg('mindmap')
       stopMindmapPolling()
       mindmapPollRef.current = setInterval(() => loadResult(false), 3000)
