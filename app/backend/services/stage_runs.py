@@ -11,7 +11,8 @@ runners), inside the caller's transaction: these functions never commit, so a st
 - finish():  the open row becomes 'done' (model, times, meta); with no open row a done row is added.
 - fail():    the open row becomes 'failed' with the error text and a reason code (see stage_codes); with no open row one is added.
 - cancel():  the open row becomes 'cancelled' (Stop, a removed queue item). Nothing open: nothing to do.
-- close_stale(): at start-up, every open row left by a crash becomes 'cancelled'.
+- close_stale(): at start-up, every open row left by a crash becomes 'cancelled' (meta {"reason": "restart"}, so it can
+             be told from a user's Stop).
 """
 from __future__ import annotations
 
@@ -194,9 +195,9 @@ async def recorded(stage: str, url: str, item_id: int, run):
 async def close_stale(db: AsyncSession) -> int:
     """Start-up: runs cut off by a restart are over. Returns how many rows were closed."""
     res = await db.execute(
-        text("UPDATE processing_stages SET status = 'cancelled', finished_at = :now, error_code = 'cancelled' "
-             "WHERE status = 'processing'"),
-        {"now": _ts()},
+        text("UPDATE processing_stages SET status = 'cancelled', finished_at = :now, error_code = 'cancelled', "
+             "meta = :meta WHERE status = 'processing'"),
+        {"now": _ts(), "meta": json.dumps({"reason": "restart"})},
     )
     return res.rowcount
 

@@ -214,3 +214,23 @@ async def test_start_up_closes_runs_cut_off_by_a_restart(client, seeded_video):
     import main
     await main._reset_stale_statuses()
     assert [r["status"] for r in await rows("cleanup")] == ["cancelled"]
+
+
+async def test_a_restart_is_told_from_a_user_stop_by_the_meta_of_the_cancelled_row():
+    await do(stage_runs.begin, "v1", "cleanup")
+    await do(stage_runs.begin, "v2", "cleanup")
+    await do(stage_runs.cancel, "v2", "cleanup")                          # the user pressed Stop
+    await do(stage_runs.begin, "v3", "summary")
+    assert await do(stage_runs.close_stale) == 2                          # v1 and v3: cut off by a restart
+    (restart,) = await rows("cleanup", "v1")
+    (stop,) = await rows("cleanup", "v2")
+    assert restart["status"] == stop["status"] == "cancelled"
+    assert json.loads(restart["meta"]) == {"reason": "restart"} and stop["meta"] is None
+
+
+async def test_start_up_marks_the_runs_it_closes_as_a_restart(client, seeded_video):
+    await do(stage_runs.begin, VIDEO_ID, "cleanup")
+    import main
+    await main._reset_stale_statuses()
+    (r,) = await rows("cleanup")
+    assert json.loads(r["meta"]) == {"reason": "restart"}
