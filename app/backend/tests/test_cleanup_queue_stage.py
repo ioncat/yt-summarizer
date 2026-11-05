@@ -38,7 +38,11 @@ async def test_the_result_page_sees_the_paragraph_counters_of_a_queue_run_and_th
     with patch("services.text_cleaner.clean_text", gate.llm()):
         task = asyncio.create_task(q._run_cleanup_stage(VIDEO_ID, 3))
         await gate.wait_started()
-        data = (await client.get(URL)).json()
+        for _ in range(100):                                   # the counters are written a moment after the callback
+            data = (await client.get(URL)).json()
+            if data.get("cleanup_paragraphs_done") is not None:
+                break
+            await asyncio.sleep(0.02)
         assert data["cleanup_status"] == "processing"
         assert data["cleanup_paragraphs_done"] == 2 and data["cleanup_paragraphs_total"] == 3   # what the page polls
         assert q._QUEUE_PROGRESS[3] == "cleanup: paragraph 2/3"                                  # and the queue page

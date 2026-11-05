@@ -38,7 +38,11 @@ async def test_the_result_page_sees_the_chunk_counters_of_a_queue_run_and_they_g
     with patch("services.text_summarizer.summarize_text", gate.llm()):
         task = asyncio.create_task(q._run_summary_stage(VIDEO_ID, 3))
         await gate.wait_started()
-        data = (await client.get(URL)).json()
+        for _ in range(100):                                   # the counters are written a moment after the callback
+            data = (await client.get(URL)).json()
+            if data.get("summary_chunks_done") is not None:
+                break
+            await asyncio.sleep(0.02)
         assert data["summary_status"] == "processing"
         assert data["summary_chunks_done"] == 2 and data["summary_chunks_total"] == 5     # what the page polls
         assert q._QUEUE_PROGRESS[3] == "summary: chunk 2/5"                               # and what the queue page shows

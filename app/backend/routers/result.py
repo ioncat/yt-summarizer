@@ -65,16 +65,7 @@ async def get_video_result(video_id: str, db: Annotated[AsyncSession, Depends(ge
     result = await get_result(db, video_id)
     if not result:
         raise HTTPException(status_code=404, detail="Result not found")
-    # Inject live cleanup progress if cleanup is running
-    cleanup_progress = _CLEANUP_PROGRESS.get(video_id)
-    if cleanup_progress:
-        result["cleanup_paragraphs_done"] = cleanup_progress["done"]
-        result["cleanup_paragraphs_total"] = cleanup_progress["total"]
-    # Inject live Map-Reduce progress if summarization is running
-    summary_progress = _SUMMARY_PROGRESS.get(video_id)
-    if summary_progress:
-        result["summary_chunks_done"] = summary_progress["done"]
-        result["summary_chunks_total"] = summary_progress["total"]
+    # (the live cleanup / summary counters come with the result: get_result reads them from the stage's run row)
     # Flag if a re-extract / re-transcription is currently running
     if video_id in _REEXTRACT_SET:
         result["reextract_in_progress"] = True

@@ -7,6 +7,8 @@ pages and the MCP tools that read them keep working. A stage with no row at all 
 Rules (the stage's CURRENT state is its newest run; the shown RESULT is described by its newest 'done' run):
 - *_status: newest run processing / done / failed as is; cancelled = nothing running = None.
 - *_error: the newest run's error text when it failed, else None.
+- cleanup_paragraphs_done / _total and summary_chunks_done / _total: the live counters of a RUNNING run (stage 4b); not in
+  the result when nothing runs or no counter has been written yet.
 - cleanup_model / summary_model, *_duration_seconds, *_finished_at, summary_mode / chunks: from the newest DONE run, so a
   failed or cancelled attempt never changes which model or mode the saved text is shown with. While the very first run is
   still going (no done run yet) the running model is shown.
@@ -68,6 +70,9 @@ def _public(run: dict) -> dict:
     }
 
 
+_COUNTER_FIELDS = {"cleanup": "cleanup_paragraphs", "summary": "summary_chunks"}
+
+
 def stages_view(by_stage: dict[str, list[dict]]) -> dict[str, dict]:
     """{stage: newest run + 'last_done' (the run the shown result came from) + 'runs' (how many)} for stages with runs."""
     out: dict[str, dict] = {}
@@ -97,6 +102,10 @@ def legacy_fields(by_stage: dict[str, list[dict]]) -> dict:
         latest, done = runs[-1], _last_done(runs)
         out[f"{stage}_status"] = latest["status"] if latest["status"] in ("processing", "done", "failed") else None
         out[f"{stage}_error"] = latest["error_text"] if latest["status"] == "failed" else None
+        counters = _COUNTER_FIELDS.get(stage)
+        if counters and latest["status"] == "processing" and latest["progress_total"] is not None:
+            # live counters of a running run (cleanup_paragraphs_*, summary_chunks_*): absent when nothing runs
+            out[f"{counters}_done"], out[f"{counters}_total"] = latest["progress_done"], latest["progress_total"]
         if stage == "mindmap":
             continue
         out[f"{stage}_model"] = done["model"] if done else (latest["model"] if latest["status"] == "processing" else None)

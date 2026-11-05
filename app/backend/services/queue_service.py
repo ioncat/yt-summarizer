@@ -174,11 +174,34 @@ async def get_queue(db: AsyncSession) -> list[dict]:
         }
         for r in rows
     ]
+    running = [i["id"] for i in items if i["status"] == "processing"]
+    if running:
+        live = await _live_progress(db, running)
+        for item in items:
+            if item["id"] in live:
+                item["progress"] = live[item["id"]]          # the counters of the stage the item is in, from its run row
     for item in items:
         if item["status"] == "partial":
             # can Retry still do something? (a re-extract or a deleted video takes the failed runs away)
             item["retryable"] = await _partial_retryable(db, item["id"], item["pipeline_stages"], item["video_id"])
     return items
+
+
+async def _live_progress(db: AsyncSession, item_ids: list[int]) -> dict[int, str]:
+    """{queue item id: "cleanup: paragraph 3/10"} for the running items whose stage has written counters."""
+    marks = ", ".join(f":i{n}" for n in range(len(item_ids)))
+    out: dict[int, str] = {}
+    for item_id, stage, done, total, meta in (await db.execute(
+        text("SELECT queue_item_id, stage, progress_done, progress_total, meta FROM processing_stages "
+             f"WHERE status = 'processing' AND progress_total IS NOT NULL AND queue_item_id IN ({marks}) ORDER BY id"),
+        {f"i{n}": i for n, i in enumerate(item_ids)},
+    )).fetchall():
+        try:
+            unit = (json.loads(meta) if meta else {}).get("unit")
+        except (TypeError, ValueError):
+            unit = None
+        out[item_id] = f"{stage}: {unit + ' ' if unit else ''}{done}/{total}"
+    return out
 
 
 async def get_queue_counts(db: AsyncSession) -> dict[str, int]:

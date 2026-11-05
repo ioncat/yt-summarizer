@@ -143,3 +143,43 @@ async def test_a_summary_run_records_chunks_and_a_stopped_run_keeps_the_last_cou
     r = await row("summary")
     assert (r["status"], r["progress_done"], r["progress_total"]) == ("cancelled", 1, 5)
     assert json.loads(r["meta"])["unit"] == "chunk"
+
+
+# --- what the API says, read from the row ------------------------------------------------------------------------
+
+async def test_the_result_shows_the_counters_of_a_running_run_from_the_row_and_drops_them_when_it_ends(client, seeded_video):
+    await begin("cleanup")
+    await begin("summary")
+    await set_progress(VIDEO_ID, "cleanup", 4, 10, "paragraph")
+    await set_progress(VIDEO_ID, "summary", 1, 3, "chapter")
+    data = (await client.get(f"/api/result/{VIDEO_ID}")).json()
+    assert (data["cleanup_paragraphs_done"], data["cleanup_paragraphs_total"]) == (4, 10)
+    assert (data["summary_chunks_done"], data["summary_chunks_total"]) == (1, 3)
+    async with AsyncSessionLocal() as db:
+        await stage_runs.finish(db, VIDEO_ID, "cleanup")
+        await stage_runs.cancel(db, VIDEO_ID, "summary")
+        await db.commit()
+    data = (await client.get(f"/api/result/{VIDEO_ID}")).json()
+    assert "cleanup_paragraphs_done" not in data and "summary_chunks_done" not in data
+    assert (data["stages"]["cleanup"]["progress_done"], data["stages"]["cleanup"]["progress_total"]) == (4, 10)   # kept on the row
+
+
+async def test_a_run_without_counters_yet_has_none_in_the_result(client, seeded_video):
+    await begin("cleanup")
+    data = (await client.get(f"/api/result/{VIDEO_ID}")).json()
+    assert data["cleanup_status"] == "processing" and "cleanup_paragraphs_done" not in data
+
+
+async def test_the_queue_page_progress_of_a_running_item_comes_from_its_run_row(client, seeded_video):
+    async with AsyncSessionLocal() as db:
+        item = (await db.execute(
+            text("INSERT INTO processing_queue (url, video_id, status, pipeline_stages, added_at, sort_order) "
+                 f"VALUES ('https://www.youtube.com/watch?v={VIDEO_ID}', '{VIDEO_ID}', 'processing', '[\"cleanup\"]', datetime('now'), 1)"))).lastrowid
+        await stage_runs.begin(db, VIDEO_ID, "cleanup", "m", item)
+        await db.commit()
+    await set_progress(VIDEO_ID, "cleanup", 3, 7, "paragraph")
+    items = {i["id"]: i for i in (await client.get("/api/queue")).json()["items"]}
+    assert items[item]["progress"] == "cleanup: paragraph 3/7"
+    await set_progress(VIDEO_ID, "cleanup", 4, 7)
+    items = {i["id"]: i for i in (await client.get("/api/queue")).json()["items"]}
+    assert items[item]["progress"] == "cleanup: paragraph 4/7"                 # the unit word stays
