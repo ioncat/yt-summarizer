@@ -416,7 +416,7 @@ A: Yes. `docker compose up --build` from the project root. Note: Ollama must be 
 A: Settings → AI Cleanup → edit the **User prompt template**. Use `{text}` as the placeholder for the paragraph being processed. Save.
 
 **Q: Where is the data stored?**  
-A: `app/data/db/yt_summarizer.sqlite`. Cookies in `app/data/www.youtube.com_cookies.txt`. Both gitignored. Back up the DB before any schema migration.
+A: `app/data/db/yt_summarizer.sqlite`. Cookies in `app/data/www.youtube.com_cookies.txt`. Both gitignored. Back up the DB before any schema migration, with `python tools/backup_db.py <label>` (the database is in WAL mode: copying the `.sqlite` file alone misses the newest data).
 
 **Q: How do I delete a single video?**  
 A: From the History page or the Result page — Delete button removes the video and all its associated subtitle/cleanup/summary data.

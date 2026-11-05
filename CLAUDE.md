@@ -84,6 +84,7 @@ Start messages: `docs/team/START_PROMPTS.md`. Work mode and who pushes: `docs/te
 | `cd app && python -m pytest -q tests` | MCP server tests |
 | `cd app/frontend && npm test` | Frontend tests (vitest) |
 | `make dev` (or `start.vbs` on Windows) | Start backend + frontend. Until New Start step 2 there are several launchers and ports; step 2 leaves one |
+| `python tools/backup_db.py <label>` | DB backup (WAL mode: never copy the `.sqlite` file by hand); files go to `app/data/backups/` |
 
 ## Critical rules
 

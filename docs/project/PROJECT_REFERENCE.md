@@ -422,6 +422,9 @@ yt-summarizer/
 | DELETE | `/api/settings/storage/uploads` | Clear all uploaded files |
 | POST | `/api/result/{video_id}/reextract` | Re-extract (YouTube) or re-transcribe (local file) subtitles |
 | GET | `/api/result/{video_id}/download` | Download video/audio via yt-dlp (`format`, `quality` query params) |
+| GET | `/api/history/text-search?q=&limit=` | Find videos by words inside their texts (q 3-200 chars, limit 1-50, case-folded in Python); up to 3 hits per video with position |
+| POST | `/api/queue/bulk` (body) | `urls` or `video_ids` (max 500 each), `stages`, `force`; answer `{added, ids, invalid, duplicates, duplicate_details[{url, video_id, reason: processed|in_queue|order}], missing}`; atomic insert (same link twice at once gives one row); 503 "database busy" on a long lock |
+| GET | `/api/result/{video_id}` (fields) | adds `stages` (latest run per stage, model/mode/time of the last successful run), live counters `cleanup_paragraphs_*`, `summary_chunks_*`; old `*_status`/`*_error` fields are kept |
 
 ---
 
@@ -459,9 +462,13 @@ Do this BEFORE restarting the backend with new model/migration code. No exceptio
 
 **URL extraction from free-form lines**: Both single and bulk endpoints strip surrounding text from each line using `https?://[^\s|"'<>]+` + trailing punctuation strip `[,;.:!?]+$`. Handles "URL | title", "title — URL", clipboard pastes from YouTube.
 
+**Stage table (NS-25, 2026-11-05)**: `processing_stages` holds one row per stage run (`video_id`, `stage`, `status` processing/done/failed/cancelled, `queue_item_id`, `attempt`, `model`, times, `error_code`, `error_text`, `meta`, `progress_done/total`); at most one open row per video and stage (partial unique index). Written by `services/stage_runs.py` from the queue worker and the endpoints; a queue item with a failed stage ends `partial`. Old status columns are still written. Reason codes: empty_answer, context_too_small, model_missing, timeout, no_subtitles, ollama_down, cancelled, unexpected, no_text, not_found, upstream_failed.
+
+**DB in WAL mode (NS-28)**: `journal_mode=WAL`, busy timeout 30 s, `synchronous=NORMAL`; a locked database is retried, then answered with 503. Back up with `python tools/backup_db.py <label>`, never by copying the file.
+
 **Queue as sole LLM path**: ALL LLM operations go through the queue — HomePage autoPipeline → `queueBulkAdd(["extract","cleanup","summary"])`; ResultPage buttons (Clean with AI / Summarize / Mind Map / pipeline guard) → `queueBulkAdd([url], [stage])`. Benchmark is the only exception. Ensures durability: restart resumes pending tasks automatically.
 
-**Queue worker**: `queue_service.py` — asyncio task started in `lifespan()`. Polls every 5s for `pending` items. Processes one item at a time. Supported stages: `extract`, `cleanup`, `summary`, `mindmap`. On restart, stuck `processing` items reset to `pending`. `video_id` stored at insert time for dedup. `_QUEUE_PROGRESS[item_id]` stores live progress text ("cleanup: paragraph 3/12") — returned via `get_queue()`, displayed in QueuePage banner + table row with active-stage highlighting. Per-item cancel Out of Scope; worker uses `is_cancelled=lambda: False`.
+**Queue worker**: `queue_service.py` — asyncio task started in `lifespan()`. Polls every 5s for `pending` items. Processes one item at a time. Supported stages: `extract`, `cleanup`, `summary`, `mindmap`. On restart, stuck `processing` items reset to `pending`. `video_id` stored at insert time for dedup. `_QUEUE_PROGRESS[item_id]` stores live progress text ("cleanup: paragraph 3/12") — returned via `get_queue()`, displayed in QueuePage banner + table row with active-stage highlighting. Mind map, summary and cleanup run only here (the background copies are deleted); Stop on a running stage uses a cancel flag kept in memory; the live counters come from the stage table.
 
 ---
 
