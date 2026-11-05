@@ -190,6 +190,16 @@ export async function getStatus(taskId: string): Promise<StatusResponse> {
   return res.json()
 }
 
+/** Stop the transcription of an uploaded file: a queued one leaves the queue, a running one ends after the segment in hand. */
+export async function stopFileTranscription(videoId: string): Promise<void> {
+  const res = await fetch(`${BASE}/process/file/${encodeURIComponent(videoId)}`, { method: 'DELETE' })
+  if (res.status === 404) return   // it is already over: the page's next status poll shows how it ended
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(errorText(body, 'Could not stop the transcription'))
+  }
+}
+
 export async function getResult(videoId: string): Promise<ResultResponse> {
   const res = await fetch(`${BASE}/result/${encodeURIComponent(videoId)}`)
   if (res.status === 404) throw new Error('Result not found')

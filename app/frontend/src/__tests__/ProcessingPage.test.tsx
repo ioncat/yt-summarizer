@@ -12,6 +12,7 @@ vi.mock('../api', () => ({
   startSummary: vi.fn(),
   cancelCleanup: vi.fn(),
   cancelSummary: vi.fn(),
+  stopFileTranscription: vi.fn(),
 }))
 
 function Where() { return <div data-testid="where">{useLocation().pathname}</div> }
@@ -88,5 +89,44 @@ describe('ProcessingPage (extraction only; the cleanup/summary chain is gone, NS
     view.unmount()
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
     expect(vi.mocked(api.getStatus).mock.calls.length).toBe(calls)
+  })
+
+  describe('an uploaded file (NS-11 stage 5)', () => {
+    function renderFile() {
+      return render(
+        <MemoryRouter initialEntries={[{ pathname: '/processing/task9/file-ab12cd34' }]}>
+          <Routes>
+            <Route path="/processing/:taskId/:videoId" element={<><ProcessingPage /><Where /></>} />
+            <Route path="*" element={<Where />} />
+          </Routes>
+        </MemoryRouter>
+      )
+    }
+
+    it('says "Transcribing…" from the start (the file may wait in the queue) and offers Stop', () => {
+      vi.mocked(api.getStatus).mockResolvedValue(status({ status: 'pending' }))
+      renderFile()
+      expect(screen.getByText('Transcribing…')).toBeTruthy()
+      expect(screen.queryByText('Extracting subtitles…')).toBeNull()
+      expect(screen.getByRole('button', { name: 'Stop' })).toBeTruthy()
+    })
+
+    it('Stop asks the server to stop this file and shows what the status says next', async () => {
+      vi.mocked(api.getStatus).mockResolvedValue(status({ status: 'pending' }))
+      vi.mocked(api.stopFileTranscription).mockResolvedValue(undefined)
+      renderFile()
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop' })) })
+      expect(api.stopFileTranscription).toHaveBeenCalledWith('file-ab12cd34')
+      expect(screen.getByRole('button', { name: 'Stopping…' })).toBeTruthy()
+      vi.mocked(api.getStatus).mockResolvedValue(status({ status: 'failed', error_message: 'Transcription stopped' }))
+      await act(async () => { await vi.advanceTimersByTimeAsync(2100) })
+      expect(screen.getByText('Transcription stopped')).toBeTruthy()
+    })
+
+    it('a YouTube video has no Stop button', () => {
+      vi.mocked(api.getStatus).mockResolvedValue(status({}))
+      renderPage()
+      expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull()
+    })
   })
 })

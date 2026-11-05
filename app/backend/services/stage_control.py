@@ -8,6 +8,7 @@ from __future__ import annotations
 
 CLEANUP_CANCEL: set[str] = set()  # video ids whose running cleanup must stop (after the paragraph in hand)
 MINDMAP_CANCEL: set[str] = set()  # video ids whose running mind map must stop
+TRANSCRIBE_CANCEL: set[str] = set()  # video ids (file-...) whose running transcription must stop (NS-11 stage 5)
 SUMMARY_CANCEL: set[str] = set()  # video ids whose running summarization must stop
 # (The live paragraph / chunk counters of a running cleanup / summary are no longer here: they are on the stage's run row in
 # processing_stages, services/stage_progress.py - NS-11 decision 2.)

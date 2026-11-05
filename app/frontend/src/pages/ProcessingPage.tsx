@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { getStatus, processVideo } from '../api'
+import { getStatus, processVideo, stopFileTranscription } from '../api'
 
 const LANG_LABELS: Record<string, string> = {
   ru: 'Russian', en: 'English', uk: 'Ukrainian',
@@ -15,6 +15,7 @@ export default function ProcessingPage() {
   const [progressText, setProgressText] = useState<string | null>(null)
   const [availableLangs, setAvailableLangs] = useState<string[]>([])
   const [retrying, setRetrying] = useState(false)
+  const [stopping, setStopping] = useState(false)
 
   const originalUrl = searchParams.get('url') ?? ''
 
@@ -57,7 +58,20 @@ export default function ProcessingPage() {
     }
   }
 
-  const isTranscribing = progressText != null && (
+  // An uploaded file (its id starts with "file-") is a queue item: it may wait its turn, and it can be stopped (NS-11 stage 5)
+  const isFile = (videoId ?? '').startsWith('file-')
+  async function stopTranscription() {
+    if (!videoId) return
+    setStopping(true)
+    try {
+      await stopFileTranscription(videoId)   // the next status poll shows "Transcription stopped"
+    } catch (err) {
+      console.error('[Processing] stop failed:', err)
+      setStopping(false)
+    }
+  }
+
+  const isTranscribing = isFile || progressText != null && (
     progressText.startsWith('segment') || progressText.startsWith('transcribing')
   )
   const statusText = progressText ?? 'This usually takes 15–30 seconds'
@@ -90,6 +104,16 @@ export default function ProcessingPage() {
                 {isTranscribing ? 'Transcribing…' : 'Extracting subtitles…'}
               </p>
               <p className="text-body-sm text-secondary">{statusText}</p>
+              {isFile && (
+                <button
+                  onClick={stopTranscription}
+                  disabled={stopping}
+                  title="Stop this transcription: nothing is saved"
+                  className="px-4 py-2 border border-error text-error rounded-lg text-label-md font-semibold hover:bg-error-container transition-colors disabled:opacity-50"
+                >
+                  {stopping ? 'Stopping…' : 'Stop'}
+                </button>
+              )}
             </div>
           ) : (
             /* Error state */

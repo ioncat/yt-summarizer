@@ -12,6 +12,7 @@ import os
 from sqlalchemy import text
 
 from services import stage_runs
+from services.stage_control import TRANSCRIBE_CANCEL, StageCancelled
 from services.video_service import complete_task, get_app_setting, update_task_failed
 
 LOCAL_PREFIX = "local://"
@@ -22,6 +23,13 @@ _FILE_TASK_PROGRESS: dict[str, str] = {}
 
 class FileTranscriptionFailed(RuntimeError):
     """The transcription of an upload failed; the message is what the task and the queue item show."""
+
+
+class TranscriptionStopped(Exception):
+    """Raised inside the speech-to-text progress callback when Stop was pressed: the engine's own error handling turns it into
+    a failed result, and the runner then recognises the Stop by the flag."""
+
+STOPPED_MESSAGE = "Transcription stopped"
 
 
 def uploads_dir() -> str:
@@ -71,6 +79,39 @@ async def _record(video_id: str, how: str, **kw) -> None:
         logging.getLogger("api").exception("could not record the %s of the transcription of %s", how, video_id)
 
 
+async def release_upload(db, video_id: str, db_video_id: str | None, message: str) -> None:
+    """A queued upload will not be transcribed (Stop, Remove): its task ends failed with `message` and its run row is cancelled,
+    so nothing stays 'processing' without an owner."""
+    task_id = (await db.execute(
+        text("SELECT id FROM processing_tasks WHERE video_id = :v AND status = 'pending' ORDER BY started_at DESC LIMIT 1"),
+        {"v": db_video_id},
+    )).scalar() if db_video_id else None
+    if task_id:
+        await update_task_failed(db, task_id, message)
+    await stage_runs.cancel(db, video_id, "transcribe")
+    await db.commit()
+
+
+async def stop_upload(db, video_id: str) -> str:
+    """Stop button: "stopped" (a queued item was removed), "stopping" (a running one was told to stop) or "none"."""
+    from services.queue_service import delete_item
+    row = (await db.execute(
+        text("SELECT id, status, db_video_id FROM processing_queue WHERE video_id = :v AND url LIKE 'local://%' "
+             "AND status IN ('pending', 'processing') ORDER BY id DESC LIMIT 1"), {"v": video_id},
+    )).first()
+    if row is None:
+        return "none"
+    item_id, status, db_video_id = row
+    if status == "processing":
+        TRANSCRIBE_CANCEL.add(video_id)
+        return "stopping"
+    if await delete_item(db, item_id) == "deleted":
+        await release_upload(db, video_id, db_video_id, STOPPED_MESSAGE)
+        return "stopped"
+    TRANSCRIBE_CANCEL.add(video_id)          # it started in the meantime: tell the running one
+    return "stopping"
+
+
 async def run_queued_file(item: dict) -> dict:
     """Run one queued upload (called by the queue worker). Returns {"video_id", "db_video_id"}; raises FileTranscriptionFailed.
     The stage's run row is opened (a queue item that was reset or retried gets a new run), then closed done / failed."""
@@ -83,9 +124,14 @@ async def run_queued_file(item: dict) -> dict:
         await db.commit()
     try:
         outcome = await _run_queued_file(item, video_id, db_video_id, original_filename)
+    except StageCancelled:
+        await _record(video_id, "cancelled")
+        raise
     except FileTranscriptionFailed as exc:
         await _record(video_id, "failed", error=str(exc))
         raise
+    finally:
+        TRANSCRIBE_CANCEL.discard(video_id)   # a Stop that came too late must not stop the next run of this upload
     await _record(video_id, "done", model=outcome["model"], device=outcome["device"], started_at=outcome["started_at"])
     return {"video_id": video_id, "db_video_id": db_video_id}
 
@@ -107,6 +153,15 @@ async def _run_queued_file(item: dict, video_id: str, db_video_id: str | None, o
     return await run_file_transcription(task_id, video_id, path, original_filename, item.get("language") or "auto")
 
 
+async def _stop_now(task_id: str, local_video_id: str) -> None:
+    """Stop was pressed: the task and the queue item say so, nothing is saved, so a saved transcript stays as it was."""
+    from models.database import AsyncSessionLocal
+    TRANSCRIBE_CANCEL.discard(local_video_id)
+    async with AsyncSessionLocal() as db:
+        await update_task_failed(db, task_id, STOPPED_MESSAGE)
+    raise StageCancelled(STOPPED_MESSAGE)
+
+
 async def run_file_transcription(
     task_id: str,
     local_video_id: str,
@@ -124,6 +179,8 @@ async def run_file_transcription(
     from services.subtitle_extractor import ExtractionResult, SubtitleEntry, VideoMetadata
 
     try:
+        if local_video_id in TRANSCRIBE_CANCEL:
+            await _stop_now(task_id, local_video_id)         # Stop came before the work began
         from datetime import datetime as _datetime
         async with AsyncSessionLocal() as db:
             stt_model = await get_app_setting(db, "stt_model") or "base"
@@ -134,6 +191,8 @@ async def run_file_transcription(
         _FILE_TASK_PROGRESS[task_id] = "transcribing…"
 
         def _on_stt_progress(n: int, cur_s: float = 0.0, tot_s: float = 0.0) -> None:
+            if local_video_id in TRANSCRIBE_CANCEL:
+                raise TranscriptionStopped(STOPPED_MESSAGE)   # Stop: the engine ends the run after the segment in hand
             pct = f" · {int(cur_s / tot_s * 100)}%" if tot_s > 0 else ""
             _FILE_TASK_PROGRESS[task_id] = f"segment {n}{pct}"
 
@@ -146,6 +205,9 @@ async def run_file_transcription(
             on_progress=_on_stt_progress,
         )
         _FILE_TASK_PROGRESS.pop(task_id, None)
+
+        if local_video_id in TRANSCRIBE_CANCEL:
+            await _stop_now(task_id, local_video_id)   # Stop pressed (decision 1): nothing is saved
 
         if not transcription.success:
             message = transcription.error_message or "Transcription failed"
@@ -219,7 +281,7 @@ async def run_file_transcription(
                 pass
         return {"model": stt_model, "device": actual_device, "started_at": transcription_started_at}
 
-    except FileTranscriptionFailed:
+    except (FileTranscriptionFailed, StageCancelled):
         raise
     except Exception as e:
         async with AsyncSessionLocal() as db:

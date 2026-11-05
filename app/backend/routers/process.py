@@ -124,6 +124,17 @@ async def process_file(
     return {"task_id": task.id, "video_id": local_video_id}
 
 
+@router.delete("/process/file/{video_id}")
+async def stop_file_transcription(video_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Stop the transcription of an uploaded file (NS-11 stage 5): a queued one is taken out of the queue, a running one is told
+    to stop (it ends after the segment in hand). Either way nothing is saved, so a saved transcript stays as it was."""
+    from services.file_stt import stop_upload
+    outcome = await stop_upload(db, video_id)
+    if outcome == "none":
+        raise HTTPException(status_code=404, detail="This file is not being transcribed")
+    return {"status": outcome}
+
+
 @router.get("/status/{task_id}")
 async def get_status(task_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
     import json
