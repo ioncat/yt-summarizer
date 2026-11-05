@@ -111,13 +111,13 @@ Stage 0 done 2026-11-01 (tests only, no production change): baseline tests `11d6
 Planned order (one commit per stage, review + QA after each): 0 delete the dead ProcessingPage chain; 1 queue items by `video_id` (local files) and fix the History bulk id; 2 mind map; 3 summary; 4 cleanup (DB-backed progress first); 5 file transcription; 6 re-extract/re-transcribe; 7 YouTube extract (`/api/process`, MCP and HomePage change with it)
 Labels: `by-backend` | Status: 🟡 Stage 0 done, decisions pending | Depends on: NS-12
 
-Stage 1 (commits f245cb1, 149206f, d3fba36, b5ec2b4): reviewed CLEAN, QA pending. Low findings left for later: no cap on `video_ids`/`urls` in `/api/queue/bulk` (40,000 ids give a 500; add `Field(max_length=500)`); `force` is ignored with `video_ids`; `duplicates` mixes URLs and ids; whitespace-only ids return 200 with added 0; no lock against two simultaneous bulk calls with the same id (one duplicate item at worst).
+Stage 1 (commits f245cb1, 149206f, d3fba36, b5ec2b4): reviewed CLEAN; QA 2026-11-05: bulk from History (local file + YouTube), queue rows, cleaned text and summary of a local file, re-queue of a queued file, normal URL on Home pass; the 409 on Home is `POST /api/process` for a video already in History (intended); check 'stage-only item whose video is gone' not run (QA may not delete data, covered by unit tests); regression S4, S6-S8 not run. Low findings left for later: no cap on `video_ids`/`urls` in `/api/queue/bulk` (40,000 ids give a 500; add `Field(max_length=500)`); `force` is ignored with `video_ids`; `duplicates` mixes URLs and ids; whitespace-only ids return 200 with added 0; no lock against two simultaneous bulk calls with the same id (one duplicate item at worst).
 
 ---
 
 ### After step 3 — small items unblocked by restructure
 
-**NS-15 — MCP `get_result`: add `kind` parameter**
+**NS-15 — MCP `get_result`: add `kind` parameter** ⚪ Superseded by NS-29 (2026-11-05)
 Origin: Owner, 2026-10-31 (found in live use); noted in new-start.md
 Value: MCP callers can get the full transcript instead of just the summary; current `include_text=true` silently returns the summary
 Fix: add `kind: Literal["subtitles","cleaned","summary","mindmap"] = "cleaned"` to `get_result`; return the matching field from the DB row
