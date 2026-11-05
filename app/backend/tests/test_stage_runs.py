@@ -234,3 +234,12 @@ async def test_start_up_marks_the_runs_it_closes_as_a_restart(client, seeded_vid
     await main._reset_stale_statuses()
     (r,) = await rows("cleanup")
     assert json.loads(r["meta"]) == {"reason": "restart"}
+
+
+async def test_only_the_open_run_insert_may_be_ignored_other_constraint_failures_show():
+    """finish / fail add rows with a plain INSERT: a NOT NULL violation is an error, not a silent no-op."""
+    from sqlalchemy.exc import IntegrityError
+    async with AsyncSessionLocal() as db:
+        with pytest.raises(IntegrityError):
+            await stage_runs._insert(db, None, "cleanup", "done")                 # video_id is NOT NULL
+        await db.rollback()

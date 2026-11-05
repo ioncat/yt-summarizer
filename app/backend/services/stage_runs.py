@@ -39,7 +39,7 @@ async def _open_row(db: AsyncSession, video_id: str, stage: str) -> int | None:
 
 
 _INSERT_RUN = (
-    "INSERT OR IGNORE INTO processing_stages (video_id, stage, status, queue_item_id, attempt, model, started_at, "
+    "INSERT {verb} INTO processing_stages (video_id, stage, status, queue_item_id, attempt, model, started_at, "
     "finished_at, error_code, error_text, meta, created_at) "
     "SELECT :v, :s, :status, :qid, "
     "(SELECT COALESCE(MAX(attempt), 0) + 1 FROM processing_stages WHERE video_id = :v AND stage = :s), "
@@ -50,10 +50,14 @@ _INSERT_RUN = (
 async def _insert(db: AsyncSession, video_id: str, stage: str, status: str, **cols):
     """Add a run (the attempt number is computed in the same statement). Returns the new row's id, or None when the
     partial unique index refused a second OPEN row (a concurrent begin won)."""
-    sql = _INSERT_RUN
     if status == "processing":
-        sql += (" WHERE NOT EXISTS (SELECT 1 FROM processing_stages WHERE video_id = :v AND stage = :s "
-                "AND status = 'processing')")
+        # only here may a conflict be ignored (an open run exists: a concurrent begin won); a failure of any other kind
+        # of insert, or any other constraint, is an error and must show
+        sql = _INSERT_RUN.format(verb="OR IGNORE") + (
+            " WHERE NOT EXISTS (SELECT 1 FROM processing_stages WHERE video_id = :v AND stage = :s "
+            "AND status = 'processing')")
+    else:
+        sql = _INSERT_RUN.format(verb="")
     res = await db.execute(
         text(sql),
         {"v": video_id, "s": stage, "status": status, "qid": cols.get("queue_item_id"),
