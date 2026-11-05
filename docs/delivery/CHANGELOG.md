@@ -4,6 +4,8 @@ Reverse-chronological, append-only. Format: see `documentation-conventions.md`.
 
 ## 2026-11-05
 
+- **The agent chooses what it gets (NS-29)**: MCP `get_result` takes `parts` (summary, transcript, cleaned, mindmap, status) with `offset`/`limit` paging and a line telling what exists for the video; default answer unchanged except that line and the channel (the field was read under the wrong name). `search_history` now covers the whole history (it saw only the 20 newest), finds Cyrillic in any case, and with `in_text=True` searches inside the texts (new read-only `GET /api/history/text-search`; hits show the position to pass to `get_result`). Reviewed: clean after one round (Cyrillic case, query length cap, scan note). Checked live against the running backend. Restart the MCP client to load the new tools. Commits: `ff63a55`, `eb6ac1e`, `b4d5c88`, `b7c19b0`, `32dd2a3`, `b226f51`, `1fbdee0`, `dc37ae8`.
+
 - **Empty model answers fixed (NS-26)**: summary, mind map and cleanup failed on long texts because Ollama ran with its default 4096-token context and a thinking model spent it all on thinking, returning an empty answer. Every Ollama chat call now sends a `num_ctx` sized to the input (setting `llm_max_num_ctx`, 4096–65536; the chat keeps `chat_num_ctx` as a floor); an empty answer is its own error with a clear message on the result page (`cleanup_error`, `summary_error`, `mindmap_error` columns, added by a migration; a backup was taken). Verified live: the two videos that failed now get summary and mind map. Reviewed: clean after two rounds. Commits: `90c7437`, `7d26488`, `41ae0bf`, `552d34a`, `8b45c65`.
 
 ## 2026-11-01
