@@ -286,10 +286,14 @@ async def _search_in_texts(query: str, limit: int) -> str:
             return f"ERROR: Cannot connect to YT Summarizer at {BASE_URL}"
     if r.status_code != 200:
         return f"ERROR {r.status_code}: {r.text[:300]}"
-    videos = r.json().get("videos", [])
+    data = r.json()
+    videos = data.get("videos", [])
+    looked = ""
+    if data.get("total_videos") is not None:
+        looked = f" Looked through {data.get('searched', data['total_videos'])} of {data['total_videos']} video(s)."
     if not videos:
-        return f"No videos contain '{query}'."
-    lines = [f"Found {len(videos)} video(s) with '{query}' in their text:"]
+        return f"No videos contain '{query}'.{looked}"
+    lines = [f"Found {len(videos)} video(s) with '{query}' in their text.{looked}"]
     for v in videos:
         lines.append(f"- {v.get('title') or 'Unknown'}{f' — {_channel(v)}' if _channel(v) else ''}  (video_id: {v['video_id']})")
         for m in v.get("matches", []):
@@ -306,6 +310,8 @@ async def search_history(query: str = "", limit: int = 20, in_text: bool = False
     With in_text=True, search the words inside the texts instead (transcript, cleaned text,
     summary, mind map): the answer gives, per video and part, how many hits there are and the
     character position of the first one with a snippet, to read on with get_result(offset=...).
+    It scans every text, so it can take seconds on a large history; the answer says how many
+    videos were looked through (it stops early once `limit` videos matched).
 
     Args:
         query: text to search in video titles and channel names (in_text: the words to find, 3+ chars)

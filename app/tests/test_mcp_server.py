@@ -466,7 +466,7 @@ async def test_search_history_passes_the_query_to_the_server_and_still_filters()
     assert "Привет мир" in result and "Совсем другое" not in result
 
 
-TEXT_HITS = {"query": "зиррокс", "videos": [{
+TEXT_HITS = {"query": "зиррокс", "searched": 7, "total_videos": 120, "videos": [{
     "video_id": "vidT", "title": "Лекция", "author": "Канал",
     "counts": {"transcript": 14, "summary": 1},
     "matches": [
@@ -487,7 +487,7 @@ async def test_search_in_text_lists_parts_counts_positions_and_snippets():
         mock.get(f"{BASE}/api/history/text-search").mock(side_effect=handler)
         result = await search_history(query="зиррокс", limit=5, in_text=True)
     assert seen == [{"q": "зиррокс", "limit": "5"}]
-    assert "Found 1 video(s) with 'зиррокс' in their text:" in result
+    assert "Found 1 video(s) with 'зиррокс' in their text. Looked through 7 of 120 video(s)." in result
     assert "- Лекция — Канал  (video_id: vidT)" in result
     assert "  - transcript ×14, first at char 41230: …и тут Зиррокс снова…" in result
     assert "  - summary ×1, first at char 120: …про Зиррокс в начале…" in result
@@ -506,8 +506,10 @@ async def test_search_in_text_needs_three_characters_and_makes_no_request():
 @pytest.mark.asyncio
 async def test_search_in_text_no_match_backend_error_and_no_backend():
     with respx.mock(assert_all_called=False) as mock:
-        mock.get(f"{BASE}/api/history/text-search").mock(return_value=httpx.Response(200, json={"videos": []}))
-        assert await search_history(query="nothing", in_text=True) == "No videos contain 'nothing'."
+        mock.get(f"{BASE}/api/history/text-search").mock(return_value=httpx.Response(
+            200, json={"videos": [], "searched": 120, "total_videos": 120}))
+        assert await search_history(query="nothing", in_text=True) == (
+            "No videos contain 'nothing'. Looked through 120 of 120 video(s).")
     with respx.mock(assert_all_called=False) as mock:
         mock.get(f"{BASE}/api/history/text-search").mock(return_value=httpx.Response(500, text="boom"))
         assert (await search_history(query="nothing", in_text=True)).startswith("ERROR 500")
