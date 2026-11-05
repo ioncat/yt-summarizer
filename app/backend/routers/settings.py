@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Annotated
 
-import httpx
+import httpx
 from services.http_client import http_client
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
