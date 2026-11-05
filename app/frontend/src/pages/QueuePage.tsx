@@ -41,6 +41,7 @@ export default function QueuePage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const inFlight = useRef(false)    // one request at a time: a slow answer cannot be overtaken by a newer one
   const reloadAfter = useRef(false) // a reload asked for while one was running (e.g. right after an add)
+  const mounted = useRef(true)      // no state updates and no further loads once the page is left
   const [pollFailures, setPollFailures] = useState(0)
 
   async function load() {
@@ -48,23 +49,31 @@ export default function QueuePage() {
     inFlight.current = true
     try {
       const data = await getQueue()
+      if (!mounted.current) return
       setItems(data.items)
       setPollFailures(0)
     } catch {
-      setPollFailures(n => n + 1)  // the last good list stays on screen; after two misses a banner says so
+      if (mounted.current) setPollFailures(n => n + 1)  // the last good list stays on screen; after two misses a banner says so
     } finally {
       inFlight.current = false
-      setLoading(false)
-      if (reloadAfter.current) { reloadAfter.current = false; void load() }
+      if (mounted.current) {
+        setLoading(false)
+        if (reloadAfter.current) { reloadAfter.current = false; void load() }
+      }
     }
   }
 
   const adds = useQueueAdd(load)
 
   useEffect(() => {
+    mounted.current = true
     load()
     pollRef.current = setInterval(load, 3000)
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+    return () => {
+      mounted.current = false
+      reloadAfter.current = false
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleDelete(id: number) {

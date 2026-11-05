@@ -232,6 +232,21 @@ describe('QueuePage polling (NS-28)', () => {
     expect(await screen.findByText('justAdded001')).toBeTruthy()  // the newer answer is what stays
   })
 
+  it('leaving the page while a reload is waiting for the poll in flight starts no further load', async () => {
+    let first!: (v: { items: api.QueueItem[]; count: number }) => void
+    vi.mocked(api.getQueue).mockReturnValueOnce(new Promise(res => { first = res }))
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [], count: 0 })
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({ added: 1, ids: [9], invalid: [], duplicates: [] })
+    const view = renderQueue()
+    await openAndSubmit('https://youtu.be/leavePage001')
+    await screen.findByText('Added to the queue.')            // a reload is now waiting behind the first poll
+    expect(api.getQueue).toHaveBeenCalledTimes(1)
+    view.unmount()
+    first({ items: [], count: 0 })
+    await new Promise(r => setTimeout(r, 50))
+    expect(api.getQueue).toHaveBeenCalledTimes(1)             // no stray second load after the page is gone
+  })
+
   it('after two failed polls a banner says the backend cannot be reached, the old list stays, and it clears on success', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.mocked(api.getQueue).mockResolvedValueOnce({ items: [item(1, 'https://youtu.be/lastGood0001')], count: 1 })
