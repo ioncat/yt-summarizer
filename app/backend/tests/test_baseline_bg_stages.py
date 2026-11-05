@@ -487,7 +487,7 @@ async def test_reextract_replaces_text_and_clears_all_derived_data(client, video
     await set_fmt(cleaned_text="C", cleanup_status="done", cleanup_model="m", summary_text="S",
                   summary_status="done", summary_model="m", summary_mode="single",
                   mindmap_text="M", mindmap_status="done")
-    with patch("routers.result.extract_subtitles", return_value=_extraction()):
+    with patch("services.reextract.extract_subtitles", return_value=_extraction()):
         r = await client.post(f"{URL}/reextract", json={"language": "en"})
     assert r.status_code == 200 and r.json() == {"status": "reextracting"}
     row = await fmt_row()
@@ -511,7 +511,7 @@ async def test_reextract_failed_extraction_changes_nothing_and_reports_nothing(c
     failed = SimpleNamespace(success=False, error_type="x", error_message="boom",
                              available_languages=[], language=None, subtitles=[], metadata=None)
     before = (await fmt_row())["formatted_text"]
-    with patch("routers.result.extract_subtitles", return_value=failed):
+    with patch("services.reextract.extract_subtitles", return_value=failed):
         r = await client.post(f"{URL}/reextract", json={})
     assert r.status_code == 200
     assert (await fmt_row())["formatted_text"] == before
@@ -529,7 +529,7 @@ async def test_reextract_second_request_while_running_is_409_and_flag_visible(cl
             time.sleep(0.02)
         return _extraction()
 
-    with patch("routers.result.extract_subtitles", slow_extract):
+    with patch("services.reextract.extract_subtitles", slow_extract):
         t1 = asyncio.create_task(client.post(f"{URL}/reextract", json={}))
         await asyncio.wait_for(started.wait(), 5)
         data = (await client.get(URL)).json()

@@ -170,7 +170,7 @@ async def test_reextract_is_refused_while_cleanup_or_summary_is_processing(clien
 
 async def test_reextract_of_a_youtube_video_replaces_the_text_in_place_and_clears_derived_data(client, youtube_video):
     await set_fmt(VIDEO_ID, cleaned_text="OLD CLEAN", cleanup_status="done", summary_text="OLD SUMMARY", summary_status="done")
-    with patch("routers.result.extract_subtitles", return_value=yt()):
+    with patch("services.reextract.extract_subtitles", return_value=yt()):
         r = await client.post(f"/api/result/{VIDEO_ID}/reextract", json={"language": "auto"})
     assert r.status_code == 200
     row = await fmt_row(VIDEO_ID)
@@ -182,7 +182,7 @@ async def test_a_failed_youtube_reextract_keeps_everything_and_tells_nobody(clie
     # BASELINE: known bug - same silence as for a file (decision 5).
     await set_fmt(VIDEO_ID, cleaned_text="OLD CLEAN", cleanup_status="done")
     before = (await fmt_row(VIDEO_ID))["formatted_text"]
-    with patch("routers.result.extract_subtitles", return_value=yt(ok=False, error="This video has no subtitles available.")):
+    with patch("services.reextract.extract_subtitles", return_value=yt(ok=False, error="This video has no subtitles available.")):
         r = await client.post(f"/api/result/{VIDEO_ID}/reextract", json={})
     assert r.status_code == 200
     row = await fmt_row(VIDEO_ID)
