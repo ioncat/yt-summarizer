@@ -256,6 +256,8 @@ async def test_summary_run_stores_the_reason_and_the_result_exposes_it(client, s
     respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
     respx.post(CHAT).mock(return_value=_chat_answer("", thinking="x"))
     await client.post(f"/api/result/{VIDEO_ID}/summary")
+    from tests.baseline_helpers import run_queued_stage
+    await run_queued_stage(VIDEO_ID, "summary")  # the queue worker runs it (NS-11 stage 3)
     row = await fmt_row()
     assert row["summary_status"] == "failed" and row["summary_error"] == THINKING_MSG
     data = (await client.get(f"/api/result/{VIDEO_ID}")).json()
@@ -280,16 +282,23 @@ async def test_a_successful_rerun_clears_the_old_reason(client, seeded_video):
     respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
     respx.post(CHAT).mock(return_value=_chat_answer("Готовая сводка."))
     await client.post(f"/api/result/{VIDEO_ID}/summary")
+    from tests.baseline_helpers import run_queued_stage
+    await run_queued_stage(VIDEO_ID, "summary")  # the queue worker runs it (NS-11 stage 3)
     row = await fmt_row()
     assert row["summary_status"] == "done" and row["summary_error"] is None
 
 
 @respx.mock
-async def test_unreachable_ollama_leaves_no_specific_reason(client, seeded_video):
+async def test_unreachable_ollama_gives_no_thinking_reason_only_the_neutral_one(client, seeded_video):
     respx.get(TAGS).mock(side_effect=httpx.ConnectError("refused"))
     await client.post(f"/api/result/{VIDEO_ID}/summary")
+    from tests.baseline_helpers import run_queued_stage
+    await run_queued_stage(VIDEO_ID, "summary")  # the queue worker runs it (NS-11 stage 3)
     row = await fmt_row()
-    assert row["summary_status"] == "failed" and row["summary_error"] is None  # page keeps its generic text
+    # no "thinking used the whole context" claim for a model that was never reached: the queue stage (NS-11 stage 3) says
+    # neutrally that nothing was produced (it used to be None, with the page showing its generic text)
+    assert row["summary_status"] == "failed"
+    assert row["summary_error"] == "No summary was produced: Ollama may be unreachable, or the model returned nothing"
 
 
 @respx.mock

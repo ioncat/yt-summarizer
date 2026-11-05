@@ -5,6 +5,7 @@ import asyncio
 import pytest
 import respx
 import httpx
+from tests.baseline_helpers import run_queued_stage
 
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 
@@ -31,7 +32,7 @@ async def test_trigger_summary_ollama_down(client, seeded_video):
         respx.post(OLLAMA_CHAT_URL).mock(side_effect=httpx.ConnectError("refused"))
         r = await client.post(f"/api/result/{seeded_video['video_id']}/summary")
         assert r.status_code == 200
-        await asyncio.sleep(0.3)
+        await run_queued_stage(seeded_video["video_id"], "summary")  # the queue worker runs it (NS-11 stage 3)
 
     r2 = await client.get(f"/api/result/{seeded_video['video_id']}")
     assert r2.json()["summary_status"] == "failed"

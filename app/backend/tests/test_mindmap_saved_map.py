@@ -47,7 +47,7 @@ async def test_the_queue_stage_keeps_the_saved_map_when_the_regeneration_comes_b
     with patch("services.text_mindmapper.generate_mindmap", gate.llm()):
         await q._run_mindmap_stage(VIDEO_ID, 1)
     row = await fmt_row()
-    assert row["mindmap_status"] == "failed" and row["mindmap_error"] == "The model returned no mind map"
+    assert row["mindmap_status"] == "failed" and row["mindmap_error"] == "No mind map was produced: Ollama may be unreachable, or the model returned nothing"
     assert row["mindmap_text"] == "SAVED MAP"
 
 

@@ -209,7 +209,9 @@ async def test_stage_runner_applies_the_cap_setting(client, seeded_video):
 
     await client.put("/api/settings/summarization", json={"model": "m"})
     await client.put("/api/settings/app", json={"ollama_url": OLLAMA, "llm_max_num_ctx": "8192"})
-    with patch("routers.result.summarize_text", fake_summarize):
+    from tests.baseline_helpers import run_queued_stage
+    with patch("services.text_summarizer.summarize_text", fake_summarize):
         await client.post(f"/api/result/{seeded_video['video_id']}/summary")
+        await run_queued_stage(seeded_video["video_id"], "summary")  # the queue worker runs it (NS-11 stage 3)
     await client.put("/api/settings/app", json={"llm_max_num_ctx": "32768"})
     assert seen_cap["ctx"] == 8192

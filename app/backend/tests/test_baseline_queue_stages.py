@@ -194,7 +194,7 @@ async def test_queue_summary_empty_result_stores_a_reason(seeded_video):
     with patch("services.text_summarizer.summarize_text", gate.llm()):
         await q._run_summary_stage(VIDEO_ID, 1)
     row = await fmt_row()
-    assert row["summary_status"] == "failed" and row["summary_error"] == "The model returned no summary"
+    assert row["summary_status"] == "failed" and row["summary_error"] == "No summary was produced: Ollama may be unreachable, or the model returned nothing"
 
 
 async def test_queue_item_for_a_summary_without_model_ends_failed_not_done(seeded_video):
@@ -276,7 +276,7 @@ async def test_queue_mindmap_empty_result_stores_a_reason(seeded_video):
     with patch("services.text_mindmapper.generate_mindmap", gate.llm()):
         await q._run_mindmap_stage(VIDEO_ID, 1)
     row = await fmt_row()
-    assert row["mindmap_status"] == "failed" and row["mindmap_error"] == "The model returned no mind map"
+    assert row["mindmap_status"] == "failed" and row["mindmap_error"] == "No mind map was produced: Ollama may be unreachable, or the model returned nothing"
 
 
 async def test_queue_item_for_a_mindmap_without_model_ends_failed_not_done(seeded_video):

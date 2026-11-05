@@ -115,7 +115,7 @@ async def test_a_failure_of_the_mind_map_stage_itself_keeps_its_own_message(clie
     with patch("services.text_mindmapper.generate_mindmap", gate.llm()):
         await run_worker([(await _only_item())["id"]])
     row = await fmt_row()
-    assert row["mindmap_status"] == "failed" and row["mindmap_error"] == "The model returned no mind map"
+    assert row["mindmap_status"] == "failed" and row["mindmap_error"] == "No mind map was produced: Ollama may be unreachable, or the model returned nothing"
 
 
 async def test_a_failing_item_without_a_mind_map_stage_does_not_touch_the_status(client, seeded_video):

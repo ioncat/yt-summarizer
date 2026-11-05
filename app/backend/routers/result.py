@@ -422,9 +422,14 @@ async def _run_summary(video_id: str) -> None:
 @router.post("/result/{video_id}/summary")
 async def trigger_summary(
     video_id: str,
-    background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    """Queue the summarization. The status is 'processing' at once (the page shows progress while the item waits its
+    turn behind the queue); the queue worker does the work. A second click while one is queued or running adds nothing
+    (NS-11 stage 3)."""
+    from services.db_retry import retry_locked
+    from services.queue_by_id import enqueue_stage
+
     stage = await get_stage_settings(db, "summarization")
     if not stage.get("model"):
         raise HTTPException(
@@ -437,18 +442,28 @@ async def trigger_summary(
             status_code=400,
             detail="Ollama URL not configured. Please set it in Settings → General."
         )
-    ok = await set_summary_processing(db, video_id, model=stage.get("model"))
-    if not ok:
+    if not await get_result(db, video_id):
         raise HTTPException(status_code=404, detail="Result not found")
     _SUMMARY_CANCEL_SET.discard(video_id)
-    background_tasks.add_task(_run_summary, video_id)
+    # queue first: if the database is busy nothing has changed (503); the status is set right after, and again by the
+    # stage itself when it starts
+    await retry_locked(lambda: enqueue_stage(db, video_id, "summary"), db, "summary: queue")
+    await set_summary_processing(db, video_id, model=stage.get("model"))
     return {"status": "processing"}
 
 
 @router.delete("/result/{video_id}/summary")
-async def cancel_summary(video_id: str):
-    """Signal a running summarization to stop."""
-    _SUMMARY_CANCEL_SET.add(video_id)
+async def cancel_summary(video_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Stop the summarization: a queued one is taken out of the queue, a running one is told to stop.
+
+    Either way the status goes back to "nothing running" and a previous summary is kept (as in the background copy).
+    """
+    from services.queue_by_id import dequeue_pending_stage, has_processing_item
+
+    if await dequeue_pending_stage(db, video_id, "summary"):
+        await reset_summary_status(db, video_id)  # it never started: nothing else will reset the status
+    if await has_processing_item(db, video_id):
+        _SUMMARY_CANCEL_SET.add(video_id)         # the worker is on this video: its summary stage polls the flag
     return {"status": "cancelling"}
 
 

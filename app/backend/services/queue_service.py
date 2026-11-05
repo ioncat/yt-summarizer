@@ -560,7 +560,7 @@ async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
             await finish_summary(
                 db, yt_video_id, summary, mode=mode,
                 chunks_count=chunks_count, started_at=started_at,
-                error=llm_failure_reason() or (None if summary else "The model returned no summary"),
+                error=llm_failure_reason() or (None if summary else "No summary was produced: Ollama may be unreachable, or the model returned nothing"),
             )
     except StageCancelled:
         raise
@@ -724,7 +724,7 @@ async def _run_mindmap_stage(yt_video_id: str, item_id: int) -> None:
         async with AsyncSessionLocal() as db:
             await finish_mindmap(
                 db, yt_video_id, mindmap_md,
-                error=llm_failure_reason() or (None if mindmap_md else "The model returned no mind map"),
+                error=llm_failure_reason() or (None if mindmap_md else "No mind map was produced: Ollama may be unreachable, or the model returned nothing"),
             )
     except StageCancelled:
         raise

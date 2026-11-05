@@ -172,18 +172,46 @@ async def test_cleanup_cancel_when_nothing_runs_is_200_and_stale_flag_is_cleared
 
 
 # ---------------------------------------------------------------------------
-# Summary  (POST/DELETE /api/result/{id}/summary -> _run_summary)
+# Summary  (POST/DELETE /api/result/{id}/summary): since NS-11 stage 3 the endpoint queues the work and the queue
+# worker runs it. These were the background copy's baseline tests; each keeps its name and its meaning, only the way
+# the work is run changed (see the notes on the tests that changed behaviour).
 # ---------------------------------------------------------------------------
 
 def _summary_gate(result=("Sum text.", "single", 1)):
     return Gate(result=result)
 
 
+async def _summary_item():
+    """The queue item the POST created (stages ['summary']), or None."""
+    from models.database import AsyncSessionLocal
+    from services import queue_service as q
+    async with AsyncSessionLocal() as db:
+        items = [i for i in await q.get_queue(db) if i["video_id"] == VIDEO_ID and i["pipeline_stages"] == ["summary"]]
+    return items[-1] if items else None
+
+
+async def _post_summary_and_run(client):
+    from tests.baseline_helpers import run_worker
+    r = await client.post(f"{URL}/summary")
+    item = await _summary_item()
+    if item is not None:
+        await run_worker([item["id"]])
+    return r, item
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _clean_queue_for_summary(client):
+    from tests.baseline_helpers import reset_queue
+    await reset_queue()
+    yield
+    await reset_queue()
+
+
 async def test_summary_success_writes_everything_and_benchmark_row(client, seeded_video):
     gate = _summary_gate(("Sum text.", "map_reduce", 4))
     gate.release.set()
-    with patch("routers.result.summarize_text", gate.llm()):
-        r = await client.post(f"{URL}/summary")
+    with patch("services.text_summarizer.summarize_text", gate.llm()):
+        r, item = await _post_summary_and_run(client)
     assert r.status_code == 200 and r.json() == {"status": "processing"}
     row = await fmt_row()
     assert row["summary_status"] == "done" and row["summary_text"] == "Sum text."
@@ -197,35 +225,39 @@ async def test_summary_success_writes_everything_and_benchmark_row(client, seede
 async def test_summary_source_is_cleaned_text_when_present_else_formatted(client, seeded_video):
     gate = _summary_gate()
     gate.release.set()
-    with patch("routers.result.summarize_text", gate.llm()):
-        await client.post(f"{URL}/summary")
+    with patch("services.text_summarizer.summarize_text", gate.llm()):
+        await _post_summary_and_run(client)
     assert gate.calls[0]["args"][0].startswith("Привет всем.")  # formatted text, no cleanup yet
     await set_fmt(cleaned_text="CLEANED SOURCE", cleanup_status="done")
     gate2 = _summary_gate()
     gate2.release.set()
-    with patch("routers.result.summarize_text", gate2.llm()):
-        await client.post(f"{URL}/summary")
+    with patch("services.text_summarizer.summarize_text", gate2.llm()):
+        await _post_summary_and_run(client)
     assert gate2.calls[0]["args"][0] == "CLEANED SOURCE"
 
 
 async def test_summary_runs_without_cleanup_no_server_side_confirmation(client, seeded_video):
     gate = _summary_gate()
     gate.release.set()
-    with patch("routers.result.summarize_text", gate.llm()):
-        r = await client.post(f"{URL}/summary")
+    with patch("services.text_summarizer.summarize_text", gate.llm()):
+        r, item = await _post_summary_and_run(client)
     assert r.status_code == 200
     assert (await fmt_row())["cleanup_status"] is None
 
 
 async def test_summary_during_run_status_and_chunk_progress(client, seeded_video):
+    from tests.baseline_helpers import run_worker
     gate = Gate(result=("S", "single", 1), progress=(1, 4))
-    with patch("routers.result.summarize_text", gate.llm()):
-        task = await _run_blocked(client, "post", f"{URL}/summary", gate)
+    with patch("services.text_summarizer.summarize_text", gate.llm()):
+        await client.post(f"{URL}/summary")
+        item = await _summary_item()
+        worker = asyncio.create_task(run_worker([item["id"]]))
+        await gate.wait_started()
         assert (await fmt_row())["summary_status"] == "processing"
         data = (await client.get(URL)).json()
         assert data["summary_chunks_done"] == 1 and data["summary_chunks_total"] == 4
         gate.release.set()
-        await task
+        await worker
 
 
 async def test_summary_without_model_400_without_ollama_400_unknown_video_404(client, seeded_video):
@@ -236,16 +268,21 @@ async def test_summary_without_model_400_without_ollama_400_unknown_video_404(cl
     assert (await client.post(f"{URL}/summary")).status_code == 400
     await client.put("/api/settings/app", json={"ollama_url": "http://localhost:11434"})
     assert (await client.post("/api/result/nope-nope/summary")).status_code == 404
+    assert await _summary_item() is None                       # none of the refused requests queued anything
 
 
 async def test_summary_cancel_resets_status_to_null_and_keeps_previous_summary(client, seeded_video):
+    from tests.baseline_helpers import run_worker
     await set_fmt(summary_text="OLD SUMMARY", summary_status="done", summary_model="old")
     gate = _summary_gate(("NEW", "single", 1))
-    with patch("routers.result.summarize_text", gate.llm()):
-        task = await _run_blocked(client, "post", f"{URL}/summary", gate)
+    with patch("services.text_summarizer.summarize_text", gate.llm()):
+        await client.post(f"{URL}/summary")
+        item = await _summary_item()
+        worker = asyncio.create_task(run_worker([item["id"]]))
+        await gate.wait_started()
         assert (await client.delete(f"{URL}/summary")).json() == {"status": "cancelling"}
         gate.release.set()
-        await task
+        await worker
     row = await fmt_row()
     assert row["summary_status"] is None and row["summary_text"] == "OLD SUMMARY"
     assert await benchmark_rows("summary") == []
@@ -254,23 +291,21 @@ async def test_summary_cancel_resets_status_to_null_and_keeps_previous_summary(c
 async def test_summary_empty_result_ends_failed(client, seeded_video):
     gate = _summary_gate(("", "single", 1))
     gate.release.set()
-    with patch("routers.result.summarize_text", gate.llm()):
-        await client.post(f"{URL}/summary")
+    with patch("services.text_summarizer.summarize_text", gate.llm()):
+        await _post_summary_and_run(client)
     assert (await fmt_row())["summary_status"] == "failed"
 
 
-async def test_summary_exception_leaves_status_processing_forever(client, seeded_video):
-    # BASELINE: known bug — _run_summary has no try/except
-    # correct: the status ends 'failed' and the error is reported
+async def test_summary_exception_ends_failed_with_a_message(client, seeded_video):
+    # was: BASELINE known bug — the background copy had no try/except and left the status 'processing' forever.
+    # Fixed by the queue stage (NS-11 stage 3): 'failed' and the error is stored.
     async def boom(*a, **k):
         raise RuntimeError("llm exploded")
 
-    with patch("routers.result.summarize_text", boom):
-        try:
-            await client.post(f"{URL}/summary")
-        except RuntimeError:
-            pass
-    assert (await fmt_row())["summary_status"] == "processing"
+    with patch("services.text_summarizer.summarize_text", boom):
+        await _post_summary_and_run(client)
+    row = await fmt_row()
+    assert row["summary_status"] == "failed" and row["summary_error"] == "llm exploded"
 
 
 async def test_summary_uses_full_extract_for_long_text_with_chapters(client, seeded_video):
@@ -285,9 +320,9 @@ async def test_summary_uses_full_extract_for_long_text_with_chapters(client, see
     extract_gate.release.set()
     plain_gate = _summary_gate()
     plain_gate.release.set()
-    with patch("routers.result.extract_notes", extract_gate.llm()), \
-         patch("routers.result.summarize_text", plain_gate.llm()):
-        await client.post(f"{URL}/summary")
+    with patch("services.text_summarizer.extract_notes", extract_gate.llm()), \
+         patch("services.text_summarizer.summarize_text", plain_gate.llm()):
+        await _post_summary_and_run(client)
     assert len(extract_gate.calls) == 1 and plain_gate.calls == []
     assert (await fmt_row())["summary_mode"] == "full_extract"
 
