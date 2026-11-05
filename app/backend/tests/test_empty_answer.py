@@ -11,7 +11,8 @@ from tests.baseline_helpers import VIDEO_ID, fmt_row, set_fmt
 OLLAMA = "http://localhost:11434"
 TAGS = f"{OLLAMA}/api/tags"
 CHAT = f"{OLLAMA}/api/chat"
-THINKING_MSG = "model returned no answer (thinking used the whole context)"
+THINKING_MSG = ("model returned no answer (thinking used the whole context) — "
+                "raise llm_max_num_ctx or use a model without thinking")
 NOTHING_MSG = "model returned nothing"
 
 
@@ -100,13 +101,125 @@ async def test_mindmap_normal_stream_is_unchanged():
     assert llm_failure_reason() is None
 
 
+def _cleanup_text(n):
+    return "\n\n".join(f"Исходный абзац номер {i}." for i in range(n))
+
+
+def _all_empty(request):
+    return _chat_answer("", thinking="x")
+
+
+def _answers(empty_indexes, thinking=True):
+    """Ollama fake: the paragraph whose text contains 'номер i' for i in empty_indexes gets an empty answer."""
+    def handler(request):
+        user = json.loads(request.content)["messages"][-1]["content"]
+        if any(f"номер {i}." in user for i in empty_indexes):
+            return _chat_answer("", thinking="x" if thinking else None)
+        return _chat_answer("Очищенный абзац.")
+    return handler
+
+
 @respx.mock
-async def test_cleanup_empty_paragraph_answer_still_keeps_the_original_text():
+async def test_cleanup_a_few_empty_answers_keep_the_original_paragraph_and_succeed():
     from services.text_cleaner import clean_text
+    begin_llm_run(None)
     respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
-    respx.post(CHAT).mock(return_value=_chat_answer("", thinking="x"))
-    out = await clean_text("Исходный абзац.", model="m", ollama_url=OLLAMA)
-    assert out == "Исходный абзац."
+    respx.post(CHAT).mock(side_effect=_answers({1}))
+    out = await clean_text(_cleanup_text(5), model="m", ollama_url=OLLAMA)
+    assert out is not None
+    paragraphs = out.split("\n\n")
+    assert "Исходный абзац номер 1." in paragraphs and paragraphs.count("Очищенный абзац.") == 4
+    assert llm_failure_reason() is None
+
+
+@respx.mock
+async def test_cleanup_half_empty_is_still_not_a_failure():
+    from services.text_cleaner import clean_text
+    begin_llm_run(None)
+    respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
+    respx.post(CHAT).mock(side_effect=_answers({0, 1}))  # exactly half of 4
+    assert await clean_text(_cleanup_text(4), model="m", ollama_url=OLLAMA) is not None
+    assert llm_failure_reason() is None
+
+
+@respx.mock
+@pytest.mark.parametrize("n,empty", [(5, {0, 1, 2}), (2, {0, 1}), (1, {0})])
+async def test_cleanup_most_or_all_empty_answers_fail_with_the_specific_reason(n, empty):
+    from services.text_cleaner import clean_text
+    begin_llm_run(None)
+    respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
+    respx.post(CHAT).mock(side_effect=_answers(empty))
+    assert await clean_text(_cleanup_text(n), model="m", ollama_url=OLLAMA) is None
+    assert llm_failure_reason() == THINKING_MSG
+
+
+@respx.mock
+async def test_cleanup_all_empty_without_thinking_says_nothing_returned():
+    from services.text_cleaner import clean_text
+    begin_llm_run(None)
+    respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
+    respx.post(CHAT).mock(side_effect=_answers({0}, thinking=False))
+    assert await clean_text(_cleanup_text(1), model="m", ollama_url=OLLAMA) is None
+    assert llm_failure_reason() == NOTHING_MSG
+
+
+@respx.mock
+async def test_cleanup_run_stores_the_reason_and_the_result_exposes_it(client, seeded_video):
+    await client.put("/api/settings/cleanup", json={"model": "m"})
+    respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
+    respx.post(CHAT).mock(side_effect=_all_empty)
+    await client.post(f"/api/result/{VIDEO_ID}/cleanup")
+    row = await fmt_row()
+    assert row["cleanup_status"] == "failed" and row["cleanup_error"] == THINKING_MSG
+    assert (await client.get(f"/api/result/{VIDEO_ID}")).json()["cleanup_error"] == THINKING_MSG
+
+
+@respx.mock
+async def test_queue_cleanup_stage_stores_the_reason(seeded_video):
+    from services import queue_service as q
+    await set_fmt(cleanup_status=None)
+    respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
+    respx.post(CHAT).mock(side_effect=_all_empty)
+    from httpx import AsyncClient, ASGITransport
+    from main import app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        await c.put("/api/settings/cleanup", json={"model": "m"})
+    await q._run_cleanup_stage(VIDEO_ID, 1)
+    row = await fmt_row()
+    assert row["cleanup_status"] == "failed" and row["cleanup_error"] == THINKING_MSG
+
+
+def _collect_warnings(monkeypatch, module):
+    logged = []
+    monkeypatch.setattr(f"{module}.logger.warning", lambda msg, *a, **k: logged.append(msg % a if a else msg))
+    return logged
+
+
+# --- a non-empty answer that was cut off is only logged -----------------------
+
+@respx.mock
+async def test_truncated_answer_is_logged_but_still_used(monkeypatch):
+    from services.text_summarizer import summarize_text
+    begin_llm_run(None)
+    respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
+    respx.post(CHAT).mock(return_value=httpx.Response(200, json={
+        "message": {"role": "assistant", "content": "Half a summ"}, "done": True, "done_reason": "length"}))
+    logged = _collect_warnings(monkeypatch, "services.text_summarizer")
+    result, mode, _ = await summarize_text("Текст.", model="m", ollama_url=OLLAMA)
+    assert result == "Half a summ" and llm_failure_reason() is None
+    assert any("cut off" in m and "llm_max_num_ctx" in m for m in logged)
+
+
+@respx.mock
+async def test_truncated_mindmap_is_logged_but_still_used(monkeypatch):
+    from services.text_mindmapper import generate_mindmap
+    begin_llm_run(None)
+    respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
+    body = json.dumps({"message": {"content": "# Root"}, "done": True, "done_reason": "length"}) + "\n"
+    respx.post(CHAT).mock(return_value=httpx.Response(200, content=body.encode()))
+    logged = _collect_warnings(monkeypatch, "services.text_mindmapper")
+    assert await generate_mindmap("Текст.", OLLAMA, "m", "Russian") == "# Root"
+    assert any("cut off" in m for m in logged)
 
 
 # --- stored on the result and shown by the API -------------------------------

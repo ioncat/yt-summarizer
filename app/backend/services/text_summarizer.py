@@ -187,13 +187,17 @@ async def _call_ollama(
             timeout=timeout,
         )
         response.raise_for_status()
-        message = response.json()["message"]
+        data = response.json()
+        message = data["message"]
         content = (message.get("content") or "").strip()
         if not content:
             reason = empty_answer_message(bool((message.get("thinking") or "").strip()))
             logger.warning("_call_ollama: %s (model=%s)", reason, model)
             record_failure_reason(reason)
             return None
+        if data.get("done_reason") == "length":
+            logger.warning("_call_ollama: the answer was cut off (done_reason=length, model=%s) — "
+                           "raise llm_max_num_ctx or use a model without thinking", model)
         return content
     except Exception as exc:
         logger.warning("_call_ollama failed: [%s] %s", type(exc).__name__, exc)

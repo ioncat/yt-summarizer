@@ -81,6 +81,7 @@ async def generate_mindmap(
             chunks: list[str] = []
             token_count = 0
             saw_thinking = False
+            done_reason = None
             async with client.stream("POST", f"{ollama_url}/api/chat", json=payload) as resp:
                 resp.raise_for_status()
                 logger.info("[mindmapper] stream connected, reading tokens...")
@@ -101,6 +102,7 @@ async def generate_mindmap(
                         chunks.append(token)
                         token_count += 1
                     if data.get("done"):
+                        done_reason = data.get("done_reason")
                         logger.info("[mindmapper] stream done, %d tokens received", token_count)
                         break
 
@@ -111,6 +113,9 @@ async def generate_mindmap(
                 logger.warning("[mindmapper] %s", reason)
                 record_failure_reason(reason)
                 return None
+            if done_reason == "length":
+                logger.warning("[mindmapper] the answer was cut off (done_reason=length) — "
+                               "raise llm_max_num_ctx or use a model without thinking")
             return content
     except Exception as e:
         logger.error("[mindmapper] exception: %s", e, exc_info=True)

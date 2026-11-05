@@ -7,7 +7,7 @@ from typing import Callable, Optional
 
 import httpx
 
-from .ollama_options import build_options, empty_answer_message
+from .ollama_options import build_options, empty_answer_message, record_failure_reason
 
 logger = logging.getLogger(__name__)
 
@@ -80,10 +80,13 @@ async def _clean_paragraph(
     user_prompt_template: str,
     model: str,
     ollama_url: str,
+    stats: dict | None = None,
 ) -> str:
     """Send one paragraph to Ollama. Returns the original text on any failure."""
     if not text.strip():
         return text
+    if stats is not None:
+        stats["sent"] += 1
     try:
         response = await client.post(
             f"{ollama_url}/api/chat",
@@ -108,9 +111,15 @@ async def _clean_paragraph(
         message = response.json()["message"]
         cleaned = (message.get("content") or "").strip()
         if not cleaned:
+            has_thinking = bool((message.get("thinking") or "").strip())
             logger.warning("Ollama gave no cleanup text for a paragraph: %s — keeping the original",
-                           empty_answer_message(bool((message.get("thinking") or "").strip())))
+                           empty_answer_message(has_thinking))
+            if stats is not None:
+                stats["empty"] += 1
+                stats["thinking"] = stats["thinking"] or has_thinking
             return text
+        if response.json().get("done_reason") == "length":
+            logger.warning("Ollama cut a cleanup answer off (done_reason=length, model=%s)", model)
         # Normalize whitespace: collapse any internal newlines (single \n,
         # multiple \n) to a single space, then collapse runs of spaces.
         # Cleanup output is meant to be flowing prose within one paragraph;
@@ -165,6 +174,7 @@ async def clean_text(
 
             sem = asyncio.Semaphore(workers)
             completed = 0
+            stats = {"sent": 0, "empty": 0, "thinking": False}
 
             async def _process(idx: int, p: str) -> tuple[int, str | None]:
                 nonlocal completed
@@ -176,7 +186,7 @@ async def clean_text(
                         result = p
                     else:
                         result = await _clean_paragraph(
-                            client, p, effective_system, effective_user, model, ollama_url
+                            client, p, effective_system, effective_user, model, ollama_url, stats
                         )
                     completed += 1
                     if on_progress:
@@ -188,6 +198,14 @@ async def clean_text(
 
             if is_cancelled and is_cancelled():
                 logger.info("Cleanup cancelled mid-run.")
+                return None
+
+            # Mostly empty answers: the model could not clean anything — a failed stage, not a silent "done".
+            # A few empty paragraphs among many keep their original text (warning logged above).
+            if stats["sent"] and stats["empty"] * 2 > stats["sent"]:
+                logger.warning("clean_text: %d of %d paragraphs got an empty answer — cleanup failed",
+                               stats["empty"], stats["sent"])
+                record_failure_reason(empty_answer_message(stats["thinking"]))
                 return None
 
             # Sort by index, drop None and exceptions (fallback handled per-paragraph in _clean_paragraph)

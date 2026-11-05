@@ -133,7 +133,7 @@ async def _run_cleanup(video_id: str) -> None:
             _CANCEL_SET.discard(video_id)
             await reset_cleanup_status(db, video_id)
         else:
-            await finish_cleanup(db, video_id, cleaned, started_at=started_at)
+            await finish_cleanup(db, video_id, cleaned, started_at=started_at, error=llm_failure_reason())
 
 
 @router.post("/result/{video_id}/cleanup")

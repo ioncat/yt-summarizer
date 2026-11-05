@@ -26,18 +26,23 @@ MIN_NUM_CTX = 4096
 CHARS_PER_TOKEN = 3
 DEFAULT_RESERVE_TOKENS = 4096
 _BUCKETS = (4096, 8192, 16384, 32768, 65536)
+MAX_NUM_CTX = max(_BUCKETS)  # upper bound of any cap, 65536
 
 _max_num_ctx: ContextVar[int] = ContextVar("llm_max_num_ctx", default=DEFAULT_MAX_NUM_CTX)
 _failure_reason: ContextVar[list | None] = ContextVar("llm_failure_reason", default=None)
 
 
+def clamp_num_ctx(n: int) -> int:
+    return max(MIN_NUM_CTX, min(MAX_NUM_CTX, n))
+
+
 def parse_max_num_ctx(value: str | int | None) -> int:
-    """Setting value -> cap. Anything unusable falls back to the default."""
+    """Setting value -> cap, clamped to 4096..65536. A value that is not a number gives the default."""
     try:
         n = int(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return DEFAULT_MAX_NUM_CTX
-    return n if n >= MIN_NUM_CTX else DEFAULT_MAX_NUM_CTX
+    return clamp_num_ctx(n)
 
 
 @contextmanager
@@ -75,7 +80,8 @@ def llm_failure_reason() -> str | None:
 
 def empty_answer_message(has_thinking: bool) -> str:
     if has_thinking:
-        return "model returned no answer (thinking used the whole context)"
+        return ("model returned no answer (thinking used the whole context) — "
+                "raise llm_max_num_ctx or use a model without thinking")
     return "model returned nothing"
 
 
@@ -84,7 +90,7 @@ def estimate_tokens(*texts: str) -> int:
 
 
 def compute_num_ctx(*texts: str, reserve_tokens: int = DEFAULT_RESERVE_TOKENS, max_ctx: int | None = None) -> int:
-    cap = max_ctx if max_ctx is not None else _max_num_ctx.get()
+    cap = clamp_num_ctx(max_ctx) if max_ctx is not None else _max_num_ctx.get()
     prompt_tokens = estimate_tokens(*texts)
     needed = prompt_tokens + reserve_tokens + prompt_tokens // 4
     for size in _BUCKETS:
@@ -97,7 +103,7 @@ def build_options(*texts: str, reserve_tokens: int = DEFAULT_RESERVE_TOKENS, max
                   **options) -> dict:
     """Ollama `options` dict: the given options plus a `num_ctx` sized to the prompt `texts`."""
     num_ctx = compute_num_ctx(*texts, reserve_tokens=reserve_tokens, max_ctx=max_ctx)
-    cap = max_ctx if max_ctx is not None else _max_num_ctx.get()
+    cap = clamp_num_ctx(max_ctx) if max_ctx is not None else _max_num_ctx.get()
     if estimate_tokens(*texts) + reserve_tokens > cap:
         logger.warning("prompt of ~%d tokens does not leave room for the answer in num_ctx cap %d",
                        estimate_tokens(*texts), cap)

@@ -6,7 +6,8 @@ import pytest
 import respx
 
 from services.ollama_options import (
-    DEFAULT_MAX_NUM_CTX, apply_max_num_ctx, build_options, compute_num_ctx, llm_scope, parse_max_num_ctx,
+    DEFAULT_MAX_NUM_CTX, MAX_NUM_CTX, MIN_NUM_CTX, apply_max_num_ctx, build_options, compute_num_ctx, llm_scope,
+    parse_max_num_ctx,
 )
 
 OLLAMA = "http://localhost:11434"
@@ -35,11 +36,27 @@ def test_cap_is_respected_and_bad_values_fall_back():
     assert compute_num_ctx("x" * 40_000, max_ctx=16384) == 16384
     assert compute_num_ctx("x" * 80_000, max_ctx=65536) == 65536
     assert parse_max_num_ctx("8192") == 8192
-    for bad in (None, "", "abc", "100", 0):
-        assert parse_max_num_ctx(bad) == DEFAULT_MAX_NUM_CTX
+    for not_a_number in (None, "", "abc"):
+        assert parse_max_num_ctx(not_a_number) == DEFAULT_MAX_NUM_CTX
     with llm_scope("8192"):
         assert compute_num_ctx("x" * 40_000) == 8192
     assert compute_num_ctx("x" * 40_000) == 32768       # scope restored
+
+
+def test_cap_is_clamped_to_4096_at_the_bottom_and_65536_at_the_top():
+    assert MIN_NUM_CTX == 4096 and MAX_NUM_CTX == 65536
+    for low in ("100", 0, "-5", "4095"):
+        assert parse_max_num_ctx(low) == 4096
+    for high in ("131072", 1_000_000, "65537"):
+        assert parse_max_num_ctx(high) == 65536
+    assert parse_max_num_ctx("65536") == 65536 and parse_max_num_ctx("4096") == 4096
+    # an explicit max_ctx is clamped the same way, so compute_num_ctx never returns a huge cap
+    assert compute_num_ctx("x" * 900_000, max_ctx=1_000_000) == 65536
+    assert compute_num_ctx("x" * 900_000, max_ctx=100) == 4096
+    with llm_scope("999999"):
+        assert compute_num_ctx("x" * 900_000) == 65536
+    with llm_scope("10"):
+        assert compute_num_ctx("x" * 900_000) == 4096
 
 
 def test_small_reserve_keeps_cleanup_paragraphs_at_4k():
@@ -119,7 +136,7 @@ async def test_mindmap_stream_request_sends_num_ctx():
 
 
 @respx.mock
-async def test_chat_proxy_sizes_num_ctx_and_is_capped_by_chat_num_ctx(client):
+async def test_chat_proxy_keeps_chat_num_ctx_as_a_floor_and_only_grows_above_it(client):
     seen = []
 
     def handler(request):
@@ -127,13 +144,21 @@ async def test_chat_proxy_sizes_num_ctx_and_is_capped_by_chat_num_ctx(client):
         return httpx.Response(200, content=b'{"message":{"content":"hi"},"done":true}\n')
 
     respx.post(CHAT).mock(side_effect=handler)
-    msgs = [{"role": "user", "content": LONG_TEXT}]
+    short = [{"role": "user", "content": "Привет"}]
+    long_ = [{"role": "user", "content": LONG_TEXT}]          # computed size 16384
+    huge = [{"role": "user", "content": "x" * 120_000}]       # computed size 65536
     await client.put("/api/settings/app", json={"chat_num_ctx": "32768"})
-    await client.post("/api/chat", json={"model": "m", "messages": msgs})
-    assert seen[-1]["options"]["num_ctx"] == 16384
+    await client.post("/api/chat", json={"model": "m", "messages": short})
+    assert seen[-1]["options"]["num_ctx"] == 32768              # short chat: the old fixed value
+    await client.post("/api/chat", json={"model": "m", "messages": long_})
+    assert seen[-1]["options"]["num_ctx"] == 32768              # bucket changes inside the floor: no reload
+    await client.post("/api/chat", json={"model": "m", "messages": huge})
+    assert seen[-1]["options"]["num_ctx"] == 65536              # grows above the floor
     await client.put("/api/settings/app", json={"chat_num_ctx": "8192"})
-    await client.post("/api/chat", json={"model": "m", "messages": msgs})
+    await client.post("/api/chat", json={"model": "m", "messages": short})
     assert seen[-1]["options"]["num_ctx"] == 8192
+    await client.post("/api/chat", json={"model": "m", "messages": long_})
+    assert seen[-1]["options"]["num_ctx"] == 16384              # computed value above a small floor
     await client.put("/api/settings/app", json={"chat_num_ctx": "32768"})
 
 

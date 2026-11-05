@@ -366,11 +366,11 @@ async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
         )
 
         async with AsyncSessionLocal() as db:
-            await finish_cleanup(db, yt_video_id, cleaned, started_at=started_at)
+            await finish_cleanup(db, yt_video_id, cleaned, started_at=started_at, error=llm_failure_reason())
     except Exception as exc:
         logger.exception("Queue cleanup: stage failed for %s", yt_video_id)
         async with AsyncSessionLocal() as db:
-            await fail_cleanup_stage(db, yt_video_id, error=str(exc)[:500])
+            await fail_cleanup_stage(db, yt_video_id, error=llm_failure_reason() or str(exc)[:500])
         raise
 
 

@@ -216,6 +216,19 @@ describe('ResultPage', () => {
     expect(screen.queryByText(/Possible causes: Ollama not running/)).toBeNull()
   })
 
+  it('failed cleanup shows the stored reason; without one the generic text stays', async () => {
+    setResult({ cleanup_status: 'failed', cleanup_error: 'model returned nothing' })
+    await renderPage()
+    fireEvent.click(btn('Cleaned'))
+    expect(screen.getByText('model returned nothing')).toBeTruthy()
+    expect(screen.queryByText(/Possible causes: Ollama not running/)).toBeNull()
+    cleanup()
+    setResult({ cleanup_status: 'failed', cleanup_error: null })
+    await renderPage()
+    fireEvent.click(btn('Cleaned'))
+    expect(screen.getByText(/Possible causes: Ollama not running/)).toBeTruthy()
+  })
+
   it('failed summary without a stored reason keeps the generic text', async () => {
     setResult({ summary_status: 'failed', summary_error: null })
     await renderPage()
