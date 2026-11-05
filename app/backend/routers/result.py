@@ -19,7 +19,9 @@ from starlette.background import BackgroundTask
 from models.database import get_db
 from services.subtitle_extractor import extract_subtitles, extract_video_id, validate_youtube_url, _ytdlp_cmd
 from services.text_cleaner import clean_text
-from services.stage_control import MINDMAP_CANCEL, SUMMARY_CANCEL, SUMMARY_PROGRESS
+from services.stage_control import (
+    CLEANUP_CANCEL, CLEANUP_PROGRESS, MINDMAP_CANCEL, SUMMARY_CANCEL, SUMMARY_PROGRESS,
+)
 from services.video_service import (
     delete_video,
     finish_cleanup,
@@ -47,12 +49,12 @@ _reextract_logger = logging.getLogger("api.reextract")
 router = APIRouter()
 
 # In-memory cancel flags — cleared when cleanup/summary finishes or is cancelled
-_CANCEL_SET: set[str] = set()
+_CANCEL_SET = CLEANUP_CANCEL  # the cleanup flag, shared with the queue worker (services/stage_control.py)
 _SUMMARY_CANCEL_SET = SUMMARY_CANCEL  # shared with the queue worker (services/stage_control.py)
 _MINDMAP_CANCEL_SET = MINDMAP_CANCEL  # shared with the queue worker (services/stage_control.py): the same set object
 
 # In-memory progress: {video_id: {"done": int, "total": int}}
-_CLEANUP_PROGRESS: dict[str, dict] = {}
+_CLEANUP_PROGRESS = CLEANUP_PROGRESS  # same dict object as in services/stage_control.py
 _SUMMARY_PROGRESS = SUMMARY_PROGRESS  # same dict object as in services/stage_control.py
 # Videos currently being re-extracted (set of video_id)
 _REEXTRACT_SET: set[str] = set()

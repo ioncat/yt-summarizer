@@ -73,9 +73,10 @@ async def test_queue_cleanup_success_writes_same_fields_as_background_copy(seede
     assert len(bench) == 1 and bench[0]["triggered_by"] == "main"
 
 
-async def test_queue_cleanup_cannot_be_cancelled_flag_is_ignored(seeded_video):
-    # BASELINE: known gap — is_cancelled is a constant False; the Stop button's flag is never read
-    # correct: a cancel request stops the queue stage and resets the status to NULL like the BG copy
+async def test_queue_cleanup_ignores_a_stale_cancel_flag_set_before_it_starts(seeded_video):
+    # was: BASELINE known gap — is_cancelled was a constant False and the Stop flag was never read.
+    # NS-11 stage 4a (decision 1): the stage reads the flag and Stop works (see test_cleanup_queue_stage.py); a flag that
+    # was set before the stage started is stale (nothing was running) and is cleared, it must not stop a new run.
     from routers import result as res
     res._CANCEL_SET.add(VIDEO_ID)
     gate = Gate(result="Cleaned text.")

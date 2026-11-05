@@ -20,7 +20,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.database import AsyncSessionLocal
 from services.ollama_options import begin_llm_run, llm_failure_reason
 from services.queue_by_id import STAGE_COLUMNS, release_stage_status
-from services.stage_control import MINDMAP_CANCEL, SUMMARY_CANCEL, SUMMARY_PROGRESS, StageCancelled
+from services.stage_control import (
+    CLEANUP_CANCEL, CLEANUP_PROGRESS, MINDMAP_CANCEL, SUMMARY_CANCEL, SUMMARY_PROGRESS, StageCancelled,
+)
 
 logger = logging.getLogger("queue_service")
 
@@ -434,7 +436,7 @@ async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
     from services.text_cleaner import clean_text
     from services.video_service import (
         get_result, get_stage_settings, get_app_setting,
-        set_cleanup_processing, finish_cleanup, fail_cleanup_stage,
+        set_cleanup_processing, finish_cleanup, fail_cleanup_stage, reset_cleanup_status,
     )
 
     try:
@@ -456,7 +458,9 @@ async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
 
         def on_cleanup_progress(done: int, total: int) -> None:
             _QUEUE_PROGRESS[item_id] = f"cleanup: paragraph {done}/{total}"
+            CLEANUP_PROGRESS[yt_video_id] = {"done": done, "total": total}  # what the result page shows
 
+        CLEANUP_CANCEL.discard(yt_video_id)  # a flag left over from an earlier run must not stop this one
         started_at = _dt.utcnow()
         cleaned = await clean_text(
             formatted_text,
@@ -464,10 +468,19 @@ async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
             user_prompt_template=stage.get("user_prompt_template"),
             model=model,
             ollama_url=ollama_url,
-            is_cancelled=lambda: False,
+            is_cancelled=lambda: yt_video_id in CLEANUP_CANCEL,
             on_progress=on_cleanup_progress,
             parallel_workers=parallel_workers,
         )
+
+        CLEANUP_PROGRESS.pop(yt_video_id, None)
+        if yt_video_id in CLEANUP_CANCEL:
+            # Stop pressed (NS-11 decision 1, as in the background copy): the status is reset, the previous cleaned text
+            # and its details are kept, and no benchmark row is written
+            CLEANUP_CANCEL.discard(yt_video_id)
+            async with AsyncSessionLocal() as db:
+                await reset_cleanup_status(db, yt_video_id)
+            raise StageCancelled("Cleanup cancelled")
 
         async with AsyncSessionLocal() as db:
             await finish_cleanup(
@@ -475,6 +488,8 @@ async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
                 error=llm_failure_reason() or (
                     None if cleaned else "No cleaned text was produced: Ollama may be unreachable, or the model returned nothing"),
             )
+    except StageCancelled:
+        raise
     except Exception as exc:
         logger.exception("Queue cleanup: stage failed for %s", yt_video_id)
         # a StageFailure's own message first: the reason box of an earlier stage must not leak into it
@@ -482,6 +497,8 @@ async def _run_cleanup_stage(yt_video_id: str, item_id: int) -> None:
         async with AsyncSessionLocal() as db:
             await fail_cleanup_stage(db, yt_video_id, error=reason)
         raise
+    finally:
+        CLEANUP_PROGRESS.pop(yt_video_id, None)  # on every way out: the page must not show a finished run's counters
 
 
 async def _run_summary_stage(yt_video_id: str, item_id: int) -> None:
