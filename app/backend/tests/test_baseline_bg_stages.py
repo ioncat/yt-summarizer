@@ -51,14 +51,42 @@ async def _run_blocked(client, method, url, gate, **kw):
 
 
 # ---------------------------------------------------------------------------
-# Cleanup  (POST/DELETE /api/result/{id}/cleanup -> _run_cleanup)
+# Cleanup  (POST/DELETE /api/result/{id}/cleanup): since NS-11 stage 4a the endpoint queues the work and the queue
+# worker runs it. These were the background copy's baseline tests; each keeps its name and its meaning, only the way
+# the work is run changed (see the notes on the tests that changed behaviour).
 # ---------------------------------------------------------------------------
+
+async def _cleanup_item():
+    """The queue item the POST created (stages ['cleanup']), or None."""
+    from models.database import AsyncSessionLocal
+    from services import queue_service as q
+    async with AsyncSessionLocal() as db:
+        items = [i for i in await q.get_queue(db) if i["video_id"] == VIDEO_ID and i["pipeline_stages"] == ["cleanup"]]
+    return items[-1] if items else None
+
+
+async def _post_cleanup_and_run(client):
+    from tests.baseline_helpers import run_worker
+    r = await client.post(f"{URL}/cleanup")
+    item = await _cleanup_item()
+    if item is not None:
+        await run_worker([item["id"]])
+    return r, item
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _clean_queue_for_cleanup(client):
+    from tests.baseline_helpers import reset_queue
+    await reset_queue()
+    yield
+    await reset_queue()
+
 
 async def test_cleanup_success_writes_status_text_model_timestamps_and_benchmark_row(client, seeded_video):
     gate = Gate(result="Cleaned text.")
     gate.release.set()
-    with patch("routers.result.clean_text", gate.llm()):
-        r = await client.post(f"{URL}/cleanup")
+    with patch("services.text_cleaner.clean_text", gate.llm()):
+        r, item = await _post_cleanup_and_run(client)
     assert r.status_code == 200 and r.json() == {"status": "processing"}
     row = await fmt_row()
     assert row["cleanup_status"] == "done"
@@ -73,15 +101,19 @@ async def test_cleanup_success_writes_status_text_model_timestamps_and_benchmark
 
 
 async def test_cleanup_during_run_status_processing_and_progress_visible_in_result(client, seeded_video):
+    from tests.baseline_helpers import run_worker
     gate = Gate(progress=(2, 5))
-    with patch("routers.result.clean_text", gate.llm()):
-        task = await _run_blocked(client, "post", f"{URL}/cleanup", gate)
+    with patch("services.text_cleaner.clean_text", gate.llm()):
+        await client.post(f"{URL}/cleanup")
+        item = await _cleanup_item()
+        worker = asyncio.create_task(run_worker([item["id"]]))
+        await gate.wait_started()
         row = await fmt_row()
         assert row["cleanup_status"] == "processing" and row["cleanup_model"] == "m-clean"
         data = (await client.get(URL)).json()
         assert data["cleanup_paragraphs_done"] == 2 and data["cleanup_paragraphs_total"] == 5
         gate.release.set()
-        await task
+        await worker
     data = (await client.get(URL)).json()
     assert "cleanup_paragraphs_done" not in data  # progress dict cleared when the run ends
 
@@ -90,13 +122,14 @@ async def test_cleanup_without_model_is_rejected_400(client, seeded_video):
     await client.put("/api/settings/cleanup", json={"model": None})
     r = await client.post(f"{URL}/cleanup")
     assert r.status_code == 400
-    assert (await fmt_row())["cleanup_status"] is None
+    assert (await fmt_row())["cleanup_status"] is None and await _cleanup_item() is None   # nothing queued
 
 
 async def test_cleanup_without_ollama_url_is_rejected_400(client, seeded_video):
     await client.put("/api/settings/app", json={"ollama_url": None})
     r = await client.post(f"{URL}/cleanup")
     assert r.status_code == 400
+    assert await _cleanup_item() is None
 
 
 async def test_cleanup_unknown_video_is_404(client):
@@ -105,15 +138,19 @@ async def test_cleanup_unknown_video_is_404(client):
 
 
 async def test_cleanup_cancel_resets_status_to_null_and_keeps_previous_text(client, seeded_video):
+    from tests.baseline_helpers import run_worker
     await set_fmt(cleaned_text="OLD CLEANED", cleanup_status="done", cleanup_model="old-model")
     gate = Gate(result="NEW CLEANED")
-    with patch("routers.result.clean_text", gate.llm()):
-        task = await _run_blocked(client, "post", f"{URL}/cleanup", gate)
+    with patch("services.text_cleaner.clean_text", gate.llm()):
+        await client.post(f"{URL}/cleanup")
+        item = await _cleanup_item()
+        worker = asyncio.create_task(run_worker([item["id"]]))
+        await gate.wait_started()
         r = await client.delete(f"{URL}/cleanup")
         assert r.status_code == 200 and r.json() == {"status": "cancelling"}
         assert (await fmt_row())["cleanup_status"] == "processing"  # nothing stops until the fake returns
         gate.release.set()
-        await task
+        await worker
     row = await fmt_row()
     assert row["cleanup_status"] is None
     assert row["cleaned_text"] == "OLD CLEANED"
@@ -123,50 +160,47 @@ async def test_cleanup_cancel_resets_status_to_null_and_keeps_previous_text(clie
 async def test_cleanup_empty_llm_result_ends_failed(client, seeded_video):
     gate = Gate(result=None)
     gate.release.set()
-    with patch("routers.result.clean_text", gate.llm()):
-        r = await client.post(f"{URL}/cleanup")
+    with patch("services.text_cleaner.clean_text", gate.llm()):
+        r, item = await _post_cleanup_and_run(client)
     assert r.status_code == 200
     row = await fmt_row()
     assert row["cleanup_status"] == "failed" and row["cleaned_text"] is None
 
 
-async def test_cleanup_exception_leaves_status_processing_forever(client, seeded_video):
-    # BASELINE: known bug — _run_cleanup has no try/except, a crash leaves 'processing'
-    # correct: the status ends 'failed' (as the queue copy does) and the error is reported
+async def test_cleanup_exception_ends_failed_with_a_message(client, seeded_video):
+    # was: BASELINE known bug — the background copy had no try/except and left the status 'processing' forever.
+    # Fixed by the queue stage (NS-11 stage 4a): 'failed' and the error is stored.
     async def boom(*a, **k):
         raise RuntimeError("llm exploded")
 
-    with patch("routers.result.clean_text", boom):
-        try:
-            await client.post(f"{URL}/cleanup")
-        except RuntimeError:
-            pass  # the background-task exception surfaces through the ASGI transport
-    assert (await fmt_row())["cleanup_status"] == "processing"
+    with patch("services.text_cleaner.clean_text", boom):
+        await _post_cleanup_and_run(client)
+    row = await fmt_row()
+    assert row["cleanup_status"] == "failed" and row["cleanup_error"] == "llm exploded"
 
 
-async def test_cleanup_second_request_while_running_starts_a_second_concurrent_run(client, seeded_video):
-    # BASELINE: known bug — no guard against a second run of the same stage
-    # correct: the second request is refused (409) or joins the run in progress; one run at a time
-    gate = Gate()
-    with patch("routers.result.clean_text", gate.llm()):
-        t1 = await _run_blocked(client, "post", f"{URL}/cleanup", gate)
-        t2 = asyncio.create_task(client.post(f"{URL}/cleanup"))
-        await asyncio.sleep(0.2)
-        assert len(gate.calls) == 2
-        gate.release.set()
-        r1, r2 = await asyncio.gather(t1, t2)
-    assert r1.status_code == 200 and r2.status_code == 200
+async def test_cleanup_second_request_while_queued_or_running_is_not_started_twice(client, seeded_video):
+    # was: BASELINE known bug — no guard against a second run of the same stage (two concurrent runs).
+    # NS-11 stage 4a: one statement checks and inserts, so a second request adds nothing; one run at a time.
+    r1 = await client.post(f"{URL}/cleanup")
+    r2 = await client.post(f"{URL}/cleanup")
+    assert r1.status_code == 200 and r2.status_code == 200 and r2.json() == {"status": "processing"}
+    from models.database import AsyncSessionLocal
+    from services import queue_service as q
+    async with AsyncSessionLocal() as db:
+        assert len([i for i in await q.get_queue(db) if i["video_id"] == VIDEO_ID]) == 1
 
 
-async def test_cleanup_cancel_when_nothing_runs_is_200_and_stale_flag_is_cleared_by_next_start(client, seeded_video):
+async def test_cleanup_cancel_when_nothing_runs_is_200_and_leaves_no_stale_flag(client, seeded_video):
+    # was: the background copy left a stale flag that the next start cleared; now nothing is set when nothing runs.
     from routers import result as res
     r = await client.delete(f"{URL}/cleanup")
     assert r.status_code == 200 and r.json() == {"status": "cancelling"}
-    assert VIDEO_ID in res._CANCEL_SET
+    assert VIDEO_ID not in res._CANCEL_SET
     gate = Gate(result="Fresh.")
     gate.release.set()
-    with patch("routers.result.clean_text", gate.llm()):
-        await client.post(f"{URL}/cleanup")
+    with patch("services.text_cleaner.clean_text", gate.llm()):
+        await _post_cleanup_and_run(client)
     assert (await fmt_row())["cleanup_status"] == "done"
     assert VIDEO_ID not in res._CANCEL_SET
 

@@ -138,9 +138,14 @@ async def _run_cleanup(video_id: str) -> None:
 @router.post("/result/{video_id}/cleanup")
 async def trigger_cleanup(
     video_id: str,
-    background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    """Queue the AI cleanup. The status is 'processing' at once (the page shows progress while the item waits its turn
+    behind the queue); the queue worker does the work. A second click while one is queued or running adds nothing
+    (NS-11 stage 4a)."""
+    from services.db_retry import retry_locked
+    from services.queue_by_id import enqueue_stage
+
     stage = await get_stage_settings(db, "cleanup")
     if not stage.get("model"):
         raise HTTPException(
@@ -153,18 +158,26 @@ async def trigger_cleanup(
             status_code=400,
             detail="Ollama URL not configured. Please set it in Settings → General."
         )
-    ok = await set_cleanup_processing(db, video_id, model=stage.get("model"))
-    if not ok:
+    if not await get_result(db, video_id):
         raise HTTPException(status_code=404, detail="Result not found")
     _CANCEL_SET.discard(video_id)  # clear any stale cancel flag before starting
-    background_tasks.add_task(_run_cleanup, video_id)
+    # queue first: if the database is busy nothing has changed (503); the status is set right after, and again by the
+    # stage itself when it starts
+    await retry_locked(lambda: enqueue_stage(db, video_id, "cleanup"), db, "cleanup: queue")
+    await set_cleanup_processing(db, video_id, model=stage.get("model"))
     return {"status": "processing"}
 
 
 @router.delete("/result/{video_id}/cleanup")
-async def cancel_cleanup(video_id: str):
-    """Signal a running cleanup to stop. Status resets to null after current paragraph."""
-    _CANCEL_SET.add(video_id)
+async def cancel_cleanup(video_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Stop the cleanup: a queued one is taken out of the queue, a running one is told to stop (it ends after the
+    paragraph in hand). Either way the status goes back to "nothing running" and a previous cleaned text is kept."""
+    from services.queue_by_id import dequeue_pending_stage, has_processing_item
+
+    if await dequeue_pending_stage(db, video_id, "cleanup"):
+        await reset_cleanup_status(db, video_id)  # it never started: nothing else will reset the status
+    if await has_processing_item(db, video_id):
+        _CANCEL_SET.add(video_id)                 # the worker is on this video: its cleanup stage polls the flag
     return {"status": "cancelling"}
 
 

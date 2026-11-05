@@ -163,12 +163,22 @@ async def test_cleanup_all_empty_without_thinking_says_nothing_returned():
     assert llm_failure_reason() == NOTHING_MSG
 
 
+@pytest.fixture(autouse=True)
+async def _empty_queue_between_tests(client):
+    from tests.baseline_helpers import reset_queue
+    await reset_queue()
+    yield
+    await reset_queue()
+
+
 @respx.mock
 async def test_cleanup_run_stores_the_reason_and_the_result_exposes_it(client, seeded_video):
     await client.put("/api/settings/cleanup", json={"model": "m"})
     respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
     respx.post(CHAT).mock(side_effect=_all_empty)
     await client.post(f"/api/result/{VIDEO_ID}/cleanup")
+    from tests.baseline_helpers import run_queued_stage
+    await run_queued_stage(VIDEO_ID, "cleanup")  # the queue worker runs it (NS-11 stage 4a)
     row = await fmt_row()
     assert row["cleanup_status"] == "failed" and row["cleanup_error"] == THINKING_MSG
     assert (await client.get(f"/api/result/{VIDEO_ID}")).json()["cleanup_error"] == THINKING_MSG
@@ -180,9 +190,13 @@ async def test_a_successful_second_cleanup_clears_cleanup_error(client, seeded_v
     respx.get(TAGS).mock(return_value=httpx.Response(200, json={"models": []}))
     route = respx.post(CHAT).mock(side_effect=_all_empty)
     await client.post(f"/api/result/{VIDEO_ID}/cleanup")
+    from tests.baseline_helpers import run_queued_stage
+    await run_queued_stage(VIDEO_ID, "cleanup")  # the queue worker runs it (NS-11 stage 4a)
     assert (await fmt_row())["cleanup_error"] == THINKING_MSG
     route.mock(return_value=_chat_answer("Очищенный абзац."))
     await client.post(f"/api/result/{VIDEO_ID}/cleanup")
+    from tests.baseline_helpers import run_queued_stage
+    await run_queued_stage(VIDEO_ID, "cleanup")  # the queue worker runs it (NS-11 stage 4a)
     row = await fmt_row()
     assert row["cleanup_status"] == "done" and row["cleanup_error"] is None
     assert (await client.get(f"/api/result/{VIDEO_ID}")).json()["cleanup_error"] is None
