@@ -87,18 +87,19 @@ async def test_a_known_video_is_still_409_and_queues_nothing(client, seeded_vide
     assert await _items(client) == []
 
 
-async def test_a_burst_of_enqueue_calls_on_a_file_database_inserts_exactly_one_item(tmp_path):
+async def test_a_burst_of_enqueue_calls_on_a_file_database_inserts_exactly_one_item_and_one_run(tmp_path):
     """Real concurrency: separate connections to a database file."""
     import asyncio
     from sqlalchemy.ext.asyncio import AsyncSession
     from sqlalchemy.orm import sessionmaker
     from models.database import create_engine_for
-    from models.models import ProcessingQueueItem
+    from models.models import ProcessingQueueItem, ProcessingStage
     from services.extract_queue import enqueue_extract
 
     engine = create_engine_for(f"sqlite+aiosqlite:///{tmp_path / 'burst.sqlite'}")
     async with engine.begin() as conn:
         await conn.run_sync(lambda c: ProcessingQueueItem.__table__.create(c))
+        await conn.run_sync(lambda c: ProcessingStage.__table__.create(c))
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def one():
@@ -109,7 +110,55 @@ async def test_a_burst_of_enqueue_calls_on_a_file_database_inserts_exactly_one_i
     assert len([r for r in results if r is not None]) == 1 and results.count(None) == 9
     async with factory() as db:
         assert (await db.execute(text("SELECT COUNT(*) FROM processing_queue"))).scalar() == 1
+        assert (await db.execute(text("SELECT COUNT(*) FROM processing_stages WHERE status = 'processing' AND stage = 'extract'"))).scalar() == 1
         await db.execute(text("UPDATE processing_queue SET status = 'done'"))
         await db.commit()
     assert await one() is not None                         # once the item is over, a new request is accepted
     await engine.dispose()
+
+
+# --- the extract run row (decision: stage rows in processing_stages) -----------------------------------------------------
+
+async def _runs(video_id=NEW):
+    async with AsyncSessionLocal() as db:
+        return [dict(r) for r in (await db.execute(
+            text("SELECT * FROM processing_stages WHERE video_id = :v AND stage = 'extract' ORDER BY id"), {"v": video_id})).mappings().all()]
+
+
+async def test_the_request_opens_the_extract_run_and_the_worker_closes_it_done(client):
+    r = await client.post("/api/process", json={"url": URL})
+    (item,) = await _items(client)
+    (run,) = await _runs()
+    assert (run["status"], run["queue_item_id"], run["attempt"]) == ("processing", item["id"], 1)
+    with patch("services.subtitle_extractor.extract_subtitles", return_value=extraction()):
+        await run_extract_items(NEW)
+    (run,) = await _runs()                                       # the same row, now closed
+    assert (run["status"], run["error_code"]) == ("done", None) and run["finished_at"]
+    assert r.status_code == 200
+
+
+async def test_a_failed_extraction_closes_the_run_failed_with_a_reason_code(client):
+    with patch("services.subtitle_extractor.extract_subtitles", return_value=failed("This video has no subtitles available.", ["en"])):
+        await client.post("/api/process", json={"url": URL})
+        await run_extract_items(NEW)
+    (run,) = await _runs()
+    assert (run["status"], run["error_code"]) == ("failed", "no_subtitles") and "no subtitles" in run["error_text"]
+
+
+async def test_removing_the_queued_item_cancels_its_run(client):
+    await client.post("/api/process", json={"url": URL})
+    (item,) = await _items(client)
+    await client.delete(f"/api/queue/{item['id']}")
+    assert [r["status"] for r in await _runs()] == ["cancelled"]
+
+
+async def test_clear_pending_cancels_the_runs_of_the_queued_links(client):
+    await client.post("/api/process", json={"url": URL})
+    await client.delete("/api/queue/all")
+    assert [r["status"] for r in await _runs()] == ["cancelled"]
+
+
+async def test_the_status_text_for_a_bulk_added_item_is_not_invented(client):
+    """A bulk add makes its task only when the worker starts: before that no task exists, so there is nothing to report."""
+    await client.post("/api/queue/bulk", json={"urls": [URL], "pipeline_stages": ["extract"]})
+    assert (await client.get("/api/status/no-such-task")).status_code == 404

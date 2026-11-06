@@ -77,7 +77,8 @@ async def test_a_failure_without_languages_has_none(client):
     await forget()
 
 
-async def test_the_status_of_a_running_extraction_is_pending_without_progress_text(client):
+async def test_the_status_says_waiting_in_the_queue_then_extracting_and_nothing_when_over(client):
+    # NS-11 stage 7: this used to be "pending, no progress text" at all times (BASELINE)
     release, started = threading.Event(), threading.Event()
 
     def slow(*a, **k):
@@ -87,12 +88,18 @@ async def test_the_status_of_a_running_extraction_is_pending_without_progress_te
 
     with patch("services.subtitle_extractor.extract_subtitles", slow):
         task_id = (await client.post("/api/process", json={"url": URL})).json()["task_id"]
-        worker = asyncio.create_task(run_extract_items(NEW))
-        await asyncio.get_running_loop().run_in_executor(None, started.wait, 5)
         st = (await client.get(f"/api/status/{task_id}")).json()
-        assert st["status"] == "pending" and st["progress_text"] is None      # BASELINE: changes in stage 7 (commit 3)
-        release.set()
+        assert st["status"] == "pending" and st["progress_text"] == "waiting in the queue"
+        worker = asyncio.create_task(run_extract_items(NEW))
+        try:
+            await asyncio.get_running_loop().run_in_executor(None, started.wait, 5)
+            st = (await client.get(f"/api/status/{task_id}")).json()
+            assert st["status"] == "pending" and st["progress_text"] == "extracting subtitles…"
+        finally:
+            release.set()
         await worker
+    st = (await client.get(f"/api/status/{task_id}")).json()
+    assert st["status"] == "completed" and st["progress_text"] is None
     await forget()
 
 

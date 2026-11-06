@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from sqlalchemy import text
 
+from services import stage_runs
 from services.video_service import update_task_failed
 
 
@@ -23,15 +24,23 @@ async def enqueue_extract(db, url: str, video_id: str, db_video_id: str, languag
              "AND (pipeline_stages LIKE '%\"extract\"%' OR pipeline_stages LIKE '%\"transcribe\"%'))"),
         {"url": url, "vid": video_id, "dbid": db_video_id, "stages": '["extract"]', "lang": language},
     )
+    if res.rowcount != 1:
+        return None
+    # the extract run opens on the request (status "processing" at once, decision 3), tied to the item
+    await stage_runs.begin(db, video_id, "extract", None, res.lastrowid)
     await db.commit()
-    return res.lastrowid if res.rowcount == 1 else None
+    return res.lastrowid
 
 
-async def release_task(db, db_video_id: str | None, message: str) -> None:
-    """A queued item that had a pending task will not run (Remove, Clear pending): the task ends failed with `message`, so the
-    Processing page does not wait for ever. Items without a task (bulk adds) have no db_video_id and are left alone."""
+async def release_task(db, video_id: str | None, db_video_id: str | None, message: str) -> None:
+    """A queued item that had a pending task will not run (Remove, Clear pending): the task ends failed with `message` and the
+    extract run opened on the request is cancelled, so the Processing page does not wait for ever. Items without a task (bulk adds)
+    have no db_video_id and are left alone."""
     if not db_video_id:
         return
+    if video_id:
+        await stage_runs.cancel(db, video_id, "extract")
+        await db.commit()
     task_id = (await db.execute(
         text("SELECT id FROM processing_tasks WHERE video_id = :v AND status = 'pending' ORDER BY started_at DESC LIMIT 1"),
         {"v": db_video_id},

@@ -77,13 +77,14 @@ async def _record(video_id: str, how: str, **kw) -> None:
         logging.getLogger("api").exception("could not record the %s of the transcription of %s", how, video_id)
 
 
-async def upload_progress_text(db, task_id: str) -> str | None:
-    """What /api/status/{task_id} says while an upload is in the queue: "waiting in the queue", or the live "segment 12 · 40%"
-    built from the run row's counters. None for a task that is not a queued upload, or whose item is over."""
+async def task_progress_text(db, task_id: str) -> str | None:
+    """What /api/status/{task_id} says while the task's queue item (an upload, or a link typed on the Processing path) is waiting or
+    running: "waiting in the queue"; for a running upload the live "segment 12 · 40%" built from the run row's counters; for a running
+    link "extracting subtitles…". None for a task with no queued item (or whose item is over), and for a re-extract's item."""
     import json
     row = (await db.execute(
-        text("SELECT q.status, q.video_id FROM processing_queue q JOIN processing_tasks t ON t.video_id = q.db_video_id "
-             "WHERE t.id = :t AND q.url LIKE 'local://%' ORDER BY q.id DESC LIMIT 1"), {"t": task_id},
+        text("SELECT q.status, q.video_id, q.url FROM processing_queue q JOIN processing_tasks t ON t.video_id = q.db_video_id "
+             "WHERE t.id = :t AND q.pipeline_stages NOT LIKE '%\"reextract\"%' ORDER BY q.id DESC LIMIT 1"), {"t": task_id},
     )).first()
     if row is None:
         return None
@@ -91,6 +92,8 @@ async def upload_progress_text(db, task_id: str) -> str | None:
         return "waiting in the queue"
     if row[0] != "processing":
         return None
+    if not (row[2] or "").startswith(LOCAL_PREFIX):
+        return "extracting subtitles…"
     run = (await db.execute(
         text("SELECT progress_done, progress_total, meta FROM processing_stages WHERE video_id = :v AND stage = 'transcribe' "
              "AND status = 'processing' ORDER BY id DESC LIMIT 1"), {"v": row[1]},

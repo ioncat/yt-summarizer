@@ -249,7 +249,7 @@ async def delete_item(db: AsyncSession, item_id: int, upload_message: str = "Rem
     if row[0] == "pending" and '"reextract"' in (row[2] or ""):
         await release_reextract(db, row[1], row[3])       # a re-extract that will not run: its run row ends (NS-11 stage 6)
     if row[0] == "pending" and not (row[3] or "").startswith(LOCAL_PREFIX) and '"reextract"' not in (row[2] or ""):
-        await release_task(db, row[4], upload_message)    # a link typed on the Processing path: its task must not stay pending
+        await release_task(db, row[1], row[4], upload_message)    # a link typed on the Processing path: its task must not stay pending
     return "deleted"
 
 
@@ -266,7 +266,7 @@ async def clear_pending(db: AsyncSession) -> int:
              "AND pipeline_stages NOT LIKE '%\"reextract\"%' AND video_id IS NOT NULL"),
     )).fetchall()
     link_tasks = (await db.execute(
-        text("SELECT db_video_id FROM processing_queue WHERE status = 'pending' AND db_video_id IS NOT NULL "
+        text("SELECT video_id, db_video_id FROM processing_queue WHERE status = 'pending' AND db_video_id IS NOT NULL "
              "AND url NOT LIKE 'local://%' AND pipeline_stages NOT LIKE '%\"reextract\"%'"),
     )).fetchall()
     reextracts = (await db.execute(
@@ -284,8 +284,8 @@ async def clear_pending(db: AsyncSession) -> int:
         await release_upload(db, video_id, db_video_id, "Removed from the queue")   # the uploads' tasks end failed, not pending
     for video_id, url in reextracts:
         await release_reextract(db, video_id, url)                                  # the re-extracts' runs end (NS-11 stage 6)
-    for (db_video_id,) in link_tasks:
-        await release_task(db, db_video_id, "Removed from the queue")               # the Processing path's tasks end failed
+    for video_id, db_video_id in link_tasks:
+        await release_task(db, video_id, db_video_id, "Removed from the queue")     # the Processing path's tasks end failed
     return result.rowcount
 
 
