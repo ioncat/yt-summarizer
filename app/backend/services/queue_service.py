@@ -535,10 +535,6 @@ class ExtractionFailed(RuntimeError):
     """The extraction failed and its task already says why (message and available languages)."""
 
 
-class ExtractionFailed(RuntimeError):
-    """The extraction failed and its task already says why (message and available languages)."""
-
-
 async def _run_extract(url: str, language: str = "auto") -> dict[str, Any]:
     """Extract subtitles and save to DB. Returns {video_id, db_video_id}."""
     import asyncio as _asyncio
