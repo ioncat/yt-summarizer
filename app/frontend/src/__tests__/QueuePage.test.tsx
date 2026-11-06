@@ -515,3 +515,36 @@ describe('QueuePage Cancel (NS-16)', () => {
     await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('This item is already over: nothing to cancel'))
   })
 })
+
+describe('QueuePage layout (NS-17 item 5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(api.getQueue).mockResolvedValue({
+      items: [item(41, 'https://www.youtube.com/watch?v=aVeryLongLinkIdForLayout0001', { pipeline_stages: ['extract', 'cleanup', 'summary', 'mindmap'] })],
+      count: 1,
+    })
+  })
+
+  it('the Cancel / Remove column is pinned to the right edge of the table, so it cannot be scrolled out of view', async () => {
+    renderQueue()
+    const cell = await screen.findByTestId('queue-actions')
+    expect(cell.className).toContain('sticky')
+    expect(cell.className).toContain('right-0')
+    expect(cell.className).toContain('bg-')                       // opaque, so the cells under it do not show through
+    expect(cell.querySelector('button')).toBeTruthy()
+  })
+
+  it('the cells use the narrow padding below the xl breakpoint and the URL cell may wrap', async () => {
+    const { container } = renderQueue()
+    await screen.findByTestId('queue-actions')
+    const cells = Array.from(container.querySelectorAll('table th, table td'))
+    expect(cells.length).toBeGreaterThan(6)
+    for (const c of cells) {
+      expect(c.className).toContain('px-3')
+      expect(c.className).toContain('xl:px-6')
+      expect(c.className.split(' ')).not.toContain('px-6')
+    }
+    expect(container.querySelector('td.break-all')).toBeTruthy()  // the link column wraps instead of widening the table
+  })
+})
+

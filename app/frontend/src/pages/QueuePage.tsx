@@ -279,12 +279,12 @@ export default function QueuePage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-surface-container-low border-b border-outline-variant">
-                    <th className="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider">#</th>
-                    <th className="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider">URL</th>
-                    <th className="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider">Pipeline</th>
-                    <th className="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider text-center">Status</th>
-                    <th className="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider text-right">Added</th>
-                    <th className="px-6 py-4 w-10" />
+                    <th className="px-3 py-4 xl:px-6 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider">#</th>
+                    <th className="px-3 py-4 xl:px-6 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider">URL</th>
+                    <th className="px-3 py-4 xl:px-6 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider">Pipeline</th>
+                    <th className="px-3 py-4 xl:px-6 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider text-center">Status</th>
+                    <th className="px-3 py-4 xl:px-6 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider text-right">Added</th>
+                    <th className="px-3 py-4 xl:px-6 w-10 sticky right-0 bg-surface-container-low" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant/30">
@@ -295,10 +295,10 @@ export default function QueuePage() {
                         : item.status === 'failed' || item.status === 'partial' ? 'bg-error-container/5 hover:bg-error-container/20'
                         : 'hover:bg-surface-container-high'
                       }`}>
-                        <td className="px-6 py-5 text-on-surface-variant text-body-sm">{idx + 1}</td>
+                        <td className="px-3 py-5 xl:px-6 text-on-surface-variant text-body-sm">{idx + 1}</td>
 
                         {/* URL */}
-                        <td className="px-6 py-5 text-body-sm">
+                        <td className="px-3 py-5 xl:px-6 text-body-sm break-all min-w-0 max-w-[16rem]">
                           {item.status === 'done' && item.video_id ? (
                             <Link to={`/result/${item.video_id}`} className="text-primary font-medium hover:underline">
                               {shortUrl(item.url)}
@@ -309,7 +309,7 @@ export default function QueuePage() {
                         </td>
 
                         {/* Pipeline */}
-                        <td className="px-6 py-5">
+                        <td className="px-3 py-5 xl:px-6">
                           <div className="flex items-center gap-1 text-label-sm flex-wrap">
                             {item.pipeline_stages.map((s, i) => {
                               const cur = item.status === 'processing' ? activeStage(item.progress) : null
@@ -331,7 +331,7 @@ export default function QueuePage() {
                         </td>
 
                         {/* Status */}
-                        <td className="px-6 py-5">
+                        <td className="px-3 py-5 xl:px-6">
                           <div className="flex items-center justify-center gap-1.5">
                             {item.status === 'processing' && (
                               <>
@@ -390,12 +390,12 @@ export default function QueuePage() {
                         </td>
 
                         {/* Added */}
-                        <td className="px-6 py-5 text-right text-on-surface-variant text-label-sm whitespace-nowrap">
+                        <td className="px-3 py-5 xl:px-6 text-right text-on-surface-variant text-label-sm whitespace-nowrap">
                           {formatTime(item.added_at)}
                         </td>
 
-                        {/* Actions */}
-                        <td className="px-6 py-5 text-center">
+                        {/* Actions: stays in view when the table is wider than the card (NS-17 item 5) */}
+                        <td className="px-3 py-5 xl:px-6 text-center sticky right-0 bg-surface-container-lowest" data-testid="queue-actions">
                           {item.status === 'pending' && (
                             <button
                               onClick={() => handleCancel(item.id)}
