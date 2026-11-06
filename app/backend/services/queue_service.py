@@ -977,6 +977,50 @@ async def _run_download_stage(item_id: int, video_id: str, url: str) -> None:
             await db.commit()
 
 
+async def _run_first_stage(item: dict, item_id: int, url: str, pipeline_stages: list[str], item_language: str) -> tuple[str, str | None]:
+    """Stage 1 of an item: re-extract / transcribe an upload / transcribe a link / extract subtitles / (stages only) find the video
+    in History. Returns (video id, db video id); raises what the stage raises."""
+    # Stage 1: transcribe OR extract (mutually exclusive) — skip for already-processed videos
+    if "reextract" in pipeline_stages:
+        # a re-extract / re-transcribe of a video that is in History (NS-11 stage 6): replaces its text in place
+        _QUEUE_PROGRESS[item_id] = "re-extracting…"
+        reextract_result = await run_queued_reextract(item)
+        yt_video_id = reextract_result["video_id"]
+        db_video_id = reextract_result["db_video_id"]
+    elif "transcribe" in pipeline_stages and url.startswith(LOCAL_PREFIX):
+        # an uploaded file (NS-11 stage 5): the audio is on disk, the item names it by video_id
+        _QUEUE_PROGRESS[item_id] = "transcribing…"
+        file_result = await run_queued_file(item)
+        yt_video_id = file_result["video_id"]
+        db_video_id = file_result["db_video_id"]
+    elif "transcribe" in pipeline_stages:
+        _QUEUE_PROGRESS[item_id] = "downloading audio…"
+        transcribe_result = await stage_runs.recorded(
+            "transcribe", url, item_id,
+            lambda: _cancellable(item_id, _run_transcribe(url, language=item_language, item_id=item_id)))
+        yt_video_id = transcribe_result["video_id"]
+        db_video_id = transcribe_result["db_video_id"]
+    elif "extract" in pipeline_stages:
+        _QUEUE_PROGRESS[item_id] = "extracting subtitles…"
+        extract_result = await stage_runs.recorded(
+            "extract", url, item_id, lambda: _cancellable(item_id, _run_extract(url, language=item_language)))
+        yt_video_id = extract_result["video_id"]
+        db_video_id = extract_result["db_video_id"]
+    else:
+        # Stages-only mode: the video is already in History. The item names it by video_id
+        # (local files have no YouTube URL); items queued before that fall back to the URL.
+        from services.subtitle_extractor import extract_video_id as _extract_video_id
+        yt_video_id = item.get("video_id") or _extract_video_id(url)
+        db_video_id = None
+        if not yt_video_id:
+            raise ValueError(f"Cannot extract video_id from URL: {url}")
+        if not await _video_exists(yt_video_id):
+            # deleted after it was queued, or never extracted: not a silent "done"
+            raise LookupError(f"Video {yt_video_id} is not in History (deleted, or never extracted)")
+        logger.info("Queue worker: skipping extract for item %d (stages-only mode)", item_id)
+    return yt_video_id, db_video_id
+
+
 async def queue_worker() -> None:
     """Main queue worker loop. Call once from lifespan(). Runs forever."""
     global _WORKER_STOP
@@ -999,44 +1043,7 @@ async def queue_worker() -> None:
         await _set_processing(item_id)
 
         try:
-            # Stage 1: transcribe OR extract (mutually exclusive) — skip for already-processed videos
-            if "reextract" in pipeline_stages:
-                # a re-extract / re-transcribe of a video that is in History (NS-11 stage 6): replaces its text in place
-                _QUEUE_PROGRESS[item_id] = "re-extracting…"
-                reextract_result = await run_queued_reextract(item)
-                yt_video_id = reextract_result["video_id"]
-                db_video_id = reextract_result["db_video_id"]
-            elif "transcribe" in pipeline_stages and url.startswith(LOCAL_PREFIX):
-                # an uploaded file (NS-11 stage 5): the audio is on disk, the item names it by video_id
-                _QUEUE_PROGRESS[item_id] = "transcribing…"
-                file_result = await run_queued_file(item)
-                yt_video_id = file_result["video_id"]
-                db_video_id = file_result["db_video_id"]
-            elif "transcribe" in pipeline_stages:
-                _QUEUE_PROGRESS[item_id] = "downloading audio…"
-                transcribe_result = await stage_runs.recorded(
-                    "transcribe", url, item_id,
-                    lambda: _cancellable(item_id, _run_transcribe(url, language=item_language, item_id=item_id)))
-                yt_video_id = transcribe_result["video_id"]
-                db_video_id = transcribe_result["db_video_id"]
-            elif "extract" in pipeline_stages:
-                _QUEUE_PROGRESS[item_id] = "extracting subtitles…"
-                extract_result = await stage_runs.recorded(
-                    "extract", url, item_id, lambda: _cancellable(item_id, _run_extract(url, language=item_language)))
-                yt_video_id = extract_result["video_id"]
-                db_video_id = extract_result["db_video_id"]
-            else:
-                # Stages-only mode: the video is already in History. The item names it by video_id
-                # (local files have no YouTube URL); items queued before that fall back to the URL.
-                from services.subtitle_extractor import extract_video_id as _extract_video_id
-                yt_video_id = item.get("video_id") or _extract_video_id(url)
-                db_video_id = None
-                if not yt_video_id:
-                    raise ValueError(f"Cannot extract video_id from URL: {url}")
-                if not await _video_exists(yt_video_id):
-                    # deleted after it was queued, or never extracted: not a silent "done"
-                    raise LookupError(f"Video {yt_video_id} is not in History (deleted, or never extracted)")
-                logger.info("Queue worker: skipping extract for item %d (stages-only mode)", item_id)
+            yt_video_id, db_video_id = await _run_first_stage(item, item_id, url, pipeline_stages, item_language)
 
             # Stage 2: cleanup (optional)
             if "cleanup" in pipeline_stages:
