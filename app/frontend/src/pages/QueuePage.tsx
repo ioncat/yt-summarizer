@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { Link } from 'react-router-dom'
-import { getQueue, deleteQueueItem, clearQueuePending, clearQueueFailed, retryQueueItem, retryAllFailed, QueueItem } from '../api'
+import { getQueue, deleteQueueItem, cancelQueueItem, clearQueuePending, clearQueueFailed, retryQueueItem, retryAllFailed, QueueItem } from '../api'
 import NewItemForm from '../components/queue/NewItemForm'
 import { useQueueAdd } from '../components/queue/useQueueAdd'
 
@@ -42,6 +42,7 @@ export default function QueuePage() {
   const [loading, setLoading] = useState(true)
   const [expandedError, setExpandedError] = useState<number | null>(null)
   const [newOpen, setNewOpen] = useState(false)
+  const [stopping, setStopping] = useState<Set<number>>(new Set())   // running items that were told to stop (NS-16)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const inFlight = useRef(false)    // one request at a time: a slow answer cannot be overtaken by a newer one
   const reloadAfter = useRef(false) // a reload asked for while one was running (e.g. right after an add)
@@ -55,6 +56,7 @@ export default function QueuePage() {
       const data = await getQueue()
       if (!mounted.current) return
       setItems(data.items)
+      setStopping(prev => (prev.size ? new Set(data.items.filter(i => i.status === 'processing' && prev.has(i.id)).map(i => i.id)) : prev))
       setPollFailures(0)
     } catch {
       if (mounted.current) setPollFailures(n => n + 1)  // the last good list stays on screen; after two misses a banner says so
@@ -86,6 +88,22 @@ export default function QueuePage() {
       setItems(prev => prev.filter(i => i.id !== id))
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to delete')
+    }
+  }
+
+  // Cancel (NS-16): a waiting item leaves the queue; a running one is told to stop and ends "skipped" when its current step returns
+  async function handleCancel(id: number) {
+    try {
+      const res = await cancelQueueItem(id)
+      if (res.status === 'removed') {
+        setItems(prev => prev.filter(i => i.id !== id))
+      } else {
+        setStopping(prev => new Set(prev).add(id))
+        load()
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to cancel')
+      load()
     }
   }
 
@@ -380,11 +398,21 @@ export default function QueuePage() {
                         <td className="px-6 py-5 text-center">
                           {item.status === 'pending' && (
                             <button
-                              onClick={() => handleDelete(item.id)}
-                              title="Remove from queue"
+                              onClick={() => handleCancel(item.id)}
+                              title="Cancel: take it out of the queue"
                               className="material-symbols-outlined text-[18px] text-outline hover:text-error transition-colors"
                             >
                               close
+                            </button>
+                          )}
+                          {item.status === 'processing' && (
+                            <button
+                              onClick={() => handleCancel(item.id)}
+                              disabled={stopping.has(item.id)}
+                              title={stopping.has(item.id) ? 'Stopping…' : 'Cancel: stop the running job'}
+                              className="material-symbols-outlined text-[18px] text-outline hover:text-error transition-colors disabled:opacity-40"
+                            >
+                              stop_circle
                             </button>
                           )}
                           {isStuckPartial(item) && (

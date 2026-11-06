@@ -12,6 +12,7 @@ vi.mock('../api', () => ({
   getQueue: vi.fn(),
   queueBulkAdd: vi.fn(),
   deleteQueueItem: vi.fn(),
+  cancelQueueItem: vi.fn(),
   clearQueuePending: vi.fn(),
   clearQueueFailed: vi.fn(),
   retryQueueItem: vi.fn(),
@@ -448,5 +449,69 @@ describe('QueuePage stuck partial items (NS-25 review)', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Clean failed/ }))
     await waitFor(() => expect(screen.getAllByText('partial')).toHaveLength(1))
     expect(screen.getAllByTitle('Retry the failed stages')).toHaveLength(1)
+  })
+})
+
+describe('QueuePage Cancel (NS-16)', () => {
+  const waiting = item(21, 'https://youtu.be/waiting0001')
+  const running = item(22, 'https://youtu.be/running0001', { status: 'processing', progress: 'cleanup: paragraph 2/9' })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [waiting, running], count: 2 })
+  })
+
+  it('every active row has a Cancel button: waiting and running', async () => {
+    renderQueue()
+    await screen.findByText('waiting0001')
+    expect(screen.getAllByTitle(/^Cancel/)).toHaveLength(2)
+    expect(screen.getByTitle('Cancel: take it out of the queue')).toBeTruthy()
+    expect(screen.getByTitle('Cancel: stop the running job')).toBeTruthy()
+  })
+
+  it('finished rows have no Cancel button', async () => {
+    vi.mocked(api.getQueue).mockResolvedValue({
+      items: [item(31, 'https://youtu.be/finished0001', { status: 'done' }), item(32, 'https://youtu.be/failed000001', { status: 'failed', error_message: 'x' })],
+      count: 2,
+    })
+    renderQueue()
+    await screen.findByText('finished0001')
+    expect(screen.queryAllByTitle(/^Cancel/)).toHaveLength(0)
+  })
+
+  it('Cancel on a waiting item takes the row away', async () => {
+    vi.mocked(api.cancelQueueItem).mockResolvedValue({ status: 'removed', id: 21 })
+    renderQueue()
+    fireEvent.click(await screen.findByTitle('Cancel: take it out of the queue'))
+    await waitFor(() => expect(api.cancelQueueItem).toHaveBeenCalledWith(21))
+    await waitFor(() => expect(screen.queryByText('waiting0001')).toBeNull())
+    expect(screen.getAllByText('running0001').length).toBeGreaterThan(0)
+  })
+
+  it('Cancel on a running item keeps the row, says it is stopping, and the button cannot be pressed twice', async () => {
+    vi.mocked(api.cancelQueueItem).mockResolvedValue({ status: 'stopping', id: 22 })
+    renderQueue()
+    fireEvent.click(await screen.findByTitle('Cancel: stop the running job'))
+    await waitFor(() => expect(api.cancelQueueItem).toHaveBeenCalledWith(22))
+    const stopped = await screen.findByTitle('Stopping…')
+    expect((stopped as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getAllByText('running0001').length).toBeGreaterThan(0)
+  })
+
+  it('when the worker has ended the item as skipped the row stays as skipped, without a Cancel', async () => {
+    vi.mocked(api.cancelQueueItem).mockResolvedValue({ status: 'stopping', id: 22 })
+    renderQueue()
+    fireEvent.click(await screen.findByTitle('Cancel: stop the running job'))
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [{ ...running, status: 'skipped', progress: null, error_message: 'Cleanup cancelled' }], count: 1 })
+    await waitFor(() => expect(screen.getByText('skipped')).toBeTruthy(), { timeout: 4000 })
+    expect(screen.queryByTitle(/^Cancel: stop/)).toBeNull()
+  })
+
+  it('a failed cancel shows the server message', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    vi.mocked(api.cancelQueueItem).mockRejectedValue(new Error('This item is already over: nothing to cancel'))
+    renderQueue()
+    fireEvent.click(await screen.findByTitle('Cancel: stop the running job'))
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('This item is already over: nothing to cancel'))
   })
 })

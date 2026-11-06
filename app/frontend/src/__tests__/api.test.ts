@@ -7,6 +7,7 @@ import {
   queueBulkAdd,
   queueBulkAddByIds,
   deleteQueueItem,
+  cancelQueueItem,
   errorText,
   toggleFavorite,
   deleteResult,
@@ -160,6 +161,10 @@ describe('error messages from the server (NS-24a review)', () => {
     await expect(queueBulkAdd(['x'])).rejects.toThrow('No valid YouTube URLs')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({ detail: 'Cannot delete a processing item' }, 409)))
     await expect(deleteQueueItem(1)).rejects.toThrow('Cannot delete a processing item')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({ detail: 'This item is already over: nothing to cancel' }, 409)))
+    await expect(cancelQueueItem(1)).rejects.toThrow('This item is already over: nothing to cancel')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({}, 500)))
+    await expect(cancelQueueItem(1)).rejects.toThrow('Failed to cancel')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({ detail: { weird: true } }, 500)))
     await expect(queueBulkAdd(['x'])).rejects.toThrow('Failed to add to queue')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({}, 500)))

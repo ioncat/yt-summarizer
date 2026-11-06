@@ -665,6 +665,16 @@ export async function deleteQueueItem(id: number): Promise<void> {
   }
 }
 
+/** The Cancel button of a queue row (NS-16): a waiting item leaves the queue ("removed"), a running one is told to stop ("stopping"). */
+export async function cancelQueueItem(id: number): Promise<{ status: 'removed' | 'stopping'; id: number }> {
+  const res = await fetch(`${BASE}/queue/${id}/cancel`, { method: 'POST' })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(errorText(body, 'Failed to cancel'))
+  }
+  return res.json()
+}
+
 export async function clearQueuePending(): Promise<{ cleared: number }> {
   const res = await fetch(`${BASE}/queue/all`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to clear queue')
