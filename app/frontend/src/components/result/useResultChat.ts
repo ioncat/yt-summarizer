@@ -11,6 +11,15 @@ interface UseResultChatParams {
   setActiveTab: Setter<Tab>
 }
 
+class ChatStreamError extends Error {}
+
+/** The same words as the backend's empty-answer message for the other steps (services/ollama_options.py). */
+export function emptyChatAnswerMessage(sawThinking: boolean): string {
+  return sawThinking
+    ? 'The model returned no answer (thinking used the whole context). Use a model without thinking, or raise the context limit in Settings → General.'
+    : 'The model returned nothing.'
+}
+
 export function useResultChat({ videoId, result, chatModel, summaryModel, ollamaUrl, setActiveTab }: UseResultChatParams) {
   const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
   const [chatInput, setChatInput]     = useState('')
@@ -50,6 +59,7 @@ export function useResultChat({ videoId, result, chatModel, summaryModel, ollama
     setIsChatting(true)
 
     let fullResponse = ''
+    let sawThinking = false            // the model "thought" but gave no answer: the context was used up (NS-26)
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -66,6 +76,8 @@ export function useResultChat({ videoId, result, chatModel, summaryModel, ollama
         if (!line.trim()) return
         try {
           const json  = JSON.parse(line)
+          if (json.error) throw new ChatStreamError(String(json.error))        // the backend's {"error": ...} line
+          if (json.message?.thinking) sawThinking = true
           const token = json.message?.content ?? json.response ?? ''
           if (token) {
             fullResponse += token
@@ -75,7 +87,7 @@ export function useResultChat({ videoId, result, chatModel, summaryModel, ollama
               return updated
             })
           }
-        } catch { /* skip malformed */ }
+        } catch (e) { if (e instanceof ChatStreamError) throw e /* else: skip a malformed line */ }
       }
 
       while (true) {
@@ -87,6 +99,15 @@ export function useResultChat({ videoId, result, chatModel, summaryModel, ollama
         lines.forEach(processLine)
       }
 
+      if (!fullResponse.trim()) {
+        // an empty answer is not an answer: say why instead of leaving an empty bubble, and do not add it to the conversation
+        setChatHistory(prev => {
+          const updated = [...prev]
+          updated[updated.length - 1] = { role: 'assistant', content: `⚠ ${emptyChatAnswerMessage(sawThinking)}` }
+          return updated
+        })
+        return
+      }
       ollamaMessagesRef.current = [...ollamaMessagesRef.current, { role: 'assistant', content: fullResponse }]
       if (fullResponse && videoId) {
         const savedHistory = [

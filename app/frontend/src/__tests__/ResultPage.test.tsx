@@ -712,5 +712,65 @@ describe('ResultPage', () => {
       await new Promise(r => setTimeout(r, 400))
       expect(m.downloadVideo).not.toHaveBeenCalled()
     })
+
+    describe('chat answers that are empty (NS-26)', () => {
+      const ndjson = (...lines: unknown[]) => new Response(lines.map(l => JSON.stringify(l)).join('\n') + '\n')
+
+      async function ask(question: string) {
+        const input = await screen.findByPlaceholderText('Ask about the video…')
+        fireEvent.change(input, { target: { value: question } })
+        fireEvent.click(screen.getByTitle('Send'))
+        await waitFor(() => expect(screen.getByTitle('Send')).toBeTruthy())
+        fireEvent.click(screen.getAllByRole('button', { name: /^Chat/ })[0])         // the answer is shown on the Chat tab
+      }
+
+      async function openChat() {
+        setResult({ summary_status: 'done', summary_text: 'The summary' })
+        await renderPage()
+        await waitFor(() => expect(m.getSettings).toHaveBeenCalled())
+        fireEvent.click(btn(/Summary/))
+      }
+
+      beforeEach(() => { Element.prototype.scrollIntoView = vi.fn() })          // (jsdom has none; the chat scrolls to the newest line)
+      afterEach(() => { vi.unstubAllGlobals() })
+
+      it('an answer with only thinking says the thinking used the context, with the way out', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(ndjson({ message: { thinking: 'hmm…' } }, { done: true, done_reason: 'length' })))
+        await openChat()
+        await ask('What is it?')
+        expect(await screen.findByText(/returned no answer \(thinking used the whole context\)/)).toBeTruthy()
+        expect(screen.getByText(/Settings → General/)).toBeTruthy()
+      })
+
+      it('an answer with nothing at all says so, instead of an empty bubble', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(ndjson({ message: { content: '' }, done: true })))
+        await openChat()
+        await ask('What is it?')
+        expect(await screen.findByText('⚠ The model returned nothing.')).toBeTruthy()
+      })
+
+      it('an error line from the backend is shown, not swallowed', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(ndjson({ error: 'Ollama error 500' })))
+        await openChat()
+        await ask('What is it?')
+        expect(await screen.findByText('⚠ Ollama error 500')).toBeTruthy()
+      })
+
+      it('an empty answer is kept out of the conversation sent with the next question', async () => {
+        const fetchMock = vi.fn()
+          .mockResolvedValueOnce(ndjson({ message: { content: '' }, done: true }))
+          .mockResolvedValueOnce(ndjson({ message: { content: 'Now an answer' }, done: true }))
+        vi.stubGlobal('fetch', fetchMock)
+        m.saveChatHistory.mockResolvedValue(undefined as never)
+        await openChat()
+        await ask('First?')
+        await screen.findByText('⚠ The model returned nothing.')
+        await ask('Second?')
+        expect(await screen.findByText('Now an answer')).toBeTruthy()
+        const sent = JSON.parse(fetchMock.mock.calls[1][1].body).messages as Array<{ role: string; content: string }>
+        expect(sent.every(x => x.content.trim() !== '')).toBe(true)          // no empty assistant turn
+        expect(sent.map(x => x.role)).toEqual(['system', 'user', 'assistant', 'user', 'user'])
+      })
+    })
   })
 })
