@@ -8,9 +8,11 @@ from routers.process import router as process_router
 from routers.queue import router as queue_router
 from routers.result import router as result_router
 from routers.settings import router as settings_router
+from routers.stt_models import router as stt_models_router
 
 router = APIRouter(prefix="/api")
 router.include_router(process_router)
+router.include_router(stt_models_router)     # (between process and queue, where these endpoints always were)
 router.include_router(queue_router)     # (the queue endpoints used to be the end of process.py: same place in the order)
 router.include_router(result_router)
 router.include_router(history_router)
