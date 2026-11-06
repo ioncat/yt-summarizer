@@ -820,7 +820,7 @@
    "/api/downloads/{video_id}": {
     "get": {
      "description": "The file the queue's download stage saved for this video (data/downloads): the one named in its newest finished download run.\nOnly the video id comes from the request, so no path can be asked for, and fragments or other files in the folder are never\nserved.",
-     "operationId": "get_saved_download_api_downloads__video_id__get",
+     "operationId": "get_saved_download",
      "parameters": [
       {
        "in": "path",
@@ -856,7 +856,7 @@
     },
     "head": {
      "description": "The file the queue's download stage saved for this video (data/downloads): the one named in its newest finished download run.\nOnly the video id comes from the request, so no path can be asked for, and fragments or other files in the folder are never\nserved.",
-     "operationId": "get_saved_download_api_downloads__video_id__get",
+     "operationId": "head_saved_download",
      "parameters": [
       {
        "in": "path",
@@ -2789,8 +2789,14 @@
   },
   {
    "methods": [
-    "GET",
     "HEAD"
+   ],
+   "name": "get_saved_download",
+   "path": "/api/downloads/{video_id}"
+  },
+  {
+   "methods": [
+    "GET"
    ],
    "name": "get_saved_download",
    "path": "/api/downloads/{video_id}"

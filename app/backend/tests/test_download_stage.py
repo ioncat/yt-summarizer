@@ -560,3 +560,21 @@ async def test_head_has_the_same_checks_as_get(client):
 async def test_other_methods_on_the_download_endpoint_are_still_refused(client):
     for method in ("POST", "PUT", "DELETE", "PATCH"):
         assert (await client.request(method, f"/api/downloads/{VIDEO_ID}")).status_code == 405
+
+
+# --- the ids of a by-id add are in the order of the videos that were queued (the Home page pairs them up by position) -----------------
+
+async def test_the_ids_of_a_by_id_add_follow_the_order_of_the_videos_that_were_queued(client, db_session):
+    from models.models import Video
+    from services.queue_by_id import add_by_video_ids
+    names = ["zzzzzzzzzz1", "aaaaaaaaaa2", "mmmmmmmmmm3", "bbbbbbbbbb4"]                 # not in alphabetical or insertion order
+    for name in reversed(names):
+        db_session.add(Video(url=f"https://www.youtube.com/watch?v={name}", video_id=name, title=name, author="a", duration=1))
+    await db_session.commit()
+    asked = [names[2], "missingvid1", names[0], names[2], names[3], names[1]]            # a missing id and a repeat in the middle
+    r = await add_by_video_ids(db_session, asked, ["download"])
+    assert r["missing"] == ["missingvid1"] and r["duplicates"] == []
+    queued = [names[2], names[0], names[3], names[1]]                                    # asked order, repeat and missing left out
+    assert r["ids"] == sorted(r["ids"]) and len(r["ids"]) == 4
+    by_id = {i["id"]: i["video_id"] for i in (await client.get("/api/queue")).json()["items"]}
+    assert [by_id[i] for i in r["ids"]] == queued
