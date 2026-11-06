@@ -15,20 +15,15 @@ from starlette.background import BackgroundTask
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import get_db
+from services.downloader import mp4_format_spec
 from services.subtitle_extractor import _ytdlp_cmd, validate_youtube_url
 from services.video_service import get_app_setting
 
 router = APIRouter()
 
 
-def _mp4_format_spec(quality: str) -> str:
-    if quality == "best":
-        return "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
-    h = quality.rstrip("p")
-    return (
-        f"bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]"
-        f"/bestvideo[height<={h}]+bestaudio/best[height<={h}]"
-    )
+# (the format selector lives in services/downloader.py, shared with the download stage of the queue)
+_mp4_format_spec = mp4_format_spec
 
 
 @router.get("/download/direct")
