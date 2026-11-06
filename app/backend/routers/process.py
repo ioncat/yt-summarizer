@@ -1,27 +1,23 @@
 from __future__ import annotations
 
-import asyncio
 import os
 import re
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import get_db
 from services.extract_queue import enqueue_extract
 from services.file_stt import enqueue_local_file, task_progress_text, uploads_dir
-from services.subtitle_extractor import extract_subtitles, extract_video_id, validate_youtube_url
-from services.text_formatter import format_subtitles
+from services.subtitle_extractor import extract_video_id, validate_youtube_url
 from services.video_service import (
-    complete_task,
     create_pending_task,
     get_app_setting,
     get_result,
     get_task,
-    update_task_failed,
 )
 
 router = APIRouter()
@@ -39,33 +35,6 @@ _TRAIL_RE = re.compile(r'[,;.:!?]+$')
 class ProcessRequest(BaseModel):
     url: str
     language: str = "auto"      # decision 8: auto everywhere (it used to be "ru" here only)
-
-
-async def _run_processing(task_id: str, url: str, language: str) -> None:
-    from models.database import AsyncSessionLocal
-
-    try:
-        async with AsyncSessionLocal() as db:
-            cookies_path = await get_app_setting(db, "cookies_path")
-            ytdlp_path = await get_app_setting(db, "ytdlp_path") or "yt-dlp"
-
-        extraction = await asyncio.to_thread(
-            extract_subtitles, url, language, cookies_path, ytdlp_path
-        )
-        async with AsyncSessionLocal() as db:
-            if not extraction.success:
-                await update_task_failed(
-                    db, task_id,
-                    extraction.error_message or "Extraction failed",
-                    available_languages=extraction.available_languages,
-                )
-                return
-            formatted = format_subtitles(extraction.subtitles, chapters=extraction.metadata.chapters)
-            await complete_task(db, task_id, url, extraction, formatted)
-
-    except Exception as e:
-        async with AsyncSessionLocal() as db:
-            await update_task_failed(db, task_id, str(e))
 
 
 @router.post("/process")

@@ -162,3 +162,9 @@ async def test_the_status_text_for_a_bulk_added_item_is_not_invented(client):
     """A bulk add makes its task only when the worker starts: before that no task exists, so there is nothing to report."""
     await client.post("/api/queue/bulk", json={"urls": [URL], "pipeline_stages": ["extract"]})
     assert (await client.get("/api/status/no-such-task")).status_code == 404
+
+
+def test_the_background_copy_of_the_extraction_is_gone():
+    import routers.process as proc
+    assert not hasattr(proc, "_run_processing")
+    assert not hasattr(proc, "BackgroundTasks") and not hasattr(proc, "extract_subtitles")        # the router no longer runs any work itself
