@@ -132,6 +132,8 @@ async def _clean_paragraph(
     except Exception as exc:
         logger.warning("Ollama failed on paragraph: %s", exc)
         record_llm_exception(exc, model)
+        if stats is not None:
+            stats["errors"] += 1
         return text
 
 
@@ -176,7 +178,7 @@ async def clean_text(
 
             sem = asyncio.Semaphore(workers)
             completed = 0
-            stats = {"sent": 0, "empty": 0, "thinking": False}
+            stats = {"sent": 0, "empty": 0, "errors": 0, "thinking": False}
 
             async def _process(idx: int, p: str) -> tuple[int, str | None]:
                 nonlocal completed
@@ -202,12 +204,15 @@ async def clean_text(
                 logger.info("Cleanup cancelled mid-run.")
                 return None
 
-            # Mostly empty answers: the model could not clean anything — a failed stage, not a silent "done".
-            # A few empty paragraphs among many keep their original text (warning logged above).
-            if stats["sent"] and stats["empty"] * 2 > stats["sent"]:
-                logger.warning("clean_text: %d of %d paragraphs got an empty answer — cleanup failed",
-                               stats["empty"], stats["sent"])
-                record_failure_reason(empty_answer_message(stats["thinking"]))
+            # Mostly empty answers or failed requests (a missing model, a dead server): the model could not clean anything —
+            # a failed stage, not a silent "done" with the raw text. A few bad paragraphs among many keep their original
+            # text (warning logged above).
+            bad = stats["empty"] + stats["errors"]
+            if stats["sent"] and bad * 2 > stats["sent"]:
+                logger.warning("clean_text: %d of %d paragraphs got an empty answer and %d failed — cleanup failed",
+                               stats["empty"], stats["sent"], stats["errors"])
+                if stats["empty"] > stats["errors"]:
+                    record_failure_reason(empty_answer_message(stats["thinking"]))
                 return None
 
             # Sort by index, drop None and exceptions (fallback handled per-paragraph in _clean_paragraph)
