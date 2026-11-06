@@ -613,6 +613,7 @@ export interface QueueReportEntry {
   url: string
   video_id: string | null
   status: 'added' | 'processed' | 'in_queue' | 'in_list' | 'invalid'
+  reason?: 'http_only' | 'not_youtube'   // invalid links only: an http:// link is refused with its own reason
 }
 
 export interface QueueAddResult {

@@ -217,7 +217,8 @@ async def queue_bulk_add(
     and `duplicate_details` gives each one's video id and reason: "processed", "in_queue", "in_list" (the same video is earlier
     in this very list) or, for video_ids, "order". The links that were added come back in `ids`, in the order they were sent.
     `report` repeats it as one entry per link in the order sent: {url, video_id, status} with status added / processed / in_queue /
-    in_list / invalid (the page shows it as it is).
+    in_list / invalid (the page shows it as it is). An invalid entry also has `reason`: "http_only" (an http:// link to YouTube:
+    only https links are accepted) or "not_youtube".
 
     `video_ids` queues results that are already in History by id (the only way to queue a local file);
     they can only run the LLM stages (cleanup, summary, mindmap).
@@ -264,7 +265,10 @@ async def queue_bulk_add(
         vid = extract_video_id(canonical) if canonical else None
         if not vid:
             invalid.append(url)
-            entries.append({"url": url, "video_id": None, "status": "invalid"})
+            # an http:// link to a YouTube video is refused (https only) - say that, not "not a YouTube link"
+            http_only = url[:7].lower() == "http://" and validate_youtube_url("https://" + url[7:]) is not None
+            entries.append({"url": url, "video_id": None, "status": "invalid",
+                            "reason": "http_only" if http_only else "not_youtube"})
         elif vid in seen_video_ids:
             in_list.append((url, vid))   # a duplicate in the list is not an invalid link (NS-24): it gets its own reason
             entries.append({"url": url, "video_id": vid, "status": "in_list"})

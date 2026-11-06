@@ -12,6 +12,11 @@ export const STATUS_TEXT: Record<ReportStatus, string> = {
   invalid: 'not a YouTube link',
 }
 
+/** What the user reads for a refused link: an http:// link to YouTube is refused for its scheme, not as "not a YouTube link". */
+export function statusText(e: QueueReportEntry): string {
+  return e.status === 'invalid' && e.reason === 'http_only' ? 'only https links are accepted' : STATUS_TEXT[e.status]
+}
+
 /** One row per link in the order sent. The server sends it as `report`; for an older answer it is rebuilt from the other keys
  *  (the order is then: skipped links only, as that answer cannot say more). */
 export function reportOf(res: QueueAddResult): QueueReportEntry[] {
@@ -49,7 +54,7 @@ export function BulkReport({ added, report }: { added: number; report: QueueRepo
               </span>
               <span className="font-mono text-on-surface-variant break-all opacity-90">{e.url}</span>
               <span className={`italic shrink-0 ${e.status === 'added' ? 'text-tertiary' : e.status === 'invalid' ? 'text-error' : 'text-secondary'}`}>
-                {STATUS_TEXT[e.status]}
+                {statusText(e)}
               </span>
               {e.status === 'processed' && e.video_id && (
                 <Link to={`/result/${e.video_id}`} className="shrink-0 font-semibold text-primary underline">Open the result →</Link>

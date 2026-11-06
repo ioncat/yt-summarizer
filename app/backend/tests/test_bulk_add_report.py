@@ -70,3 +70,14 @@ async def test_the_report_has_one_entry_per_link_in_the_order_sent(client, seede
     ]
     assert [e["video_id"] for e in body["report"]] == [vid(1), VIDEO_ID, None, vid(1), "queued00001", vid(2), vid(2)]
     assert sum(e["status"] == "added" for e in body["report"]) == body["added"] == 2
+
+
+async def test_an_http_link_to_youtube_is_refused_with_its_own_reason(client):
+    ok = URL.format(vid(1))
+    http = f"http://www.youtube.com/watch?v={vid(2)}"
+    other = "https://example.com/watch?v=abcdefghijk"
+    body = (await client.post("/api/queue/bulk", json={"urls": [ok, http, other, "http://youtu.be/" + vid(3)]})).json()
+    assert body["added"] == 1 and body["invalid"] == [http, other, "http://youtu.be/" + vid(3)]    # still refused
+    assert [(e["status"], e.get("reason")) for e in body["report"]] == [
+        ("added", None), ("invalid", "http_only"), ("invalid", "not_youtube"), ("invalid", "http_only")]
+    assert [i["video_id"] for i in (await client.get("/api/queue")).json()["items"]] == [vid(1)]    # nothing was queued for http

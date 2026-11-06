@@ -473,6 +473,25 @@ describe('HomePage: one form for one link or a list', () => {
     expect(screen.getByRole('link', { name: /View queue/ }).getAttribute('href')).toBe('/queue')
   })
 
+  it('an http:// link says that only https links are accepted, not "not a YouTube link"', async () => {
+    const http = 'http://www.youtube.com/watch?v=listVideo002'
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({
+      added: 1, ids: [1], invalid: [http, 'nonsense'], duplicates: [],
+      report: [
+        { url: list[0], video_id: 'listVideo001', status: 'added' },
+        { url: http, video_id: null, status: 'invalid', reason: 'http_only' },
+        { url: 'nonsense', video_id: null, status: 'invalid', reason: 'not_youtube' },
+      ],
+    } as never)
+    renderHome()
+    fireEvent.change(field(), { target: { value: `${list[0]}\n${http}\nnonsense` } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add all (3)' }))
+    const box = await screen.findByTestId('bulk-report')
+    const rows = Array.from(box.querySelectorAll('li')).map(r => r.textContent)
+    expect(rows[1]).toBe(`remove${http}only https links are accepted`)
+    expect(rows[2]).toBe('removenonsensenot a YouTube link')
+  })
+
   it('fifty links are all in the report, in order', async () => {
     const fifty = Array.from({ length: 50 }, (_, n) => `https://youtu.be/bulk${String(n).padStart(7, '0')}`)
     vi.mocked(api.queueBulkAdd).mockResolvedValue({
