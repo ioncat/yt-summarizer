@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Transformer } from 'markmap-lib'
 import { Markmap } from 'markmap-view'
+import { fitMindmap } from './mindmapFit'
 
 const transformer = new Transformer()
 
@@ -20,20 +21,31 @@ export default function MindmapView({ text, title, onRegenerate }: Props) {
   const mmRef = useRef<Markmap | null>(null)
 
   // markmap measures the svg: drawn while the svg is hidden or has no size (a tab being switched, a lazy chunk still loading) it
-  // throws SVGLength errors and lays out at NaN / a tiny scale (NS-17 items 7, 10, 16). So it is drawn only once the svg has a size.
+  // throws SVGLength errors and lays out at NaN / a tiny scale (NS-17 items 7, 10, 16). So it is drawn only once the svg has a
+  // size, fitted at a readable scale (mindmapFit.ts), and fitted again whenever the size changes (the tab becomes visible, the
+  // window is resized). A change to a hidden (zero) size does nothing.
   useEffect(() => {
     const svg = svgRef.current
     if (!svg) return
     let observer: ResizeObserver | null = null
+    let timer: ReturnType<typeof setTimeout> | null = null
     let gone = false
+    let fittedAt = ''
+
+    const refit = (mm: Markmap) => {
+      if (gone || mmRef.current !== mm || !hasSize(svg)) return
+      const { width, height } = svg.getBoundingClientRect()
+      fittedAt = `${Math.round(width)}x${Math.round(height)}`
+      void fitMindmap(mm as never, svg)
+    }
 
     const draw = () => {
       const { root } = transformer.transform(text.replace(/</g, '&lt;'))
-      if (mmRef.current) {
-        const mm = mmRef.current
-        mm.setData(root).then(() => { if (!gone && mmRef.current === mm && hasSize(svg)) mm.fit() })
-      } else {
-        const mm = Markmap.create(svg, {
+      const box = svg.getBoundingClientRect()
+      fittedAt = `${Math.round(box.width)}x${Math.round(box.height)}`      // (the fit after setData is for this size)
+      let mm = mmRef.current
+      if (!mm) {
+        mm = Markmap.create(svg, {
           embedGlobalCSS: true,
           fitRatio: 0.9,
           duration: 300,
@@ -41,22 +53,30 @@ export default function MindmapView({ text, title, onRegenerate }: Props) {
           initialExpandLevel: 3,
         })
         mmRef.current = mm
-        mm.setData(root).then(() => { if (!gone && mmRef.current === mm && hasSize(svg)) mm.fit() })
       }
+      const shown = mm
+      shown.setData(root).then(() => refit(shown))
     }
 
-    if (hasSize(svg) || typeof ResizeObserver === 'undefined') {
-      draw()
-    } else {
-      observer = new ResizeObserver(() => {
-        if (!hasSize(svg)) return
-        observer?.disconnect()
-        observer = null
-        if (!gone) draw()
-      })
-      observer.observe(svg)
+    const sizeChanged = () => {
+      if (gone) return
+      if (!hasSize(svg)) return                                  // hidden: wait for the next size
+      if (!mmRef.current) { draw(); return }                     // first time it has a size
+      const { width, height } = svg.getBoundingClientRect()
+      if (`${Math.round(width)}x${Math.round(height)}` === fittedAt) return
+      if (timer) clearTimeout(timer)
+      const mm = mmRef.current
+      timer = setTimeout(() => refit(mm), 120)                   // a resize drag fires many times: fit once it settles
     }
-    return () => { gone = true; observer?.disconnect() }
+
+    if (hasSize(svg)) draw()
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(sizeChanged)
+      observer.observe(svg)
+    } else if (!hasSize(svg)) {
+      draw()                                                      // (no ResizeObserver: draw as before)
+    }
+    return () => { gone = true; if (timer) clearTimeout(timer); observer?.disconnect() }
   }, [text])
 
   useEffect(() => {
@@ -94,7 +114,7 @@ export default function MindmapView({ text, title, onRegenerate }: Props) {
         <button className="mindmap-export-btn" onClick={exportSvg} title="Download mindmap as SVG">
           ↓ Export SVG
         </button>
-        <button className="mindmap-export-btn" onClick={() => { if (svgRef.current && hasSize(svgRef.current)) mmRef.current?.fit() }} title="Reset zoom">
+        <button className="mindmap-export-btn" onClick={() => { if (svgRef.current && mmRef.current) void fitMindmap(mmRef.current as never, svgRef.current) }} title="Reset zoom">
           ⊡ Fit
         </button>
         {onRegenerate && (
