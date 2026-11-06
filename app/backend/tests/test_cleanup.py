@@ -70,5 +70,7 @@ async def test_cancel_cleanup(client, seeded_video):
 
 @pytest.mark.asyncio
 async def test_cleanup_not_found(client):
+    await client.put("/api/settings/cleanup", json={"model": "qwen2.5:7b"})        # the settings checks come first: configure them
+    await client.put("/api/settings/app", json={"ollama_url": "http://localhost:11434"})
     r = await client.post("/api/result/nonexistent/cleanup")
-    assert r.status_code in (404, 200)  # 200 if bg task handles missing gracefully
+    assert r.status_code == 404

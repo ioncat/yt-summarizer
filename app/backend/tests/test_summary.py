@@ -73,6 +73,8 @@ async def test_summary_uses_cleaned_text_when_available(client, db_session, seed
         fmt.cleaned_text = "Cleaned version of the transcript."
         await db_session.commit()
 
-    # Verify endpoint accepts the request
+    # Verify endpoint accepts the request (it needs a model and an Ollama URL: this test sets its own)
+    await client.put("/api/settings/summarization", json={"model": "qwen2.5:7b"})
+    await client.put("/api/settings/app", json={"ollama_url": "http://localhost:11434"})
     r = await client.post(f"/api/result/{seeded_video['video_id']}/summary")
     assert r.status_code == 200

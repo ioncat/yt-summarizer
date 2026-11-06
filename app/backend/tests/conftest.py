@@ -146,3 +146,57 @@ async def seeded_video(db_session):
     await db_session.delete(fmt)
     await db_session.delete(video)
     await db_session.commit()
+
+
+# --- order options (NS-22): the suite must pass in any order -------------------------------------------------------------
+def pytest_addoption(parser):
+    parser.addoption("--reverse", action="store_true", default=False, help="run the tests in reverse order")
+    parser.addoption("--shuffle", action="store", default=None, metavar="SEED", help="run the tests in a random order (seed)")
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--reverse"):
+        items.reverse()
+    seed = config.getoption("--shuffle")
+    if seed is not None:
+        import random
+        random.Random(int(seed)).shuffle(items)
+
+
+# --- every test starts from the seeded settings and an empty data set (NS-22) ------------------------------------------------
+# The test database lives for the whole session. A test that sets a model, an Ollama URL or a prompt, or leaves a queue item, a
+# task or a video behind, used to hand it to every test after it, so the result depended on the order. After each test the
+# settings tables are put back as they were seeded and the data tables are emptied.
+_DATA_TABLES = ("processing_stages", "processing_queue", "processing_tasks", "benchmark_runs",
+                "subtitles_raw", "subtitles_formatted", "videos")      # (children first)
+_SETTINGS_TABLES = ("app_settings", "pipeline_settings")
+_SETTINGS_BASELINE: dict[str, list[dict]] = {}
+
+
+async def _read_settings() -> dict[str, list[dict]]:
+    from sqlalchemy import text
+    async with TEST_SESSION_FACTORY() as session:
+        return {t: sorted((dict(r) for r in (await session.execute(text(f"SELECT * FROM {t}"))).mappings()),
+                          key=lambda row: str(sorted(row.items()))) for t in _SETTINGS_TABLES}
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _state_is_restored(init_database):
+    from sqlalchemy import text
+    if not _SETTINGS_BASELINE:
+        _SETTINGS_BASELINE.update(await _read_settings())
+    yield
+    async with TEST_SESSION_FACTORY() as session:
+        for table in _DATA_TABLES:
+            await session.execute(text(f"DELETE FROM {table}"))
+        await session.commit()
+    now = await _read_settings()
+    for table in _SETTINGS_TABLES:
+        if now[table] == _SETTINGS_BASELINE[table]:
+            continue
+        async with TEST_SESSION_FACTORY() as session:
+            await session.execute(text(f"DELETE FROM {table}"))
+            for row in _SETTINGS_BASELINE[table]:
+                cols = ", ".join(row)
+                await session.execute(text(f"INSERT INTO {table} ({cols}) VALUES ({', '.join(':' + c for c in row)})"), row)
+            await session.commit()
