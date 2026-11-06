@@ -62,3 +62,11 @@ async def test_get_models_ollama_down(client):
     assert r.status_code in (200, 503)
     if r.status_code == 200:
         assert r.json() == []
+
+
+async def test_the_llm_context_limit_is_saved_and_returned(client):
+    """NS-26: the Settings page has a field for it; the value survives a save and a read."""
+    r = await client.put("/api/settings/app", json={"llm_max_num_ctx": "65536", "chat_num_ctx": "16384"})
+    assert r.status_code == 200
+    app = (await client.get("/api/settings")).json()["app"]
+    assert app["llm_max_num_ctx"] == "65536" and app["chat_num_ctx"] == "16384"

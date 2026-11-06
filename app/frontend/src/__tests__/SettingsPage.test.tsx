@@ -26,6 +26,7 @@ const appSettings = {
   upload_auto_delete_mode: 'immediate',
   upload_auto_delete_days: '7',
   chat_num_ctx: '32768',
+  llm_max_num_ctx: '32768',
   download_default_format: 'mp4',
   download_default_quality: 'best',
 }
@@ -96,7 +97,8 @@ describe('SettingsPage', () => {
   it('General tab: controls present and Save calls saveAppSettings', async () => {
     await renderPage()
     expect(screen.getByDisplayValue('http://localhost:11434')).toBeTruthy()
-    expect(screen.getByText('Chat context window')).toBeTruthy()
+    expect(screen.getByText('Chat context window (minimum)')).toBeTruthy()
+    expect(screen.getByLabelText('Context limit for cleanup, summary and mind map')).toBeTruthy()
     expect(screen.getByText('Parallel workers')).toBeTruthy()
     expect(screen.getByText('Download defaults')).toBeTruthy()
     expect(screen.getByText('Boxed layout (floating UI)')).toBeTruthy()
@@ -107,6 +109,17 @@ describe('SettingsPage', () => {
       parallel_workers: '2',
       chat_num_ctx: '32768',
     })
+  })
+
+  it('General tab: the context limit of the LLM steps is a field, saved with the other settings (NS-26)', async () => {
+    await renderPage()
+    const field = screen.getByLabelText('Context limit for cleanup, summary and mind map') as HTMLSelectElement
+    expect(field.value).toBe('32768')
+    expect(Array.from(field.options).map(o => o.value)).toEqual(['4096', '8192', '16384', '32768', '65536'])   // the server's range
+    fireEvent.change(field, { target: { value: '65536' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(m.saveAppSettings).toHaveBeenCalledTimes(1))
+    expect(m.saveAppSettings.mock.calls[0][0]).toMatchObject({ llm_max_num_ctx: '65536', chat_num_ctx: '32768' })
   })
 
   it('AI Cleanup tab: model change and Save call saveSettings', async () => {

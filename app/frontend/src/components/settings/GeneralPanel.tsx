@@ -15,6 +15,7 @@ export function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
   const [parallelWorkers, setParallelWorkers] = useState(initial.parallel_workers ?? '1')
   const [parallelError, setParallelError]   = useState('')
   const [chatNumCtx, setChatNumCtx]         = useState(initial.chat_num_ctx ?? '32768')
+  const [llmMaxNumCtx, setLlmMaxNumCtx]     = useState(initial.llm_max_num_ctx ?? '32768')
   const [downloadFormat, setDownloadFormat] = useState(initial.download_default_format ?? 'mp4')
   const [downloadQuality, setDownloadQuality] = useState(initial.download_default_quality ?? 'best')
   const [saving, setSaving]                 = useState(false)
@@ -33,6 +34,7 @@ export function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
     setCookiesPath(initial.cookies_path ?? '')
     setParallelWorkers(initial.parallel_workers ?? '1')
     setChatNumCtx(initial.chat_num_ctx ?? '32768')
+    setLlmMaxNumCtx(initial.llm_max_num_ctx ?? '32768')
     setDownloadFormat(initial.download_default_format ?? 'mp4')
     setDownloadQuality(initial.download_default_quality ?? 'best')
   }, [initial])
@@ -64,6 +66,7 @@ export function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
         cookies_path: cookiesPath || null,
         parallel_workers: String(pw),
         chat_num_ctx: chatNumCtx,
+        llm_max_num_ctx: llmMaxNumCtx,
         download_default_format: downloadFormat,
         download_default_quality: downloadQuality,
       })
@@ -149,9 +152,10 @@ export function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
 
       {/* Chat context window */}
       <div className="space-y-1.5">
-        <label className="text-label-md text-on-surface">Chat context window</label>
+        <label className="text-label-md text-on-surface">Chat context window (minimum)</label>
         <p className="text-body-sm text-on-surface-variant">
-          Tokens available for the video transcript + conversation. Larger values use more VRAM.
+          The chat asks Ollama for at least this many tokens (transcript + conversation) and grows with the conversation up to the
+          larger of this value and the limit below. Larger values use more VRAM.
         </p>
         <select
           className={SELECT()}
@@ -164,6 +168,27 @@ export function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
           <option value="32768">32K — recommended</option>
           <option value="65536">64K — long videos</option>
           <option value="131072">128K — very long videos (high VRAM)</option>
+        </select>
+      </div>
+
+      {/* Context limit of the other LLM steps */}
+      <div className="space-y-1.5">
+        <label className="text-label-md text-on-surface" htmlFor="llm-max-num-ctx">Context limit for cleanup, summary and mind map</label>
+        <p className="text-body-sm text-on-surface-variant">
+          The app sizes the context to each input and never asks for more than this. Too small and a long video fails with
+          "the answer was cut off"; larger values use more VRAM.
+        </p>
+        <select
+          id="llm-max-num-ctx"
+          className={SELECT()}
+          value={llmMaxNumCtx}
+          onChange={e => setLlmMaxNumCtx(e.target.value)}
+        >
+          <option value="4096">4K — minimal (short clips only)</option>
+          <option value="8192">8K</option>
+          <option value="16384">16K</option>
+          <option value="32768">32K — recommended</option>
+          <option value="65536">64K — long videos (high VRAM)</option>
         </select>
       </div>
 

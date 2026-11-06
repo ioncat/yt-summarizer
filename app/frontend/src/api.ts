@@ -414,6 +414,7 @@ export interface AppSettings {
   upload_auto_delete_mode: string | null
   upload_auto_delete_days: string | null
   chat_num_ctx: string | null
+  llm_max_num_ctx: string | null     // the upper bound of the context the app asks Ollama for (summary, cleanup, mind map, chat)
   download_default_format: string | null
   download_default_quality: string | null
 }
