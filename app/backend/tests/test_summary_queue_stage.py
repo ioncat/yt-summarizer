@@ -27,7 +27,7 @@ async def _setup(client):
 
 
 def test_the_cancel_set_is_shared_with_the_result_router():
-    from routers import result as r
+    from routers import result_stages as r
     assert r._SUMMARY_CANCEL_SET is SUMMARY_CANCEL
 
 

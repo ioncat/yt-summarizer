@@ -46,14 +46,14 @@ TEST_UPLOADS = tempfile.mkdtemp(prefix="yt-summarizer-test-uploads-")
 LIVE_UPLOADS = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data/uploads"))
 
 import routers.process as _r_process  # noqa: E402
-import routers.result as _r_result  # noqa: E402
+import routers.result_stages as _r_result_stages  # noqa: E402
 import routers.settings as _r_settings  # noqa: E402
 import services.file_stt as _s_file_stt  # noqa: E402
 
 _s_file_stt.uploads_dir = lambda: TEST_UPLOADS
 _r_process.uploads_dir = lambda: TEST_UPLOADS
 _r_settings._uploads_dir = lambda: TEST_UPLOADS
-_r_result._uploads_dir = lambda: TEST_UPLOADS
+_r_result_stages._uploads_dir = lambda: TEST_UPLOADS     # (trigger_reextract looks for the original file)
 
 
 def _snapshot_uploads(path: str) -> list:

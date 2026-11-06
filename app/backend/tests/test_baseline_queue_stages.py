@@ -78,7 +78,7 @@ async def test_queue_cleanup_ignores_a_stale_cancel_flag_set_before_it_starts(se
     # was: BASELINE known gap — is_cancelled was a constant False and the Stop flag was never read.
     # NS-11 stage 4a (decision 1): the stage reads the flag and Stop works (see test_cleanup_queue_stage.py); a flag that
     # was set before the stage started is stale (nothing was running) and is cleared, it must not stop a new run.
-    from routers import result as res
+    from routers import result_stages as res
     res._CANCEL_SET.add(VIDEO_ID)
     gate = Gate(result="Cleaned text.")
     gate.release.set()

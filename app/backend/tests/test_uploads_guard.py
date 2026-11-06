@@ -9,12 +9,12 @@ from tests import conftest as ct
 
 def test_every_upload_folder_function_points_at_the_temp_folder_not_the_live_one():
     import routers.process as proc
-    import routers.result as result
+    import routers.result_stages as result
     import routers.settings as settings
     import services.file_stt as fs
     live = os.path.normcase(ct.LIVE_UPLOADS)
     for name, fn in (("file_stt.uploads_dir", fs.uploads_dir), ("process.uploads_dir", proc.uploads_dir),
-                     ("settings._uploads_dir", settings._uploads_dir), ("result._uploads_dir", result._uploads_dir)):
+                     ("settings._uploads_dir", settings._uploads_dir), ("result_stages._uploads_dir", result._uploads_dir)):
         got = os.path.normcase(os.path.abspath(fn()))
         assert got != live and got == os.path.normcase(os.path.abspath(ct.TEST_UPLOADS)), name
     assert os.path.normcase(os.path.abspath(ct.LIVE_UPLOADS)).endswith(os.path.normcase(os.path.join("app", "data", "uploads")))

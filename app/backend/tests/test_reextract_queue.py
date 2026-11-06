@@ -250,10 +250,11 @@ async def test_a_running_reextract_without_counters_yet_says_starting(client, lo
 
 def test_the_in_memory_copies_of_the_background_task_are_gone():
     import routers.result as r
+    import routers.result_stages as rs
     import services.reextract as rx
-    for module in (r, rx):
+    for module in (r, rs, rx):
         assert not hasattr(module, "_REEXTRACT_SET") and not hasattr(module, "_RETRANSCRIBE_PROGRESS")
-    assert not hasattr(r, "run_reextract")                       # the router no longer starts the work itself
+    assert not hasattr(r, "run_reextract") and not hasattr(rs, "run_reextract")                       # the router no longer starts the work itself
 
 
 # --- simultaneous requests give one item (review of stage 6) --------------------------------------------------------------

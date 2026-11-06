@@ -193,7 +193,7 @@ async def test_cleanup_second_request_while_queued_or_running_is_not_started_twi
 
 async def test_cleanup_cancel_when_nothing_runs_is_200_and_leaves_no_stale_flag(client, seeded_video):
     # was: the background copy left a stale flag that the next start cleared; now nothing is set when nothing runs.
-    from routers import result as res
+    from routers import result_stages as res
     r = await client.delete(f"{URL}/cleanup")
     assert r.status_code == 200 and r.json() == {"status": "cancelling"}
     assert VIDEO_ID not in res._CANCEL_SET
