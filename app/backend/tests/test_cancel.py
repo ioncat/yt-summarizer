@@ -286,3 +286,20 @@ async def test_cancel_during_the_summary_of_a_three_stage_item_skips_the_mind_ma
         await worker
     assert ran == [] and (await get_item(item))["status"] == "skipped"
     assert (await fmt_row())["mindmap_status"] is None
+
+
+async def test_cancel_of_a_running_extract_only_item_ends_it_skipped_with_the_run_cancelled(client, seeded_video):
+    """yt-dlp cannot be interrupted: the Stop is looked at when the step returns. The saved video stays."""
+    async def slow_extract(url, language="auto"):
+        item_id = (await client.get("/api/queue")).json()["items"][0]["id"]
+        assert (await client.post(f"/api/queue/{item_id}/cancel")).json()["status"] == "stopping"
+        return {"video_id": VIDEO_ID, "db_video_id": None}
+
+    item = await add_item(["extract"])
+    with patch.object(q, "_run_extract", slow_extract):
+        await run_worker([item])
+    assert (await get_item(item))["status"] == "skipped"
+    shown = (await client.get(f"/api/result/{VIDEO_ID}")).json()
+    assert shown["stages"]["extract"]["status"] == "cancelled" and shown["title"]      # the video is still there
+    assert not ITEM_CANCEL
+

@@ -920,6 +920,14 @@ async def _run_mindmap_stage(yt_video_id: str, item_id: int) -> None:
 # Queue worker
 # ---------------------------------------------------------------------------
 
+async def _cancellable(item_id: int, step):
+    """Run a step that cannot be cut short (yt-dlp) and check the item's Stop flag when it returns: inside the run, so the run is
+    recorded as cancelled. What the step saved (the video) stays; the item ends skipped."""
+    result = await step
+    _check_item_cancel(item_id)
+    return result
+
+
 def _check_item_cancel(item_id: int) -> None:
     """Between the stages of an item: a Stop that arrived while a step that cannot be cut short was running ends the item here."""
     if item_id in ITEM_CANCEL:
@@ -964,13 +972,14 @@ async def queue_worker() -> None:
             elif "transcribe" in pipeline_stages:
                 _QUEUE_PROGRESS[item_id] = "downloading audio…"
                 transcribe_result = await stage_runs.recorded(
-                    "transcribe", url, item_id, lambda: _run_transcribe(url, language=item_language, item_id=item_id))
+                    "transcribe", url, item_id,
+                    lambda: _cancellable(item_id, _run_transcribe(url, language=item_language, item_id=item_id)))
                 yt_video_id = transcribe_result["video_id"]
                 db_video_id = transcribe_result["db_video_id"]
             elif "extract" in pipeline_stages:
                 _QUEUE_PROGRESS[item_id] = "extracting subtitles…"
                 extract_result = await stage_runs.recorded(
-                    "extract", url, item_id, lambda: _run_extract(url, language=item_language))
+                    "extract", url, item_id, lambda: _cancellable(item_id, _run_extract(url, language=item_language)))
                 yt_video_id = extract_result["video_id"]
                 db_video_id = extract_result["db_video_id"]
             else:
