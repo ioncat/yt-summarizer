@@ -605,7 +605,14 @@ export interface QueueItem {
 export interface QueueDuplicate {
   url: string | null
   video_id: string
-  reason: 'processed' | 'in_queue'
+  reason: 'processed' | 'in_queue' | 'in_list' | 'order'   // in_list: the same video is earlier in this very list
+}
+
+/** One link of the list that was sent, in the order sent, with what became of it (NS-24). */
+export interface QueueReportEntry {
+  url: string
+  video_id: string | null
+  status: 'added' | 'processed' | 'in_queue' | 'in_list' | 'invalid'
 }
 
 export interface QueueAddResult {
@@ -614,6 +621,7 @@ export interface QueueAddResult {
   invalid: string[]
   duplicates: string[]
   duplicate_details?: QueueDuplicate[]  // video id and reason per duplicate, from the server's own parser
+  report?: QueueReportEntry[]           // every link sent, in the order sent, with its own status
 }
 
 export async function queueBulkAdd(

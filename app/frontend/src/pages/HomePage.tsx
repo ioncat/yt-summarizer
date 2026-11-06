@@ -1,7 +1,8 @@
 import { useState, useEffect, FormEvent, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { FileUploadForm } from '../components/home/FileUploadForm'
-import { BulkReport, BulkAddResult } from '../components/home/BulkReport'
+import { BulkReport, reportOf } from '../components/home/BulkReport'
+import type { QueueReportEntry } from '../api'
 import { parseLinks } from '../utils/links'
 import { LANGUAGES, inputBase, selectBase } from '../components/home/common'
 import { AUTO_PIPELINE_KEY, PIPELINE_PRESETS, autoPipelineStages, readAutoPipeline, resolveStages } from '../utils/pipeline'
@@ -38,7 +39,7 @@ export default function HomePage() {
   const [ollamaOnline, setOllamaOnline] = useState(false)
 
   // The report of a list (two or more links): what was added and why each other link was skipped
-  const [bulkResult, setBulkResult] = useState<BulkAddResult | null>(null)
+  const [bulkResult, setBulkResult] = useState<{ added: number; report: QueueReportEntry[] } | null>(null)
 
   // The page stays: a line says what happened, so the next link can be pasted at once.
   // A duplicate carries its video id from the server (links like /live/, youtu.be/ and /shorts/ have no ?v=)
@@ -53,7 +54,7 @@ export default function HomePage() {
   // One link: the line above ("Added" / "Already processed" ...) and the follow of its queue item. Two or more: the report of the list.
   function afterAdd(res: QueueAddResult) {
     if (links.length === 1) { afterQueueAdd(res); return }
-    setBulkResult({ added: res.added, invalid: res.invalid, duplicates: res.duplicates ?? [] })
+    setBulkResult({ added: res.added, report: reportOf(res) })
     if (res.added > 0) setUrl('')
   }
 
@@ -361,7 +362,7 @@ export default function HomePage() {
               </div>
             )}
 
-            {bulkResult && <BulkReport result={bulkResult} />}
+            {bulkResult && <BulkReport added={bulkResult.added} report={bulkResult.report} />}
 
             {error && (
               <div role="alert" className="bg-error-container border border-error/30 rounded-lg px-4 py-3 flex items-center gap-3 flex-wrap">

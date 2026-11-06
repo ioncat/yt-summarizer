@@ -426,17 +426,80 @@ describe('HomePage: one form for one link or a list', () => {
     expect(vi.mocked(api.queueBulkAdd).mock.calls[0][0]).toEqual([list[0], list[1]])
   })
 
-  it('a list reports what was added and the links that were skipped, and keeps the text when nothing was added', async () => {
+  it('a list where nothing was added says so, names each link\'s reason, and keeps the text for editing', async () => {
     vi.mocked(api.queueBulkAdd).mockResolvedValue({
       added: 0, ids: [], invalid: ['nonsense'], duplicates: [list[0]],
       duplicate_details: [{ url: list[0], video_id: 'listVideo001', reason: 'processed' }],
+      report: [
+        { url: list[0], video_id: 'listVideo001', status: 'processed' },
+        { url: 'nonsense', video_id: null, status: 'invalid' },
+      ],
     })
     renderHome()
     fireEvent.change(field(), { target: { value: `${list[0]}\nnonsense` } })
     fireEvent.click(screen.getByRole('button', { name: 'Add all (2)' }))
-    expect(await screen.findByText('Skipped: 2')).toBeTruthy()
-    expect(screen.getByText('nonsense')).toBeTruthy()
+    expect(await screen.findByText(/Nothing was added/)).toBeTruthy()
+    expect(screen.getByText('already processed')).toBeTruthy()
+    expect(screen.getByText('not a YouTube link')).toBeTruthy()
     expect(field().value).toBe(`${list[0]}\nnonsense`)            // nothing was added: the text stays for editing
+  })
+
+  it('the report names every link with its own reason, in the order sent, and a processed one opens its result', async () => {
+    const report = [
+      { url: list[0], video_id: 'listVideo001', status: 'added' },
+      { url: list[1], video_id: 'listVideo002', status: 'processed' },
+      { url: 'nonsense', video_id: null, status: 'invalid' },
+      { url: list[0], video_id: 'listVideo001', status: 'in_list' },
+      { url: list[2], video_id: 'listVideo003', status: 'in_queue' },
+    ]
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({
+      added: 1, ids: [9], invalid: ['nonsense'], duplicates: [list[1], list[0], list[2]], report,
+    } as never)
+    renderHome()
+    fireEvent.change(field(), { target: { value: report.map(r => r.url).join('\n') } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add all (5)' }))
+    const box = await screen.findByTestId('bulk-report')
+    expect(box.textContent).toContain('Added 1 to the queue, skipped 4.')
+    const rows = Array.from(box.querySelectorAll('li'))
+    expect(rows.map(r => r.getAttribute('data-status'))).toEqual(['added', 'processed', 'invalid', 'in_list', 'in_queue'])
+    expect(rows.map(r => r.textContent)).toEqual([
+      `check${list[0]}added to the queue`,
+      `remove${list[1]}already processedOpen the result →`,
+      'removenonsensenot a YouTube link',
+      `remove${list[0]}duplicate in the list`,
+      `remove${list[2]}already in the queue`,
+    ])
+    expect(screen.getByRole('link', { name: /Open the result/ }).getAttribute('href')).toBe('/result/listVideo002')
+    expect(screen.getByRole('link', { name: /View queue/ }).getAttribute('href')).toBe('/queue')
+  })
+
+  it('fifty links are all in the report, in order', async () => {
+    const fifty = Array.from({ length: 50 }, (_, n) => `https://youtu.be/bulk${String(n).padStart(7, '0')}`)
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({
+      added: 50, ids: fifty.map((_, n) => n + 1), invalid: [], duplicates: [],
+      report: fifty.map((url, n) => ({ url, video_id: `bulk${String(n).padStart(7, '0')}`, status: 'added' })),
+    } as never)
+    renderHome()
+    fireEvent.change(field(), { target: { value: fifty.join('\n') } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add all (50)' }))
+    const box = await screen.findByTestId('bulk-report')
+    expect(vi.mocked(api.queueBulkAdd).mock.calls[0][0]).toEqual(fifty)
+    expect(Array.from(box.querySelectorAll('li')).map(r => r.querySelector('span.font-mono')!.textContent)).toEqual(fifty)
+    expect(box.textContent).toContain('Added 50 to the queue.')
+  })
+
+  it('an answer without a report (older server) still lists the skipped links with their reason', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({
+      added: 1, ids: [1], invalid: ['nonsense'], duplicates: [list[1]],
+      duplicate_details: [{ url: list[1], video_id: 'listVideo002', reason: 'in_queue' }],
+    })
+    renderHome()
+    fireEvent.change(field(), { target: { value: `${list[0]}\n${list[1]}\nnonsense` } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add all (3)' }))
+    const box = await screen.findByTestId('bulk-report')
+    expect(box.textContent).toContain('skipped 2')
+    expect(box.textContent).toContain('already in the queue')
+    expect(box.textContent).toContain('not a YouTube link')
   })
 
   it('Enter adds a single link; with several lines Enter is a new line and Ctrl+Enter adds the list', async () => {
