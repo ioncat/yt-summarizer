@@ -3,41 +3,13 @@ import { useNavigate, Link } from 'react-router-dom'
 import { queueAddMessage } from '../utils/queueMessage'
 import { getHistory, deleteResult, deleteResultsBulk, queueBulkAddByIds, toggleFavorite, HistoryItem } from '../api'
 import { classifyVideo, VideoType } from '../utils/videoType'
+import { SourceBadge } from '../components/SourceBadge'
 
 const HISTORY_PIPELINE_PRESETS = [
   { value: 'cleanup', label: 'Cleanup', stages: ['cleanup'] },
   { value: 'summary', label: 'Summary', stages: ['summary'] },
   { value: 'cleanup_summary', label: 'Cleanup + Summary', stages: ['cleanup', 'summary'] },
 ]
-
-const AUDIO_EXTS = new Set(['.mp3', '.wav', '.m4a', '.ogg', '.flac', '.aac', '.opus', '.wma'])
-
-function getSourceType(item: import('../api').HistoryItem): 'youtube' | 'local_audio' | 'local_video' {
-  if (!item.url?.startsWith('local://')) return 'youtube'
-  const filename = item.url.replace('local://', '')
-  const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase()
-  return AUDIO_EXTS.has(ext) ? 'local_audio' : 'local_video'
-}
-
-function SourceBadge({ item }: { item: import('../api').HistoryItem }) {
-  if (item.subtitle_source !== 'transcript') return null
-  const src = getSourceType(item)
-  const configs = {
-    local_audio: { icon: 'audio_file',   title: 'Local audio file (STT)' },
-    local_video: { icon: 'movie',        title: 'Local video file (STT)' },
-    youtube:     { icon: 'smart_display', title: 'YouTube (STT)' },
-  }
-  const c = configs[src]
-  return (
-    <span
-      title={c.title}
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container text-tag-uppercase font-bold tracking-wider uppercase"
-    >
-      <span className="material-symbols-outlined text-[14px]">{c.icon}</span>
-      STT
-    </span>
-  )
-}
 
 function TypeBadge({ type }: { type: VideoType }) {
   const configs: Record<string, { icon: string; bg: string; text: string }> = {
