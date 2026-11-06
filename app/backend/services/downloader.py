@@ -33,6 +33,16 @@ class DownloadFailed(RuntimeError):
     """The download did not produce a file; the message says why (it is shown on the queue row and the result page)."""
 
 
+def clean_ytdlp_error(stderr: str, limit: int = 500) -> str:
+    """The part of yt-dlp's stderr worth showing: its ERROR lines. yt-dlp also prints warnings, the usual one being the long
+    "No supported JavaScript runtime could be found ..." notice, which says nothing about why this download failed. Without any
+    ERROR line the last lines that are not warnings are used."""
+    lines = [l.strip() for l in stderr.splitlines() if l.strip()]
+    errors = [l for l in lines if l.startswith("ERROR")]
+    kept = errors[-2:] if errors else [l for l in lines if not l.startswith("WARNING")][-3:]
+    return " | ".join(kept)[-limit:] if kept else "unknown error"
+
+
 def downloads_dir() -> str:
     """Where downloaded files are saved (data/downloads next to the backend folder; gitignored)."""
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/downloads"))
@@ -126,7 +136,7 @@ def _run_blocking(args: list[str], video_id: str, out_dir: str) -> Path:
     except subprocess.TimeoutExpired as exc:
         raise DownloadFailed("Download timed out") from exc
     if proc.returncode != 0:
-        err = proc.stderr.decode(errors="replace")[-500:].strip() if proc.stderr else "unknown error"
+        err = clean_ytdlp_error(proc.stderr.decode(errors="replace")) if proc.stderr else "unknown error"
         raise DownloadFailed(f"yt-dlp failed: {err}")
     out = find_download(video_id, out_dir)
     if out is None:

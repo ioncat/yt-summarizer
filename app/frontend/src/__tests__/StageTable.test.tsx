@@ -90,3 +90,14 @@ describe('StageTable download row (NS-17 item 12)', () => {
     expect(screen.queryByRole('link')).toBeNull()
   })
 })
+
+describe('StageTable download reason (review)', () => {
+  it('download_failed is shown in plain words', () => {
+    const failed = { attempt: 1, status: 'failed', queue_item_id: 3, model: null, started_at: null, finished_at: null,
+      error_code: 'download_failed', error_text: 'yt-dlp failed: ERROR: HTTP Error 404: Not Found', meta: {}, progress_done: null,
+      progress_total: null, runs: 1, last_done: null }
+    render(<StageTable result={{ video_id: 'abc12345678', stages: { download: failed } } as never} />)
+    expect(screen.getByText('the download failed')).toBeTruthy()
+    expect(screen.getByText(/HTTP Error 404/)).toBeTruthy()
+  })
+})

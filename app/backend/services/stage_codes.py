@@ -20,11 +20,16 @@ ERROR_CODES = (
     "upstream_failed",   # an earlier stage of the same queue item failed, so this one never ran
     "no_speech",         # the transcription found no speech in the file
     "file_missing",      # the uploaded file is no longer on disk
+    "download_failed",   # the download stage: yt-dlp failed, or it produced no file
 )
 
 
-def classify_error(error_text: str | None) -> str | None:
+def classify_error(error_text: str | None, stage: str | None = None) -> str | None:
     """Reason code for a stored error text (None for no text). Used by the migration of old rows and by the stage writer.
+
+    The download stage has its own rule: its texts come from yt-dlp ("HTTP Error 404: Not Found", "No file was produced", a refused
+    connection ...) and must not be read as an Ollama or model problem. A timeout and a Stop keep their own codes; anything else
+    that fails the download is `download_failed`.
 
     Order matters: a missing MODEL ("model 'x' not found") is model_missing before the generic "not found"; a connection
     that failed or an Ollama server error (HTTP 5xx) is ollama_down before the rest.
@@ -32,6 +37,12 @@ def classify_error(error_text: str | None) -> str | None:
     if not error_text or not error_text.strip():
         return None
     t = error_text.lower()
+    if stage == "download":
+        if "timed out" in t or "timeout" in t:
+            return "timeout"
+        if "cancelled" in t or "canceled" in t:
+            return "cancelled"
+        return "download_failed"
     if "did not run: an earlier stage failed" in t:
         return "upstream_failed"
     if "no speech" in t:

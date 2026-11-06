@@ -26,6 +26,7 @@ const REASON: Record<string, string> = {
   upstream_failed: 'an earlier step failed',
   no_speech: 'no speech was found in the file',
   file_missing: 'the uploaded file is no longer on disk',
+  download_failed: 'the download failed',
 }
 
 function seconds(run: StageRunDetail): number | null {

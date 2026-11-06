@@ -11,6 +11,7 @@ import pytest_asyncio
 
 from services import downloader
 from services.stage_control import ITEM_CANCEL
+from services.stage_codes import ERROR_CODES, classify_error
 from tests import conftest as ct
 from tests.baseline_helpers import VIDEO_ID, add_item, fmt_row, get_item, reset_queue, run_worker
 
@@ -394,3 +395,70 @@ async def test_a_stop_during_the_extract_still_stops_everything_and_downloads_no
     with patch("services.subtitle_extractor.extract_subtitles", stopped_extract), patch.object(downloader.subprocess, "run", run):
         await run_worker([item])
     assert (await get_item(item))["status"] == "skipped" and calls == []
+
+
+# --- reason codes and the texts shown (review: Low) --------------------------------------------------------------------------------
+
+JS_WARNING = ("WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another "
+              "runtime add  --js-runtimes RUNTIME[:PATH] to your command/config. YouTube extraction without a JS runtime has been "
+              "deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one")
+
+
+def test_the_yt_dlp_javascript_warning_is_not_part_of_the_shown_error():
+    stderr = f"{JS_WARNING}\nERROR: [youtube] dQw4w9WgXcQ: Video unavailable. This video has been removed by the uploader\n"
+    shown = downloader.clean_ytdlp_error(stderr)
+    assert shown == "ERROR: [youtube] dQw4w9WgXcQ: Video unavailable. This video has been removed by the uploader"
+    assert "JavaScript" not in shown
+
+
+def test_without_an_error_line_the_last_lines_that_are_not_warnings_are_shown():
+    stderr = f"{JS_WARNING}\n[download] Destination: x.mp4\n[download]  12.0% of 3.00MiB\nSomething odd happened\n"
+    shown = downloader.clean_ytdlp_error(stderr)
+    assert "JavaScript" not in shown and shown.endswith("Something odd happened")
+    assert downloader.clean_ytdlp_error(JS_WARNING) == "unknown error"                        # only a warning: nothing worth showing
+    assert downloader.clean_ytdlp_error("") == "unknown error"
+    assert len(downloader.clean_ytdlp_error("ERROR: " + "x" * 5000)) <= 500
+
+
+async def test_the_warning_does_not_reach_the_queue_row_or_the_stage_table(client, seeded_video):
+    item = await add_item(["download"])
+    stderr = f"{JS_WARNING}\nERROR: unable to download video data: HTTP Error 404: Not Found\n".encode()
+    with patch.object(downloader.subprocess, "run", fake_ytdlp(returncode=1, stderr=stderr)[0]):
+        await run_worker([item])
+    row = await get_item(item)
+    assert "HTTP Error 404" in row["error_message"] and "JavaScript" not in row["error_message"]
+    stage = await stage_of(client)
+    assert "JavaScript" not in stage["error_text"]
+    assert stage["error_code"] == "download_failed"                                          # not not_found
+
+
+@pytest.mark.parametrize("text,code", [
+    ("yt-dlp failed: ERROR: unable to download video data: HTTP Error 404: Not Found", "download_failed"),
+    ("yt-dlp failed: ERROR: [youtube] dQw4w9WgXcQ: Video unavailable. This video is private", "download_failed"),
+    ("yt-dlp failed: ERROR: unable to download video data: <urlopen error [Errno 111] Connection refused>", "download_failed"),
+    ("yt-dlp failed: ERROR: [youtube] x: Sign in to confirm you're not a bot", "download_failed"),
+    ("No file was produced (a video over 4G is skipped)", "download_failed"),
+    ("Download timed out", "timeout"),
+    ("Cancelled", "cancelled"),
+    ("Download is not available for local files", "download_failed"),
+])
+def test_a_failed_download_gets_the_download_code_from_real_texts(text, code):
+    assert classify_error(text, "download") == code
+
+
+def test_the_same_texts_without_the_stage_keep_their_old_codes():
+    """The stage argument is what stops them being read as an Ollama / model problem."""
+    assert classify_error("yt-dlp failed: ERROR: HTTP Error 404: Not Found") == "not_found"
+    assert classify_error("No file was produced (a video over 4G is skipped)") == "empty_answer"
+    assert classify_error("yt-dlp failed: ERROR: <urlopen error Connection refused>") == "ollama_down"
+
+
+def test_download_failed_is_a_known_code():
+    assert "download_failed" in ERROR_CODES
+
+
+async def test_a_run_that_fails_with_no_file_has_the_download_code(client, seeded_video):
+    item = await add_item(["download"])
+    with patch.object(downloader.subprocess, "run", fake_ytdlp(make_file=False)[0]):
+        await run_worker([item])
+    assert (await stage_of(client))["error_code"] == "download_failed"

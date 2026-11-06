@@ -117,7 +117,7 @@ async def fail(db: AsyncSession, video_id: str, stage: str, error: str | None, m
     """The stage failed. The reason code comes from the text (stage_codes.classify_error); a failure always has one."""
     _check(stage)
     now = _ts()
-    code = classify_error(error) or "unexpected"
+    code = classify_error(error, stage) or "unexpected"
     open_id = await _open_row(db, video_id, stage)
     if open_id is None:
         await _insert(db, video_id, stage, "failed", model=model, finished_at=now, error_code=code, error_text=error)
