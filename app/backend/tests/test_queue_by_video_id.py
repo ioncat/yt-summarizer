@@ -121,7 +121,7 @@ async def test_bulk_add_queues_a_local_file_by_video_id(client, local_video):
     r = await client.post("/api/queue/bulk", json={"video_ids": [LOCAL_ID], "pipeline_stages": ["cleanup", "summary"]})
     assert r.status_code == 200
     assert r.json() == {"added": 1, "ids": r.json()["ids"], "invalid": [], "duplicates": [],
-                        "duplicate_details": [], "missing": []}
+                        "duplicate_details": [], "missing": [], "report": []}   # ids have no link, so no report entry
     item = (await client.get("/api/queue")).json()["items"][0]
     assert item["video_id"] == LOCAL_ID and item["url"] == LOCAL_URL and item["db_video_id"] == local_video["db_id"]
     assert item["pipeline_stages"] == ["cleanup", "summary"] and item["status"] == "pending"
