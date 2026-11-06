@@ -200,3 +200,35 @@ async def test_the_result_page_stop_leaves_other_videos_alone(client, seeded_vid
     await client.post(f"/api/result/{VIDEO_ID}/cleanup")
     await client.post(f"/api/result/{VIDEO_ID}/cancel")
     assert [i["id"] for i in (await client.get("/api/queue")).json()["items"]] == [other]
+
+
+# --- the old per-stage Stop endpoints are aliases of the same path (commit 2) -------------------------------------------------------
+
+@pytest.mark.parametrize("stage", ["cleanup", "summary", "mindmap"])
+async def test_the_per_stage_stop_removes_a_waiting_multi_stage_item_and_gives_every_status_back(client, seeded_video, stage):
+    item = await add_item(["cleanup", "summary", "mindmap"])
+    await set_fmt(cleanup_status="processing", summary_status="processing", mindmap_status="processing")
+    r = await client.delete(f"/api/result/{VIDEO_ID}/{stage}")
+    assert r.status_code == 200 and r.json() == {"status": "cancelling"}
+    assert (await client.get("/api/queue")).json()["count"] == 0
+    row = await fmt_row()
+    assert (row["cleanup_status"], row["summary_status"], row["mindmap_status"]) == (None, None, None)
+
+
+async def test_the_per_stage_stop_does_not_touch_an_item_without_that_stage(client, seeded_video):
+    item = await add_item(["summary"])
+    await client.delete(f"/api/result/{VIDEO_ID}/cleanup")
+    assert [i["id"] for i in (await client.get("/api/queue")).json()["items"]] == [item]
+
+
+async def test_the_per_stage_stop_of_a_running_stage_stops_it(client, seeded_video):
+    gate = Gate(result="NEW")
+    item = await add_item(["cleanup"])
+    with patch("services.text_cleaner.clean_text", gate.llm()):
+        worker = asyncio.create_task(run_worker([item]))
+        await gate.wait_started()
+        assert (await client.delete(f"/api/result/{VIDEO_ID}/cleanup")).json() == {"status": "cancelling"}
+        assert gate.calls[0]["is_cancelled"]() is True
+        gate.release.set()
+        await worker
+    assert (await get_item(item))["status"] == "skipped"

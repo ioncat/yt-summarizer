@@ -28,9 +28,6 @@ from services.video_service import (
     get_app_setting,
     get_result,
     get_stage_settings,
-    reset_cleanup_status,
-    reset_mindmap_status,
-    reset_summary_status,
     save_chat_history,
     clear_chat_history,
     set_cleanup_processing,
@@ -126,12 +123,9 @@ async def trigger_cleanup(
 async def cancel_cleanup(video_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
     """Stop the cleanup: a queued one is taken out of the queue, a running one is told to stop (it ends after the
     paragraph in hand). Either way the status goes back to "nothing running" and a previous cleaned text is kept."""
-    from services.queue_by_id import dequeue_pending_stage, has_processing_item
+    from services.cancel import cancel_video_jobs
 
-    if await dequeue_pending_stage(db, video_id, "cleanup"):
-        await reset_cleanup_status(db, video_id)  # it never started: nothing else will reset the status
-    if await has_processing_item(db, video_id):
-        _CANCEL_SET.add(video_id)                 # the worker is on this video: its cleanup stage polls the flag
+    await cancel_video_jobs(db, video_id, "cleanup")      # (NS-16: the same path as the Queue page's Cancel)
     return {"status": "cancelling"}
 
 
@@ -235,12 +229,9 @@ async def cancel_summary(video_id: str, db: Annotated[AsyncSession, Depends(get_
 
     Either way the status goes back to "nothing running" and a previous summary is kept (as in the background copy).
     """
-    from services.queue_by_id import dequeue_pending_stage, has_processing_item
+    from services.cancel import cancel_video_jobs
 
-    if await dequeue_pending_stage(db, video_id, "summary"):
-        await reset_summary_status(db, video_id)  # it never started: nothing else will reset the status
-    if await has_processing_item(db, video_id):
-        _SUMMARY_CANCEL_SET.add(video_id)         # the worker is on this video: its summary stage polls the flag
+    await cancel_video_jobs(db, video_id, "summary")      # (NS-16: the same path as the Queue page's Cancel)
     return {"status": "cancelling"}
 
 
@@ -288,12 +279,9 @@ async def cancel_mindmap(video_id: str, db: AsyncSession = Depends(get_db)):
 
     Either way the status goes back to "nothing running" and a saved map is kept (as in the background copy).
     """
-    from services.queue_by_id import dequeue_pending_stage, has_processing_item
+    from services.cancel import cancel_video_jobs
 
-    if await dequeue_pending_stage(db, video_id, "mindmap"):
-        await reset_mindmap_status(db, video_id)  # it never started: nothing else will reset the status
-    if await has_processing_item(db, video_id):
-        _MINDMAP_CANCEL_SET.add(video_id)      # the worker is on this video: its mind map stage polls the flag
+    await cancel_video_jobs(db, video_id, "mindmap")      # (NS-16: the same path as the Queue page's Cancel)
     return {"status": "cancelling"}
 
 

@@ -39,9 +39,10 @@ async def _signal(db, item_id: int, video_id: str | None, stages: list[str], url
         _STAGE_FLAGS[stage].add(video_id)
 
 
-async def cancel_item(db, item_id: int) -> str:
+async def cancel_item(db, item_id: int, upload_message: str = CANCELLED_MESSAGE) -> str:
     """Cancel one queue item. Returns "removed" (it was waiting), "stopping" (it is running and was told to stop),
-    "not_found" or "not_active" (it is over: done, failed, partial or skipped)."""
+    "not_found" or "not_active" (it is over: done, failed, partial or skipped). `upload_message` is what the task of a removed
+    upload shows."""
     from services.queue_service import delete_item
 
     row = (await db.execute(
@@ -53,7 +54,7 @@ async def cancel_item(db, item_id: int) -> str:
     if status not in ("pending", "processing"):
         return "not_active"
     if status == "pending":
-        outcome = await delete_item(db, item_id, CANCELLED_MESSAGE)
+        outcome = await delete_item(db, item_id, upload_message)
         if outcome == "deleted":
             return "removed"
         if outcome == "not_found":
@@ -63,7 +64,7 @@ async def cancel_item(db, item_id: int) -> str:
     return "stopping"
 
 
-async def cancel_video_jobs(db, video_id: str, stage: str | None = None) -> dict:
+async def cancel_video_jobs(db, video_id: str, stage: str | None = None, upload_message: str = CANCELLED_MESSAGE) -> dict:
     """Cancel the waiting / running items of a video (the result page's Stop). With `stage`, only the items that include that
     stage (the old per-stage endpoints). Returns {"removed": n, "stopping": n}."""
     rows = (await db.execute(
@@ -74,7 +75,13 @@ async def cancel_video_jobs(db, video_id: str, stage: str | None = None) -> dict
     for item_id, stages_json in rows:
         if stage is not None and stage not in (json.loads(stages_json) if stages_json else ["extract"]):
             continue
-        outcome = await cancel_item(db, item_id)
+        outcome = await cancel_item(db, item_id, upload_message)
         if outcome in counts:
             counts[outcome] += 1
     return counts
+
+
+def outcome_of(counts: dict) -> str:
+    """The per-stage Stop endpoints' answer: "stopping" (a running item was told to stop), "stopped" (only waiting ones were
+    removed) or "none" (nothing was waiting or running)."""
+    return "stopping" if counts["stopping"] else "stopped" if counts["removed"] else "none"

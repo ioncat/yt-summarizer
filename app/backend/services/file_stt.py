@@ -128,21 +128,8 @@ async def release_upload(db, video_id: str, db_video_id: str | None, message: st
 
 async def stop_upload(db, video_id: str) -> str:
     """Stop button: "stopped" (a queued item was removed), "stopping" (a running one was told to stop) or "none"."""
-    from services.queue_service import delete_item
-    row = (await db.execute(
-        text("SELECT id, status, db_video_id FROM processing_queue WHERE video_id = :v AND url LIKE 'local://%' "
-             "AND status IN ('pending', 'processing') ORDER BY id DESC LIMIT 1"), {"v": video_id},
-    )).first()
-    if row is None:
-        return "none"
-    item_id, status, db_video_id = row
-    if status == "processing":
-        TRANSCRIBE_CANCEL.add(video_id)
-        return "stopping"
-    if await delete_item(db, item_id, STOPPED_MESSAGE) == "deleted":      # (releases the task and the run)
-        return "stopped"
-    TRANSCRIBE_CANCEL.add(video_id)          # it started in the meantime: tell the running one
-    return "stopping"
+    from services.cancel import cancel_video_jobs, outcome_of
+    return outcome_of(await cancel_video_jobs(db, video_id, "transcribe", STOPPED_MESSAGE))      # (NS-16: the one cancel path)
 
 
 async def run_queued_file(item: dict) -> dict:

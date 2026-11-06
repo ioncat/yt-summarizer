@@ -73,20 +73,8 @@ async def release_reextract(db, video_id: str, url: str | None) -> None:
 async def stop_reextract(db, video_id: str) -> str:
     """Stop button: "stopped" (a queued re-extract was removed), "stopping" (a running one was told to stop) or "none". Either way
     nothing is replaced: the saved subtitles and what was made from them stay."""
-    from services.queue_service import delete_item
-    row = (await db.execute(
-        text("SELECT id, status, url FROM processing_queue WHERE video_id = :v AND status IN ('pending', 'processing') "
-             "AND pipeline_stages LIKE '%\"reextract\"%' ORDER BY id DESC LIMIT 1"), {"v": video_id},
-    )).first()
-    if row is None:
-        return "none"
-    if row[1] == "processing":
-        TRANSCRIBE_CANCEL.add(video_id)
-        return "stopping"
-    if await delete_item(db, row[0]) == "deleted":                         # (releases the run too)
-        return "stopped"
-    TRANSCRIBE_CANCEL.add(video_id)          # it started in the meantime: tell the running one
-    return "stopping"
+    from services.cancel import cancel_video_jobs, outcome_of
+    return outcome_of(await cancel_video_jobs(db, video_id, "reextract"))      # (NS-16: the one cancel path)
 
 
 async def reextract_progress_text(db, video_id: str) -> str | None:
