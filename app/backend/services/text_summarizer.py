@@ -20,6 +20,17 @@ logger = logging.getLogger(__name__)
 # ~24 000 chars ≈ 6 000 tokens — safe headroom for 8K context models.
 MAP_REDUCE_THRESHOLD = 24_000
 
+# What the context limit leaves for the prompt template, the answer and some slack (tokens) when the whole text goes in one call.
+SINGLE_PASS_MARGIN_TOKENS = 2048
+
+
+def single_pass_limit_chars() -> int:
+    """Texts shorter than this are summarized in one call. 24,000 characters, but never more than the context limit in force can
+    hold (with the margin above): at 8K a 20,000-character text goes through Map-Reduce instead of failing, at 4K the limit is ~6,000."""
+    from .ollama_options import CHARS_PER_TOKEN, current_max_num_ctx
+    return min(MAP_REDUCE_THRESHOLD, max(0, current_max_num_ctx() - SINGLE_PASS_MARGIN_TOKENS) * CHARS_PER_TOKEN)
+
+
 # Target size of each MAP chunk (characters). Leaves room for prompt + output
 # inside an 8K context window.
 CHUNK_SIZE = 3_000
@@ -272,7 +283,7 @@ async def summarize_text(
                 return None, "single", 0
 
             lang_instruction = _language_instruction(language)
-            if not force_map_reduce and len(text) < MAP_REDUCE_THRESHOLD:
+            if not force_map_reduce and len(text) < single_pass_limit_chars():
                 result = await _single_pass(
                     client, text, system_prompt, user_prompt_template, model, ollama_url,
                     lang_instruction=lang_instruction,

@@ -170,7 +170,7 @@ async def test_chat_proxy_floor_is_chat_num_ctx_and_cap_is_the_larger_of_it_and_
         assert await chat(huge, "32768", "65536") == 65536     # llm_max_num_ctx raises the cap above the floor
         assert await chat(long_, "8192", "32768") == 16384     # computed value above a small floor
         assert await too_long(huge, "8192", "32768")           # llm_max_num_ctx is the cap: too long for it
-        assert await too_long(long_, "4096", "8192")           # ... also when it is small: a text that needs 16K does not fit 8K
+        assert await chat(long_, "4096", "8192") == 8192       # ... also when it is small: it still fits 8K with room for a short answer
         assert await chat(short, "8192", "4096") == 8192       # floor never lowered by a small llm cap
         assert await too_long(huge, "8192", "4096")            # cap = max(chat, llm) = 8192: too long
     finally:

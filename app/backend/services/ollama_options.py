@@ -25,6 +25,7 @@ DEFAULT_MAX_NUM_CTX = 32768
 MIN_NUM_CTX = 4096
 CHARS_PER_TOKEN = 3
 DEFAULT_RESERVE_TOKENS = 4096
+MIN_ANSWER_TOKENS = 1024     # the least room for the answer that an input must leave inside the limit; below it the call is refused
 _BUCKETS = (4096, 8192, 16384, 32768, 65536)
 MAX_REASON_CHARS = 500  # as str(exc)[:500] in the stage runners
 MAX_NUM_CTX = max(_BUCKETS)  # upper bound of any cap, 65536
@@ -116,20 +117,28 @@ class ContextTooSmall(Exception):
     the model would answer from half a text, so the call is not made (NS-26); the reason is recorded for the stage."""
 
 
-def too_long_message(tokens: int, cap: int) -> str:
-    return (f"The input (~{tokens} tokens) is too long for the context limit ({cap}): the answer would be cut off. "
-            "Raise the context limit in Settings → General, or use a shorter text.")
+def current_max_num_ctx() -> int:
+    """The context limit in force for the current stage run (the setting, clamped)."""
+    return _max_num_ctx.get()
+
+
+def too_long_message(tokens: int, cap: int, room: int = MIN_ANSWER_TOKENS) -> str:
+    return (f"The input (~{tokens} tokens) is too long for the context limit ({cap}), which must also leave room for the answer "
+            f"(~{room} tokens): the answer would be cut off. Raise the context limit in Settings → General, or use a shorter text.")
 
 
 def build_options(*texts: str, reserve_tokens: int = DEFAULT_RESERVE_TOKENS, max_ctx: int | None = None,
                   **options) -> dict:
     """Ollama `options` dict: the given options plus a `num_ctx` sized to the prompt `texts`.
 
-    Raises ContextTooSmall (after recording its reason) when the prompt plus the room for the answer is above the limit."""
+    The context asked from Ollama is sized for the full `reserve_tokens` where the limit allows it (thinking models need room), but
+    the call is refused only when the input does not leave even MIN_ANSWER_TOKENS (or `reserve_tokens`, if smaller) inside the
+    limit. Raises ContextTooSmall (after recording its reason) in that case."""
     cap = clamp_num_ctx(max_ctx) if max_ctx is not None else _max_num_ctx.get()
     tokens = estimate_tokens(*texts)
-    if tokens + reserve_tokens > cap:
-        message = too_long_message(tokens, cap)
+    room = min(reserve_tokens, MIN_ANSWER_TOKENS)
+    if tokens + room > cap:
+        message = too_long_message(tokens, cap, room)
         logger.warning("%s", message)
         record_failure_reason(message)
         raise ContextTooSmall(message)

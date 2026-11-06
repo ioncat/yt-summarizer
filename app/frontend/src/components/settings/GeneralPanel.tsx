@@ -175,8 +175,9 @@ export function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
       <div className="space-y-1.5">
         <label className="text-label-md text-on-surface" htmlFor="llm-max-num-ctx">Context limit for cleanup, summary and mind map</label>
         <p className="text-body-sm text-on-surface-variant">
-          The app sizes the context to each input and never asks for more than this. Too small and a long video fails with
-          "the answer was cut off"; larger values use more VRAM.
+          The app sizes the context to each input and never asks for more than this. Roughly 3 characters are 1 token and the answer
+          needs room too: 8K takes about 20,000 characters of text (longer summaries go in pieces), 4K only about 6,000. Too small
+          and a long video fails with "the answer would be cut off"; larger values use more VRAM.
         </p>
         <select
           id="llm-max-num-ctx"
@@ -184,7 +185,7 @@ export function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
           value={llmMaxNumCtx}
           onChange={e => setLlmMaxNumCtx(e.target.value)}
         >
-          <option value="4096">4K — minimal (short clips only)</option>
+          <option value="4096">4K — tiny inputs only</option>
           <option value="8192">8K</option>
           <option value="16384">16K</option>
           <option value="32768">32K — recommended</option>
