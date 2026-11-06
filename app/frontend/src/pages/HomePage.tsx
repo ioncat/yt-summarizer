@@ -1,6 +1,8 @@
 import { useState, useEffect, FormEvent, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { FileUploadForm } from '../components/home/FileUploadForm'
+import { BulkReport, BulkAddResult } from '../components/home/BulkReport'
+import { parseLinks } from '../utils/links'
 import { LANGUAGES, inputBase, selectBase } from '../components/home/common'
 import { AUTO_PIPELINE_KEY, PIPELINE_PRESETS, autoPipelineStages, readAutoPipeline, resolveStages } from '../utils/pipeline'
 import { getSettings, getHealth, getQueue, AllSettings, queueBulkAdd, QueueAddResult, downloadDirect } from '../api'
@@ -35,13 +37,8 @@ export default function HomePage() {
   )
   const [ollamaOnline, setOllamaOnline] = useState(false)
 
-  // Bulk Add panel state
-  const [bulkOpen, setBulkOpen] = useState(false)
-  const [bulkText, setBulkText] = useState('')
-  const [bulkPipeline, setBulkPipeline] = useState('extract')
-  const [bulkLoading, setBulkLoading] = useState(false)
-  const [bulkResult, setBulkResult] = useState<{ added: number; invalid: string[]; duplicates: string[] } | null>(null)
-  const [bulkError, setBulkError] = useState('')
+  // The report of a list (two or more links): what was added and why each other link was skipped
+  const [bulkResult, setBulkResult] = useState<BulkAddResult | null>(null)
 
   // The page stays: a line says what happened, so the next link can be pasted at once.
   // A duplicate carries its video id from the server (links like /live/, youtu.be/ and /shorts/ have no ?v=)
@@ -51,6 +48,13 @@ export default function HomePage() {
     else if (dup) setQueueNote({ kind: 'in_queue' })
     else if (res.added > 0) { setQueueNote({ kind: 'added' }); setUrl(''); if (res.ids?.length === 1) setWatchedItem(res.ids[0]) }
     else setQueueNote({ kind: 'invalid' })
+  }
+
+  // One link: the line above ("Added" / "Already processed" ...) and the follow of its queue item. Two or more: the report of the list.
+  function afterAdd(res: QueueAddResult) {
+    if (links.length === 1) { afterQueueAdd(res); return }
+    setBulkResult({ added: res.added, invalid: res.invalid, duplicates: res.duplicates ?? [] })
+    if (res.added > 0) setUrl('')
   }
 
   // Follow the queued item: one request at a time, an answer that arrives after the watch ended or changed is ignored, and the
@@ -83,17 +87,7 @@ export default function HomePage() {
     return () => { clearInterval(id); watchedRef.current = null }
   }, [watchedItem])
 
-  function extractUrlFromLine(line: string): string {
-    const match = line.match(/https?:\/\/[^\s|"'<>]+/)
-    if (!match) return line.trim()
-    return match[0].replace(/[,;.:!?]+$/, '')
-  }
-
-  const bulkUrls = bulkText
-    .split('\n')
-    .map(l => extractUrlFromLine(l.trim()))
-    .filter(l => l.length > 0)
-  const bulkCount = bulkUrls.length
+  const links = parseLinks(url)         // one per line; a lone link and a list go the same way
 
   useEffect(() => {
     Promise.all([getSettings(), getHealth()])
@@ -124,12 +118,14 @@ export default function HomePage() {
     setError('')
     setQueueNote(null)
     setWatchedItem(null)
-    const trimmedUrl = url.trim()
+    setBulkResult(null)
+    if (links.length === 0) return
 
     if (autoDownload && !autoPipeline && pipeline === 'extract') {
+      if (links.length > 1) { setError('Download works for one link at a time: leave one link in the field.'); return }
       setLoading(true)
       try {
-        await downloadDirect(trimmedUrl, autoDownloadFormat, autoDownloadQuality)
+        await downloadDirect(links[0], autoDownloadFormat, autoDownloadQuality)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Download failed')
       } finally {
@@ -152,8 +148,7 @@ export default function HomePage() {
       setLoading(true)
       storeAutoDownloadIntent()
       try {
-        const res = await queueBulkAdd([trimmedUrl], autoPipelineStages(useStt), false, language || undefined)
-        afterQueueAdd(res)
+        afterAdd(await queueBulkAdd(links, autoPipelineStages(useStt), false, language || undefined))
       } catch (err) {
         console.error('[Home] queueBulkAdd failed:', err)
         setError(err instanceof Error ? err.message : 'Failed to add to queue')
@@ -167,33 +162,13 @@ export default function HomePage() {
       setLoading(true)
       storeAutoDownloadIntent()
       try {
-        const res = await queueBulkAdd([trimmedUrl], stages, false, language || undefined)
-        afterQueueAdd(res)
+        afterAdd(await queueBulkAdd(links, stages, false, language || undefined))
       } catch (err) {
         console.error('[Home] queueBulkAdd failed:', err)
         setError(err instanceof Error ? err.message : 'Failed to add to queue')
       } finally {
         setLoading(false)
       }
-    }
-  }
-
-  async function handleBulkSubmit(e: FormEvent) {
-    e.preventDefault()
-    if (!bulkCount) return
-    setBulkLoading(true)
-    setBulkError('')
-    setBulkResult(null)
-    try {
-      const preset = PIPELINE_PRESETS.find(p => p.value === bulkPipeline)
-      const stages = preset?.stages ?? ['extract']
-      const res = await queueBulkAdd(bulkUrls, stages)
-      setBulkResult({ added: res.added, invalid: res.invalid, duplicates: res.duplicates ?? [] })
-      if (res.added > 0) setBulkText('')
-    } catch (err) {
-      setBulkError(err instanceof Error ? err.message : 'Failed to add to queue')
-    } finally {
-      setBulkLoading(false)
     }
   }
 
@@ -238,21 +213,25 @@ export default function HomePage() {
           <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
             <div className="flex flex-col gap-2">
               <label className="text-label-md text-on-surface-variant font-medium" htmlFor="url">
-                YouTube URL
+                YouTube links <span className="text-secondary font-normal">(one per line; Enter adds a single link)</span>
               </label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-secondary text-[20px]">link</span>
-                <input
-                  id="url"
-                  type="text"
-                  className={inputBase + ' !pl-12'}
-                  placeholder="https://www.youtube.com/watch?v=..."
-                  value={url}
-                  onChange={e => setUrl(e.target.value)}
-                  required
-                  autoFocus
-                />
-              </div>
+              <textarea
+                id="url"
+                className={inputBase + ' font-mono text-body-sm resize-y'}
+                placeholder="https://www.youtube.com/watch?v=..."
+                rows={3}
+                value={url}
+                onChange={e => { setUrl(e.target.value); setBulkResult(null) }}
+                onKeyDown={e => {
+                  // Enter on a single link adds it (the quick one-by-one add); with several lines Enter is a new line,
+                  // and Ctrl / Cmd + Enter adds the list
+                  if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return
+                  if (links.length <= 1 || e.ctrlKey || e.metaKey) { e.preventDefault(); if (!loading && links.length) void submitLink() }
+                }}
+                required
+                autoFocus
+              />
+              {links.length > 1 && <span className="text-label-sm text-secondary">{links.length} links detected</span>}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -382,10 +361,12 @@ export default function HomePage() {
               </div>
             )}
 
+            {bulkResult && <BulkReport result={bulkResult} />}
+
             {error && (
               <div role="alert" className="bg-error-container border border-error/30 rounded-lg px-4 py-3 flex items-center gap-3 flex-wrap">
                 <p className="text-body-sm text-on-error-container whitespace-pre-line flex-1">{error}</p>
-                {url.trim() && !loading && (
+                {links.length > 0 && !loading && (
                   <button type="button" onClick={() => void submitLink()}
                     className="px-3 py-1 rounded-lg border border-error text-error text-label-sm font-semibold hover:bg-error hover:text-on-error">
                     Retry
@@ -397,17 +378,10 @@ export default function HomePage() {
             <div className="flex flex-col md:flex-row gap-4 pt-4">
               <button
                 type="submit"
-                disabled={loading || !url.trim()}
+                disabled={loading || links.length === 0}
                 className="flex-grow bg-primary text-on-primary py-4 px-6 rounded-lg text-label-md font-bold transition-all hover:opacity-90 active:scale-[0.98] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                {loading ? 'Adding…' : 'Add to queue'}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setBulkOpen(o => !o); setBulkResult(null); setBulkError('') }}
-                className="flex-grow bg-surface-container-high text-on-surface-variant py-4 px-6 rounded-lg text-label-md font-medium transition-all hover:bg-surface-container-highest active:scale-[0.98] cursor-pointer"
-              >
-                {bulkOpen ? '✕ Cancel bulk' : 'Bulk add'}
+                {loading ? 'Adding…' : links.length > 1 ? `Add all (${links.length})` : 'Add to queue'}
               </button>
             </div>
           </form>
@@ -416,96 +390,6 @@ export default function HomePage() {
         {/* File upload form */}
         {inputMode === 'file' && <FileUploadForm />}
       </div>
-
-      {/* Bulk Add panel */}
-      {bulkOpen && (
-        <div className="w-full max-w-2xl bg-surface-container-lowest border border-outline-variant rounded-xl p-8 shadow-sm">
-          <h3 className="text-headline-lg font-semibold text-on-surface mb-6">Bulk Add to Queue</h3>
-          <form className="flex flex-col gap-4" onSubmit={handleBulkSubmit}>
-            <div className="flex flex-col gap-2">
-              <label className="text-label-md text-on-surface-variant font-medium">
-                URLs <span className="text-secondary font-normal">(one per line)</span>
-              </label>
-              <textarea
-                className="w-full px-4 py-3 bg-surface-container-low border border-outline-variant rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-body-sm text-on-surface resize-y font-mono"
-                placeholder={'https://www.youtube.com/watch?v=...\nhttps://youtu.be/...'}
-                value={bulkText}
-                onChange={e => { setBulkText(e.target.value); setBulkResult(null) }}
-                rows={5}
-              />
-              {bulkCount > 0 && (
-                <span className="text-label-sm text-secondary">{bulkCount} URL{bulkCount !== 1 ? 's' : ''} detected</span>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <label className="text-label-md text-on-surface-variant font-medium" htmlFor="bulk-pipeline">
-                Pipeline
-              </label>
-              <div className="relative">
-                <select
-                  id="bulk-pipeline"
-                  className={selectBase}
-                  value={bulkPipeline}
-                  onChange={e => setBulkPipeline(e.target.value)}
-                >
-                  {PIPELINE_PRESETS.map(p => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
-                  ))}
-                </select>
-                <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-secondary text-[20px]">expand_more</span>
-              </div>
-            </div>
-
-            {bulkError && (
-              <div className="bg-error-container border border-error/30 rounded-lg px-4 py-3">
-                <p className="text-body-sm text-on-error-container">{bulkError}</p>
-              </div>
-            )}
-
-            {bulkResult && (() => {
-              const skipped = [
-                ...bulkResult.duplicates.map(u => ({ url: u, reason: 'duplicate' })),
-                ...bulkResult.invalid.map(u => ({ url: u, reason: 'invalid' })),
-              ]
-              return (
-                <div className="flex flex-col gap-2">
-                  {bulkResult.added > 0 && (
-                    <div className="bg-tertiary-container/20 border border-tertiary/30 rounded-lg px-4 py-3 flex items-center gap-2">
-                      <span className="material-symbols-outlined text-tertiary text-[18px]">check_circle</span>
-                      <span className="text-body-sm text-on-surface">
-                        Added <strong>{bulkResult.added}</strong> to queue.{' '}
-                        <Link to="/queue" className="font-semibold text-primary underline">View queue →</Link>
-                      </span>
-                    </div>
-                  )}
-                  {skipped.length > 0 && (
-                    <div className="bg-surface-container-high border border-outline-variant rounded-lg px-4 py-3">
-                      <p className="text-label-sm text-secondary mb-2">Skipped: {skipped.length}</p>
-                      <ul className="flex flex-col gap-1">
-                        {skipped.map(({ url, reason }, i) => (
-                          <li key={i} className="flex items-baseline gap-2 text-body-sm">
-                            <span className="font-mono text-on-surface-variant break-all opacity-80">{url}</span>
-                            <span className="text-secondary italic flex-shrink-0">{reason}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )
-            })()}
-
-            <button
-              type="submit"
-              disabled={bulkLoading || bulkCount === 0}
-              className="bg-primary text-on-primary py-4 px-6 rounded-lg text-label-md font-bold transition-all hover:opacity-90 active:scale-[0.98] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {bulkLoading ? 'Adding…' : `Add to queue (${bulkCount} URL${bulkCount !== 1 ? 's' : ''})`}
-            </button>
-          </form>
-        </div>
-      )}
     </div>
   )
 }

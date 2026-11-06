@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import HomePage from '../pages/HomePage'
 import * as api from '../api'
@@ -367,5 +367,99 @@ describe('HomePage: the note follows the queued item', () => {
     await addLink('https://youtu.be/follow00001')
     await tick(9000)
     expect(api.getQueue).not.toHaveBeenCalled()
+  })
+})
+
+
+// --- the list form is the main add form (NS-24a, NS-17 item 4) ---------------------------------------------------------------
+
+describe('HomePage: one form for one link or a list', () => {
+  const field = () => screen.getByPlaceholderText(/youtube\.com\/watch/i) as HTMLTextAreaElement
+
+  function renderHome() {
+    return render(
+      <MemoryRouter>
+        <Routes>
+          <Route path="*" element={<><HomePage /><Where /></>} />
+        </Routes>
+      </MemoryRouter>
+    )
+  }
+
+  const list = ['https://youtu.be/listVideo001', 'https://youtu.be/listVideo002', 'https://youtu.be/listVideo003']
+
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it('the field takes several lines: a textarea, with the list form always on the page (no separate Bulk add)', () => {
+    renderHome()
+    expect(field().tagName).toBe('TEXTAREA')
+    expect(screen.queryByRole('button', { name: /Bulk add/ })).toBeNull()
+    expect(screen.getByText(/one per line/)).toBeTruthy()
+  })
+
+  it('a list is sent as separate links in the order typed, with the Home pipeline choice and language, and the field is cleared', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({ added: 3, ids: [1, 2, 3], invalid: [], duplicates: [], duplicate_details: [] })
+    renderHome()
+    fireEvent.change(screen.getByLabelText('Pipeline'), { target: { value: 'cleanup' } })
+    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'ru' } })
+    fireEvent.change(field(), { target: { value: list.join('\n') } })
+    expect(screen.getByText('3 links detected')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Add all (3)' }))
+    await waitFor(() => expect(api.queueBulkAdd).toHaveBeenCalledTimes(1))
+    const [urls, stages, force, language] = vi.mocked(api.queueBulkAdd).mock.calls[0]
+    expect(urls).toEqual(list)                                    // newlines no longer glue the links together
+    expect(stages).toEqual(['extract', 'cleanup'])
+    expect(force).toBe(false)
+    expect(language).toBe('ru')
+    expect(await screen.findByText(/Added/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: /View queue/ }).getAttribute('href')).toBe('/queue')
+    expect(field().value).toBe('')
+    expect(screen.getByTestId('where').textContent).toBe('/')
+  })
+
+  it('"URL | title" lines, blank lines and Windows line ends give clean links', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({ added: 2, ids: [1, 2], invalid: [], duplicates: [] })
+    renderHome()
+    fireEvent.change(field(), { target: { value: `${list[0]} | My title\r\n\r\n  ${list[1]},\r\n` } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add all (2)' }))
+    await waitFor(() => expect(api.queueBulkAdd).toHaveBeenCalled())
+    expect(vi.mocked(api.queueBulkAdd).mock.calls[0][0]).toEqual([list[0], list[1]])
+  })
+
+  it('a list reports what was added and the links that were skipped, and keeps the text when nothing was added', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({
+      added: 0, ids: [], invalid: ['nonsense'], duplicates: [list[0]],
+      duplicate_details: [{ url: list[0], video_id: 'listVideo001', reason: 'processed' }],
+    })
+    renderHome()
+    fireEvent.change(field(), { target: { value: `${list[0]}\nnonsense` } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add all (2)' }))
+    expect(await screen.findByText('Skipped: 2')).toBeTruthy()
+    expect(screen.getByText('nonsense')).toBeTruthy()
+    expect(field().value).toBe(`${list[0]}\nnonsense`)            // nothing was added: the text stays for editing
+  })
+
+  it('Enter adds a single link; with several lines Enter is a new line and Ctrl+Enter adds the list', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({ added: 1, ids: [1], invalid: [], duplicates: [] })
+    renderHome()
+    fireEvent.change(field(), { target: { value: list[0] } })
+    fireEvent.keyDown(field(), { key: 'Enter' })
+    await waitFor(() => expect(api.queueBulkAdd).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(api.queueBulkAdd).mock.calls[0][0]).toEqual([list[0]])
+
+    fireEvent.change(field(), { target: { value: `${list[0]}\n${list[1]}` } })
+    fireEvent.keyDown(field(), { key: 'Enter' })                  // plain Enter: a new line, nothing is sent
+    await new Promise(r => setTimeout(r, 20))
+    expect(api.queueBulkAdd).toHaveBeenCalledTimes(1)
+    fireEvent.keyDown(field(), { key: 'Enter', ctrlKey: true })
+    await waitFor(() => expect(api.queueBulkAdd).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(api.queueBulkAdd).mock.calls[1][0]).toEqual([list[0], list[1]])
+  })
+
+  it('an empty field cannot be sent', () => {
+    renderHome()
+    expect((screen.getByRole('button', { name: 'Add to queue' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(field(), { target: { value: '  \n \n' } })
+    expect((screen.getByRole('button', { name: 'Add to queue' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
