@@ -116,17 +116,17 @@ def test_the_downloads_folder_is_ignored_by_git_and_never_the_live_one_in_tests(
 # --- the stage in the queue worker -----------------------------------------------------------------------------------------
 
 async def test_a_download_item_saves_the_file_and_records_the_run(client, seeded_video):
-    await client.put("/api/settings/app", json={"download_default_format": "mp3", "download_default_quality": "low"})
+    await client.put("/api/settings/app", json={"download_default_format": "mp3", "download_default_quality": "720p"})
     run, calls = fake_ytdlp()
     item = await add_item(["download"])
     with patch.object(downloader.subprocess, "run", run):
         await run_worker([item])
     assert (await get_item(item))["status"] == "done"
-    assert (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp3").read_bytes() == b"x" * 10         # Settings: mp3 / low
+    assert (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp3").read_bytes() == b"x" * 10         # Settings: mp3 / 720p
     (args,) = calls
-    assert args[-2:] == ["--", URL] and "-x" in args and args[args.index("--audio-quality") + 1] == "128K"
+    assert args[-2:] == ["--", URL] and "-x" in args and args[args.index("--audio-quality") + 1] == "192K"
     run_row = await stage_of(client)
-    assert run_row["status"] == "done" and run_row["meta"] == {"file": f"{VIDEO_ID}.mp3", "size": 10, "format": "mp3", "quality": "low"}
+    assert run_row["status"] == "done" and run_row["meta"] == {"file": f"{VIDEO_ID}.mp3", "size": 10, "format": "mp3", "quality": "720p"}
     assert run_row["queue_item_id"] == item
 
 

@@ -29,6 +29,10 @@
       "download_default_format": {
        "anyOf": [
         {
+         "enum": [
+          "mp3",
+          "mp4"
+         ],
          "type": "string"
         },
         {
@@ -40,6 +44,12 @@
       "download_default_quality": {
        "anyOf": [
         {
+         "enum": [
+          "best",
+          "1080p",
+          "720p",
+          "480p"
+         ],
          "type": "string"
         },
         {

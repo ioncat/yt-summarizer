@@ -70,3 +70,24 @@ async def test_the_llm_context_limit_is_saved_and_returned(client):
     assert r.status_code == 200
     app = (await client.get("/api/settings")).json()["app"]
     assert app["llm_max_num_ctx"] == "65536" and app["chat_num_ctx"] == "16384"
+
+
+@pytest.mark.parametrize("body", [
+    {"download_default_format": "avi"}, {"download_default_format": "MP4"}, {"download_default_format": "mp4; rm -rf /"},
+    {"download_default_quality": "4k"}, {"download_default_quality": "bestvideo[height<=1]"}, {"download_default_quality": "low"},
+])
+async def test_download_defaults_outside_the_whitelist_are_refused_and_not_saved(client, body):
+    before = (await client.get("/api/settings")).json()["app"]
+    r = await client.put("/api/settings/app", json=body)
+    assert r.status_code == 422
+    after = (await client.get("/api/settings")).json()["app"]
+    assert after["download_default_format"] == before["download_default_format"]
+    assert after["download_default_quality"] == before["download_default_quality"]
+
+
+@pytest.mark.parametrize("fmt,quality", [("mp3", "best"), ("mp4", "1080p"), ("mp4", "720p"), ("mp4", "480p")])
+async def test_the_known_download_defaults_are_saved(client, fmt, quality):
+    r = await client.put("/api/settings/app", json={"download_default_format": fmt, "download_default_quality": quality})
+    assert r.status_code == 200
+    app = (await client.get("/api/settings")).json()["app"]
+    assert (app["download_default_format"], app["download_default_quality"]) == (fmt, quality)

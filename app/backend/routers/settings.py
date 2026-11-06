@@ -5,7 +5,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import httpx
 from services.http_client import http_client
@@ -57,8 +57,8 @@ class AppSettingsRequest(BaseModel):
     upload_auto_delete_days: str | None = None
     chat_num_ctx: str | None = None
     llm_max_num_ctx: str | None = None
-    download_default_format: str | None = None
-    download_default_quality: str | None = None
+    download_default_format: Literal["mp3", "mp4"] | None = None                          # (the queue's download stage builds yt-dlp
+    download_default_quality: Literal["best", "1080p", "720p", "480p"] | None = None       # arguments from these: only known values)
 
 
 def _uploads_dir() -> str:
