@@ -18,6 +18,7 @@ app/data/www.youtube.com_cookies.txt
 
 # Uploaded media files (user-uploaded audio/video, can be large)
 app/data/uploads/
+app/data/downloads/
 
 # Database directory and SQLite files
 app/data/db/

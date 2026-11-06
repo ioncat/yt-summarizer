@@ -1,7 +1,7 @@
 """Names used by the per-stage table `processing_stages` (NS-25): stages, statuses and failure reason codes."""
 from __future__ import annotations
 
-STAGES = ("extract", "transcribe", "cleanup", "summary", "mindmap")
+STAGES = ("extract", "transcribe", "cleanup", "summary", "mindmap", "download")
 STATUSES = ("processing", "done", "failed", "cancelled")
 
 # Reason codes of a failed (or cancelled) run. The first eight are the NS-25 plan; no_text / not_found / upstream_failed

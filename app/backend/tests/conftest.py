@@ -56,6 +56,15 @@ _r_settings._uploads_dir = lambda: TEST_UPLOADS
 _r_result_stages._uploads_dir = lambda: TEST_UPLOADS     # (trigger_reextract looks for the original file)
 
 
+# Downloaded files (the queue's download stage): the same rule. Every test that downloads gets the temp folder.
+TEST_DOWNLOADS = tempfile.mkdtemp(prefix="yt-summarizer-test-downloads-")
+LIVE_DOWNLOADS = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data/downloads"))
+
+import services.downloader as _s_downloader  # noqa: E402
+
+_s_downloader.downloads_dir = lambda: TEST_DOWNLOADS
+
+
 def _snapshot_uploads(path: str) -> list:
     if not os.path.isdir(path):
         return []
@@ -76,6 +85,15 @@ def _live_uploads_untouched():
     yield
     after = _snapshot_uploads(LIVE_UPLOADS)
     assert after == before, "the test run changed the live uploads folder %s: %s" % (LIVE_UPLOADS, describe_uploads_change(before, after))
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _live_downloads_untouched():
+    """Guard: the run must not create or change anything in the LIVE app/data/downloads."""
+    before = _snapshot_uploads(LIVE_DOWNLOADS)
+    yield
+    after = _snapshot_uploads(LIVE_DOWNLOADS)
+    assert after == before, "the test run changed the live downloads folder %s: %s" % (LIVE_DOWNLOADS, describe_uploads_change(before, after))
 
 
 # Override get_db dependency to use test session factory

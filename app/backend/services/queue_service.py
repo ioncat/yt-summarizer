@@ -464,7 +464,7 @@ async def _set_done(item_id: int, video_id: str | None, db_video_id: str | None)
         await db.commit()
 
 
-_STAGE_LABELS = {"cleanup": "Cleanup", "summary": "Summary", "mindmap": "Mind map"}
+_STAGE_LABELS = {"cleanup": "Cleanup", "summary": "Summary", "mindmap": "Mind map", "download": "Download"}
 
 
 async def _release_unrun_stages(video_id: str | None, url: str, stages: list[str], reason: str, cancelled: bool = False) -> None:
@@ -934,6 +934,49 @@ def _check_item_cancel(item_id: int) -> None:
         raise StageCancelled("Cancelled")
 
 
+async def _run_download_stage(item_id: int, video_id: str, url: str) -> None:
+    """The download stage (NS-17 items 12 / 13): save the video or audio in data/downloads with yt-dlp, in the format and quality
+    chosen in Settings. A failure ends the run `failed` WITHOUT raising, so the item ends partial with the reason; a Stop
+    (checked when yt-dlp returns, it cannot be interrupted) cancels the run and ends the item skipped."""
+    from services import downloader
+    from services.subtitle_extractor import _ytdlp_cmd, validate_youtube_url
+    from services.video_service import get_app_setting
+
+    async with AsyncSessionLocal() as db:
+        await stage_runs.begin(db, video_id, "download", queue_item_id=item_id)
+        await db.commit()
+    started = datetime.utcnow()
+    try:
+        if url.startswith(LOCAL_PREFIX):
+            raise downloader.DownloadFailed("Download is not available for local files")
+        canonical = validate_youtube_url(url)
+        if not canonical:
+            raise downloader.DownloadFailed("Cannot download: not a YouTube https link")
+        async with AsyncSessionLocal() as db:
+            fmt = (await get_app_setting(db, "download_default_format")) or "mp4"
+            quality = (await get_app_setting(db, "download_default_quality")) or "best"
+            ytdlp_path = await get_app_setting(db, "ytdlp_path")
+            cookies_path = await get_app_setting(db, "cookies_path")
+        _QUEUE_PROGRESS[item_id] = "download: downloading…"
+        out = await downloader.download_file(canonical, video_id, fmt, quality, _ytdlp_cmd(ytdlp_path), cookies_path)
+        _check_item_cancel(item_id)
+        meta = {"file": out.name, "size": out.stat().st_size, "format": fmt, "quality": quality}
+        async with AsyncSessionLocal() as db:
+            await stage_runs.finish(db, video_id, "download", started_at=started, meta=meta)
+            await db.commit()
+    except StageCancelled:
+        async with AsyncSessionLocal() as db:
+            await stage_runs.cancel(db, video_id, "download")
+            await db.commit()
+        raise
+    except Exception as exc:  # noqa: BLE001 - any failure of the download is the stage's failure, not the item's crash
+        if not isinstance(exc, downloader.DownloadFailed):
+            logger.exception("Queue worker: download of %s failed", video_id)
+        async with AsyncSessionLocal() as db:
+            await stage_runs.fail(db, video_id, "download", str(exc)[:500])
+            await db.commit()
+
+
 async def queue_worker() -> None:
     """Main queue worker loop. Call once from lifespan(). Runs forever."""
     global _WORKER_STOP
@@ -1009,6 +1052,11 @@ async def queue_worker() -> None:
             if "mindmap" in pipeline_stages:
                 _check_item_cancel(item_id)
                 await _run_mindmap_stage(yt_video_id, item_id)
+
+            # Stage 5: download (optional; after the text stages, so the text is there first)
+            if "download" in pipeline_stages:
+                _check_item_cancel(item_id)
+                await _run_download_stage(item_id, yt_video_id, url)
 
             async with AsyncSessionLocal() as db:
                 failed = await _item_failed_stages(db, item_id, pipeline_stages)

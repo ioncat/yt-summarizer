@@ -75,7 +75,7 @@ async def test_the_table_and_its_index_exist():
 
 
 def test_the_names_are_the_ones_of_the_plan():
-    assert STAGES == ("extract", "transcribe", "cleanup", "summary", "mindmap")
+    assert STAGES == ("extract", "transcribe", "cleanup", "summary", "mindmap", "download")     # (download: NS-17 items 12 / 13)
     assert STATUSES == ("processing", "done", "failed", "cancelled")
     assert {"empty_answer", "context_too_small", "model_missing", "timeout", "no_subtitles", "ollama_down",
             "cancelled", "unexpected"} <= set(ERROR_CODES)
