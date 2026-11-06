@@ -1,0 +1,2903 @@
+{
+ "openapi": {
+  "components": {
+   "schemas": {
+    "AppSettingsRequest": {
+     "properties": {
+      "chat_num_ctx": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Chat Num Ctx"
+      },
+      "cookies_path": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Cookies Path"
+      },
+      "download_default_format": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Download Default Format"
+      },
+      "download_default_quality": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Download Default Quality"
+      },
+      "force_map_reduce": {
+       "anyOf": [
+        {
+         "type": "boolean"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Force Map Reduce"
+      },
+      "llm_max_num_ctx": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Llm Max Num Ctx"
+      },
+      "ollama_url": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Ollama Url"
+      },
+      "parallel_workers": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Parallel Workers"
+      },
+      "stt_cache_path": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Stt Cache Path"
+      },
+      "stt_device": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Stt Device"
+      },
+      "stt_engine": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Stt Engine"
+      },
+      "stt_model": {
+       "anyOf": [
+        {
+         "maxLength": 200,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Stt Model"
+      },
+      "upload_auto_delete": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Upload Auto Delete"
+      },
+      "upload_auto_delete_days": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Upload Auto Delete Days"
+      },
+      "upload_auto_delete_mode": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Upload Auto Delete Mode"
+      },
+      "ytdlp_path": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Ytdlp Path"
+      }
+     },
+     "title": "AppSettingsRequest",
+     "type": "object"
+    },
+    "BenchmarkRunRequest": {
+     "properties": {
+      "mode_override": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Mode Override"
+      },
+      "models": {
+       "items": {
+        "type": "string"
+       },
+       "title": "Models",
+       "type": "array"
+      },
+      "stage": {
+       "default": "summary",
+       "title": "Stage",
+       "type": "string"
+      },
+      "video_id": {
+       "title": "Video Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "video_id",
+      "models"
+     ],
+     "title": "BenchmarkRunRequest",
+     "type": "object"
+    },
+    "Body_process_file_api_process_file_post": {
+     "properties": {
+      "file": {
+       "format": "binary",
+       "title": "File",
+       "type": "string"
+      },
+      "language": {
+       "default": "auto",
+       "title": "Language",
+       "type": "string"
+      }
+     },
+     "required": [
+      "file"
+     ],
+     "title": "Body_process_file_api_process_file_post",
+     "type": "object"
+    },
+    "Body_upload_cookies_api_settings_upload_cookies_post": {
+     "properties": {
+      "file": {
+       "format": "binary",
+       "title": "File",
+       "type": "string"
+      }
+     },
+     "required": [
+      "file"
+     ],
+     "title": "Body_upload_cookies_api_settings_upload_cookies_post",
+     "type": "object"
+    },
+    "BulkDeleteRequest": {
+     "properties": {
+      "video_ids": {
+       "items": {
+        "type": "string"
+       },
+       "title": "Video Ids",
+       "type": "array"
+      }
+     },
+     "required": [
+      "video_ids"
+     ],
+     "title": "BulkDeleteRequest",
+     "type": "object"
+    },
+    "BulkQueueRequest": {
+     "properties": {
+      "force": {
+       "default": false,
+       "title": "Force",
+       "type": "boolean"
+      },
+      "language": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Language"
+      },
+      "pipeline_stages": {
+       "anyOf": [
+        {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Pipeline Stages"
+      },
+      "urls": {
+       "items": {
+        "type": "string"
+       },
+       "maxItems": 500,
+       "title": "Urls",
+       "type": "array"
+      },
+      "video_ids": {
+       "items": {
+        "type": "string"
+       },
+       "maxItems": 500,
+       "title": "Video Ids",
+       "type": "array"
+      }
+     },
+     "title": "BulkQueueRequest",
+     "type": "object"
+    },
+    "ChatHistoryRequest": {
+     "properties": {
+      "messages": {
+       "items": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "title": "Messages",
+       "type": "array"
+      }
+     },
+     "required": [
+      "messages"
+     ],
+     "title": "ChatHistoryRequest",
+     "type": "object"
+    },
+    "ChatMessage": {
+     "properties": {
+      "content": {
+       "title": "Content",
+       "type": "string"
+      },
+      "role": {
+       "title": "Role",
+       "type": "string"
+      }
+     },
+     "required": [
+      "role",
+      "content"
+     ],
+     "title": "ChatMessage",
+     "type": "object"
+    },
+    "ChatRequest": {
+     "properties": {
+      "messages": {
+       "items": {
+        "$ref": "#/components/schemas/ChatMessage"
+       },
+       "title": "Messages",
+       "type": "array"
+      },
+      "model": {
+       "title": "Model",
+       "type": "string"
+      }
+     },
+     "required": [
+      "messages",
+      "model"
+     ],
+     "title": "ChatRequest",
+     "type": "object"
+    },
+    "HTTPValidationError": {
+     "properties": {
+      "detail": {
+       "items": {
+        "$ref": "#/components/schemas/ValidationError"
+       },
+       "title": "Detail",
+       "type": "array"
+      }
+     },
+     "title": "HTTPValidationError",
+     "type": "object"
+    },
+    "McpConnectBody": {
+     "properties": {
+      "confirm": {
+       "default": false,
+       "title": "Confirm",
+       "type": "boolean"
+      },
+      "replace_broken": {
+       "default": false,
+       "title": "Replace Broken",
+       "type": "boolean"
+      }
+     },
+     "title": "McpConnectBody",
+     "type": "object"
+    },
+    "ProcessRequest": {
+     "properties": {
+      "language": {
+       "default": "auto",
+       "title": "Language",
+       "type": "string"
+      },
+      "url": {
+       "title": "Url",
+       "type": "string"
+      }
+     },
+     "required": [
+      "url"
+     ],
+     "title": "ProcessRequest",
+     "type": "object"
+    },
+    "ReextractRequest": {
+     "properties": {
+      "language": {
+       "default": "auto",
+       "title": "Language",
+       "type": "string"
+      },
+      "model": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Model"
+      }
+     },
+     "title": "ReextractRequest",
+     "type": "object"
+    },
+    "StageSettingsRequest": {
+     "properties": {
+      "model": {
+       "anyOf": [
+        {
+         "maxLength": 200,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Model"
+      },
+      "system_prompt": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "System Prompt"
+      },
+      "user_prompt_template": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Prompt Template"
+      }
+     },
+     "title": "StageSettingsRequest",
+     "type": "object"
+    },
+    "ValidationError": {
+     "properties": {
+      "loc": {
+       "items": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "integer"
+         }
+        ]
+       },
+       "title": "Location",
+       "type": "array"
+      },
+      "msg": {
+       "title": "Message",
+       "type": "string"
+      },
+      "type": {
+       "title": "Error Type",
+       "type": "string"
+      }
+     },
+     "required": [
+      "loc",
+      "msg",
+      "type"
+     ],
+     "title": "ValidationError",
+     "type": "object"
+    }
+   }
+  },
+  "info": {
+   "description": "Extract and format YouTube video subtitles",
+   "title": "YT Summarizer API",
+   "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+   "/": {
+    "get": {
+     "operationId": "root__get",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Root"
+    }
+   },
+   "/api/benchmark/run": {
+    "post": {
+     "description": "Start benchmark: run N models on the same video text in parallel.",
+     "operationId": "start_benchmark_run_api_benchmark_run_post",
+     "requestBody": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BenchmarkRunRequest"
+        }
+       }
+      },
+      "required": true
+     },
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Start Benchmark Run"
+    }
+   },
+   "/api/benchmark/run/{run_id}": {
+    "delete": {
+     "description": "Delete a single benchmark run by ID.",
+     "operationId": "delete_benchmark_run_endpoint_api_benchmark_run__run_id__delete",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "run_id",
+       "required": true,
+       "schema": {
+        "title": "Run Id",
+        "type": "integer"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Delete Benchmark Run Endpoint"
+    },
+    "get": {
+     "description": "Return a single benchmark run by ID.",
+     "operationId": "get_benchmark_run_detail_api_benchmark_run__run_id__get",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "run_id",
+       "required": true,
+       "schema": {
+        "title": "Run Id",
+        "type": "integer"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Get Benchmark Run Detail"
+    }
+   },
+   "/api/benchmark/{video_id}": {
+    "get": {
+     "description": "Return all benchmark runs for a video.",
+     "operationId": "get_benchmark_api_benchmark__video_id__get",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Get Benchmark"
+    }
+   },
+   "/api/benchmarks": {
+    "get": {
+     "description": "Return all benchmark runs grouped by video.",
+     "operationId": "list_all_benchmarks_api_benchmarks_get",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "List All Benchmarks"
+    }
+   },
+   "/api/chat": {
+    "post": {
+     "description": "Proxy a chat request to Ollama with streaming \u2014 avoids browser CORS restrictions.",
+     "operationId": "chat_proxy_api_chat_post",
+     "requestBody": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ChatRequest"
+        }
+       }
+      },
+      "required": true
+     },
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Chat Proxy"
+    }
+   },
+   "/api/download/direct": {
+    "get": {
+     "description": "Download video/audio by URL directly, without subtitle extraction.",
+     "operationId": "download_direct_api_download_direct_get",
+     "parameters": [
+      {
+       "in": "query",
+       "name": "url",
+       "required": true,
+       "schema": {
+        "title": "Url",
+        "type": "string"
+       }
+      },
+      {
+       "in": "query",
+       "name": "format",
+       "required": false,
+       "schema": {
+        "default": "mp4",
+        "title": "Format",
+        "type": "string"
+       }
+      },
+      {
+       "in": "query",
+       "name": "quality",
+       "required": false,
+       "schema": {
+        "default": "best",
+        "title": "Quality",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Download Direct"
+    }
+   },
+   "/api/health": {
+    "get": {
+     "description": "Returns backend status and Ollama availability.",
+     "operationId": "health_check_api_health_get",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Health Check"
+    }
+   },
+   "/api/history": {
+    "get": {
+     "operationId": "list_history_api_history_get",
+     "parameters": [
+      {
+       "in": "query",
+       "name": "page",
+       "required": false,
+       "schema": {
+        "default": 1,
+        "title": "Page",
+        "type": "integer"
+       }
+      },
+      {
+       "in": "query",
+       "name": "search",
+       "required": false,
+       "schema": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Search"
+       }
+      },
+      {
+       "in": "query",
+       "name": "favorites_only",
+       "required": false,
+       "schema": {
+        "default": false,
+        "title": "Favorites Only",
+        "type": "boolean"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "List History"
+    }
+   },
+   "/api/history/delete-bulk": {
+    "post": {
+     "description": "Delete multiple videos by video_id. Returns counts of deleted and not found.",
+     "operationId": "delete_results_bulk_api_history_delete_bulk_post",
+     "requestBody": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BulkDeleteRequest"
+        }
+       }
+      },
+      "required": true
+     },
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Delete Results Bulk"
+    }
+   },
+   "/api/history/text-search": {
+    "get": {
+     "description": "Find videos by words inside their transcript, cleaned text, summary or mind map (read-only).",
+     "operationId": "search_history_texts_api_history_text_search_get",
+     "parameters": [
+      {
+       "in": "query",
+       "name": "q",
+       "required": false,
+       "schema": {
+        "default": "",
+        "title": "Q",
+        "type": "string"
+       }
+      },
+      {
+       "in": "query",
+       "name": "limit",
+       "required": false,
+       "schema": {
+        "default": 20,
+        "title": "Limit",
+        "type": "integer"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Search History Texts"
+    }
+   },
+   "/api/mcp/connect": {
+    "delete": {
+     "description": "Remove the yt-summarizer entry from Claude Desktop config.",
+     "operationId": "delete_mcp_connect_api_mcp_connect_delete",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Delete Mcp Connect"
+    },
+    "post": {
+     "description": "Plan (confirm=false) or execute (confirm=true) adding the MCP entry to Claude Desktop config.",
+     "operationId": "post_mcp_connect_api_mcp_connect_post",
+     "requestBody": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/McpConnectBody"
+        }
+       }
+      },
+      "required": true
+     },
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Post Mcp Connect"
+    }
+   },
+   "/api/mcp/status": {
+    "get": {
+     "description": "Return Claude Desktop connection status (reads config from disk).",
+     "operationId": "get_mcp_status_api_mcp_status_get",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Get Mcp Status"
+    }
+   },
+   "/api/models": {
+    "get": {
+     "description": "Return available Ollama models.",
+     "operationId": "list_models_api_models_get",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "List Models"
+    }
+   },
+   "/api/process": {
+    "post": {
+     "description": "Extract the subtitles of a YouTube link. The link is queued (NS-11 stage 7): the answer comes at once, the queue worker does\nthe extraction in its turn, and /api/status/{task_id} follows it. A link that is already queued returns the same task.",
+     "operationId": "process_video_api_process_post",
+     "requestBody": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProcessRequest"
+        }
+       }
+      },
+      "required": true
+     },
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Process Video"
+    }
+   },
+   "/api/process/file": {
+    "post": {
+     "description": "Upload a local audio/video file for transcription. The upload is saved and queued (NS-11 stage 5): the answer comes at\nonce, the queue worker transcribes it in its turn; /api/status/{task_id} follows it.",
+     "operationId": "process_file_api_process_file_post",
+     "requestBody": {
+      "content": {
+       "multipart/form-data": {
+        "schema": {
+         "$ref": "#/components/schemas/Body_process_file_api_process_file_post"
+        }
+       }
+      },
+      "required": true
+     },
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Process File"
+    }
+   },
+   "/api/process/file/{video_id}": {
+    "delete": {
+     "description": "Stop the transcription of an uploaded file (NS-11 stage 5): a queued one is taken out of the queue, a running one is told\nto stop (it ends after the segment in hand). Either way nothing is saved, so a saved transcript stays as it was.",
+     "operationId": "stop_file_transcription_api_process_file__video_id__delete",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Stop File Transcription"
+    }
+   },
+   "/api/queue": {
+    "get": {
+     "description": "Return all queue items ordered by sort_order + added_at.",
+     "operationId": "get_queue_items_api_queue_get",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Get Queue Items"
+    }
+   },
+   "/api/queue/all": {
+    "delete": {
+     "description": "Clear all pending queue items (does not touch processing/done/failed).",
+     "operationId": "clear_queue_pending_api_queue_all_delete",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Clear Queue Pending"
+    }
+   },
+   "/api/queue/bulk": {
+    "post": {
+     "description": "Add multiple URLs to the processing queue. Skips duplicates (already processed or in queue).\n\nEvery skipped link has an explicit reason: `invalid` lists the links that are not YouTube links; `duplicates` lists the rest\nand `duplicate_details` gives each one's video id and reason: \"processed\", \"in_queue\", \"in_list\" (the same video is earlier\nin this very list) or, for video_ids, \"order\". The links that were added come back in `ids`, in the order they were sent.\n`report` repeats it as one entry per link in the order sent: {url, video_id, status} with status added / processed / in_queue /\nin_list / invalid (the page shows it as it is). An invalid entry also has `reason`: \"http_only\" (an http:// link to YouTube:\nonly https links are accepted) or \"not_youtube\".\n\n`video_ids` queues results that are already in History by id (the only way to queue a local file);\nthey can only run the LLM stages (cleanup, summary, mindmap).\n\n`force` applies to `urls` only: it skips the \"already processed / already in the queue\" check so a\nvideo can be re-run. `video_ids` ignore it: an id that is already pending or processing is always\nreported as a duplicate (two runs of the same stage on one video would overwrite each other). Stage-aware (NS-25):\nonly the stages that a queued item already includes are skipped; the other requested stages are still queued, and a\nduplicate names the stages that are already queued.\nAt most 500 urls and 500 video_ids per request.",
+     "operationId": "queue_bulk_add_api_queue_bulk_post",
+     "requestBody": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BulkQueueRequest"
+        }
+       }
+      },
+      "required": true
+     },
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Queue Bulk Add"
+    }
+   },
+   "/api/queue/counts": {
+    "get": {
+     "description": "Return item counts per status \u2014 for nav badge.",
+     "operationId": "get_queue_status_counts_api_queue_counts_get",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Get Queue Status Counts"
+    }
+   },
+   "/api/queue/failed": {
+    "delete": {
+     "description": "Clear all failed queue items, and the partial items that are stuck (nothing left to retry). A partial item that\ncan still be retried is kept.",
+     "operationId": "clear_queue_failed_api_queue_failed_delete",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Clear Queue Failed"
+    }
+   },
+   "/api/queue/failed/retry": {
+    "post": {
+     "description": "Reset all failed and partial queue items to pending; a partial item restarts only its failed stages.",
+     "operationId": "retry_queue_failed_api_queue_failed_retry_post",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Retry Queue Failed"
+    }
+   },
+   "/api/queue/{item_id}": {
+    "delete": {
+     "description": "Delete a single pending queue item.",
+     "operationId": "delete_queue_item_api_queue__item_id__delete",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "item_id",
+       "required": true,
+       "schema": {
+        "title": "Item Id",
+        "type": "integer"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Delete Queue Item"
+    }
+   },
+   "/api/queue/{item_id}/cancel": {
+    "post": {
+     "description": "The Cancel button of a queue row (NS-16): a waiting item is taken out of the queue, a running one is told to stop (it ends\n`skipped` when its current step returns; what it had saved stays).",
+     "operationId": "cancel_queue_item_api_queue__item_id__cancel_post",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "item_id",
+       "required": true,
+       "schema": {
+        "title": "Item Id",
+        "type": "integer"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Cancel Queue Item"
+    }
+   },
+   "/api/queue/{item_id}/retry": {
+    "post": {
+     "description": "Reset a single failed or partial queue item to pending.",
+     "operationId": "retry_queue_item_api_queue__item_id__retry_post",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "item_id",
+       "required": true,
+       "schema": {
+        "title": "Item Id",
+        "type": "integer"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Retry Queue Item"
+    }
+   },
+   "/api/result/{video_id}": {
+    "delete": {
+     "operationId": "delete_result_api_result__video_id__delete",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Delete Result"
+    },
+    "get": {
+     "operationId": "get_video_result_api_result__video_id__get",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Get Video Result"
+    }
+   },
+   "/api/result/{video_id}/cancel": {
+    "post": {
+     "description": "The result page's Stop (NS-16): cancels every waiting or running job of this video, whatever its stage. Waiting ones leave\nthe queue, a running one is told to stop. Nothing running is not an error (the job may have just finished).",
+     "operationId": "cancel_video_api_result__video_id__cancel_post",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Cancel Video"
+    }
+   },
+   "/api/result/{video_id}/chat": {
+    "delete": {
+     "operationId": "clear_chat_api_result__video_id__chat_delete",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Clear Chat"
+    },
+    "put": {
+     "operationId": "save_chat_api_result__video_id__chat_put",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      }
+     ],
+     "requestBody": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ChatHistoryRequest"
+        }
+       }
+      },
+      "required": true
+     },
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Save Chat"
+    }
+   },
+   "/api/result/{video_id}/cleanup": {
+    "delete": {
+     "description": "Stop the cleanup: a queued one is taken out of the queue, a running one is told to stop (it ends after the\nparagraph in hand). Either way the status goes back to \"nothing running\" and a previous cleaned text is kept.",
+     "operationId": "cancel_cleanup_api_result__video_id__cleanup_delete",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Cancel Cleanup"
+    },
+    "post": {
+     "description": "Queue the AI cleanup. The status is 'processing' at once (the page shows progress while the item waits its turn\nbehind the queue); the queue worker does the work. A second click while one is queued or running adds nothing\n(NS-11 stage 4a).",
+     "operationId": "trigger_cleanup_api_result__video_id__cleanup_post",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Trigger Cleanup"
+    }
+   },
+   "/api/result/{video_id}/download": {
+    "get": {
+     "description": "Download video/audio via yt-dlp. Returns the file as an attachment.",
+     "operationId": "download_video_api_result__video_id__download_get",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      },
+      {
+       "in": "query",
+       "name": "format",
+       "required": false,
+       "schema": {
+        "default": "mp4",
+        "title": "Format",
+        "type": "string"
+       }
+      },
+      {
+       "in": "query",
+       "name": "quality",
+       "required": false,
+       "schema": {
+        "default": "best",
+        "title": "Quality",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Download Video"
+    }
+   },
+   "/api/result/{video_id}/favorite": {
+    "post": {
+     "operationId": "favorite_video_api_result__video_id__favorite_post",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Favorite Video"
+    }
+   },
+   "/api/result/{video_id}/mindmap": {
+    "delete": {
+     "description": "Stop the mind map: a queued one is taken out of the queue, a running one is told to stop.\n\nEither way the status goes back to \"nothing running\" and a saved map is kept (as in the background copy).",
+     "operationId": "cancel_mindmap_api_result__video_id__mindmap_delete",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Cancel Mindmap"
+    },
+    "post": {
+     "description": "Queue the mind map. Returns the saved map unless force=true (the page's \"Regenerate\").\n\nThe status is 'processing' at once (the page shows progress while the item waits its turn behind the queue); the\nqueue worker does the work. A second click while one is queued or running adds nothing (NS-11 stage 2).",
+     "operationId": "trigger_mindmap_api_result__video_id__mindmap_post",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      },
+      {
+       "in": "query",
+       "name": "force",
+       "required": false,
+       "schema": {
+        "default": false,
+        "title": "Force",
+        "type": "boolean"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Trigger Mindmap"
+    }
+   },
+   "/api/result/{video_id}/reextract": {
+    "delete": {
+     "description": "Stop a re-extract / re-transcribe: a queued one leaves the queue, a running one ends after the segment in hand. Either way\nnothing is replaced: the saved subtitles and what was made from them stay (NS-11 decision 1).",
+     "operationId": "stop_reextract_endpoint_api_result__video_id__reextract_delete",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Stop Reextract Endpoint"
+    },
+    "post": {
+     "description": "Re-fetch subtitles (YouTube) or re-transcribe (uploaded file) for an existing video; invalidates what was made from the old\ntext. The work is a queue item (NS-11 stage 6): the answer comes at once, the queue worker does it in its turn.",
+     "operationId": "trigger_reextract_api_result__video_id__reextract_post",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      }
+     ],
+     "requestBody": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReextractRequest"
+        }
+       }
+      },
+      "required": true
+     },
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Trigger Reextract"
+    }
+   },
+   "/api/result/{video_id}/summary": {
+    "delete": {
+     "description": "Stop the summarization: a queued one is taken out of the queue, a running one is told to stop.\n\nEither way the status goes back to \"nothing running\" and a previous summary is kept (as in the background copy).",
+     "operationId": "cancel_summary_api_result__video_id__summary_delete",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Cancel Summary"
+    },
+    "post": {
+     "description": "Queue the summarization. The status is 'processing' at once (the page shows progress while the item waits its\nturn behind the queue); the queue worker does the work. A second click while one is queued or running adds nothing\n(NS-11 stage 3).",
+     "operationId": "trigger_summary_api_result__video_id__summary_post",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Trigger Summary"
+    }
+   },
+   "/api/settings": {
+    "get": {
+     "operationId": "get_settings_api_settings_get",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Get Settings"
+    }
+   },
+   "/api/settings/app": {
+    "put": {
+     "operationId": "update_app_settings_api_settings_app_put",
+     "requestBody": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AppSettingsRequest"
+        }
+       }
+      },
+      "required": true
+     },
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Update App Settings"
+    }
+   },
+   "/api/settings/storage": {
+    "get": {
+     "description": "Return upload storage stats and current policy settings.",
+     "operationId": "get_storage_info_api_settings_storage_get",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Get Storage Info"
+    }
+   },
+   "/api/settings/storage/uploads": {
+    "delete": {
+     "description": "Delete all files in the uploads directory.",
+     "operationId": "clear_uploads_api_settings_storage_uploads_delete",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Clear Uploads"
+    }
+   },
+   "/api/settings/update-ytdlp": {
+    "post": {
+     "description": "Upgrade yt-dlp to the latest version in the background.",
+     "operationId": "update_ytdlp_api_settings_update_ytdlp_post",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Update Ytdlp"
+    }
+   },
+   "/api/settings/upload-cookies": {
+    "post": {
+     "description": "Upload a cookies.txt file and save it to the data directory.",
+     "operationId": "upload_cookies_api_settings_upload_cookies_post",
+     "requestBody": {
+      "content": {
+       "multipart/form-data": {
+        "schema": {
+         "$ref": "#/components/schemas/Body_upload_cookies_api_settings_upload_cookies_post"
+        }
+       }
+      },
+      "required": true
+     },
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Upload Cookies"
+    }
+   },
+   "/api/settings/ytdlp-latest": {
+    "get": {
+     "description": "Fetch the latest yt-dlp version from PyPI.",
+     "operationId": "get_ytdlp_latest_version_api_settings_ytdlp_latest_get",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Get Ytdlp Latest Version"
+    }
+   },
+   "/api/settings/ytdlp-version": {
+    "get": {
+     "description": "Return the currently installed yt-dlp version.",
+     "operationId": "get_ytdlp_version_api_settings_ytdlp_version_get",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Get Ytdlp Version"
+    }
+   },
+   "/api/settings/{stage}": {
+    "delete": {
+     "operationId": "reset_settings_api_settings__stage__delete",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "stage",
+       "required": true,
+       "schema": {
+        "title": "Stage",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Reset Settings"
+    },
+    "put": {
+     "operationId": "update_settings_api_settings__stage__put",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "stage",
+       "required": true,
+       "schema": {
+        "title": "Stage",
+        "type": "string"
+       }
+      }
+     ],
+     "requestBody": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StageSettingsRequest"
+        }
+       }
+      },
+      "required": true
+     },
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Update Settings"
+    }
+   },
+   "/api/status/{task_id}": {
+    "get": {
+     "operationId": "get_status_api_status__task_id__get",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "task_id",
+       "required": true,
+       "schema": {
+        "title": "Task Id",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Get Status"
+    }
+   },
+   "/api/stt/models": {
+    "get": {
+     "description": "Return full model catalog with downloaded status.",
+     "operationId": "get_stt_models_api_stt_models_get",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Get Stt Models"
+    }
+   },
+   "/api/stt/models/{model_name}": {
+    "delete": {
+     "description": "Remove a downloaded model from the cache.",
+     "operationId": "delete_stt_model_api_stt_models__model_name__delete",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "model_name",
+       "required": true,
+       "schema": {
+        "title": "Model Name",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Delete Stt Model"
+    }
+   },
+   "/api/stt/models/{model_name}/download": {
+    "post": {
+     "description": "Start downloading a model in the background.",
+     "operationId": "download_stt_model_api_stt_models__model_name__download_post",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "model_name",
+       "required": true,
+       "schema": {
+        "title": "Model Name",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Download Stt Model"
+    }
+   },
+   "/api/stt/models/{model_name}/download/status": {
+    "get": {
+     "description": "Poll download progress for a model.",
+     "operationId": "get_stt_model_download_status_api_stt_models__model_name__download_status_get",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "model_name",
+       "required": true,
+       "schema": {
+        "title": "Model Name",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Get Stt Model Download Status"
+    }
+   },
+   "/health": {
+    "get": {
+     "operationId": "health_check_health_get",
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      }
+     },
+     "summary": "Health Check"
+    }
+   }
+  }
+ },
+ "routes": [
+  {
+   "methods": [
+    "GET",
+    "HEAD"
+   ],
+   "name": "openapi",
+   "path": "/openapi.json"
+  },
+  {
+   "methods": [
+    "GET",
+    "HEAD"
+   ],
+   "name": "swagger_ui_html",
+   "path": "/docs"
+  },
+  {
+   "methods": [
+    "GET",
+    "HEAD"
+   ],
+   "name": "swagger_ui_redirect",
+   "path": "/docs/oauth2-redirect"
+  },
+  {
+   "methods": [
+    "GET",
+    "HEAD"
+   ],
+   "name": "redoc_html",
+   "path": "/redoc"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "process_video",
+   "path": "/api/process"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "process_file",
+   "path": "/api/process/file"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "stop_file_transcription",
+   "path": "/api/process/file/{video_id}"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "get_status",
+   "path": "/api/status/{task_id}"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "get_stt_models",
+   "path": "/api/stt/models"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "download_stt_model",
+   "path": "/api/stt/models/{model_name}/download"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "get_stt_model_download_status",
+   "path": "/api/stt/models/{model_name}/download/status"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "delete_stt_model",
+   "path": "/api/stt/models/{model_name}"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "queue_bulk_add",
+   "path": "/api/queue/bulk"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "get_queue_items",
+   "path": "/api/queue"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "get_queue_status_counts",
+   "path": "/api/queue/counts"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "clear_queue_pending",
+   "path": "/api/queue/all"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "clear_queue_failed",
+   "path": "/api/queue/failed"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "retry_queue_failed",
+   "path": "/api/queue/failed/retry"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "retry_queue_item",
+   "path": "/api/queue/{item_id}/retry"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "cancel_queue_item",
+   "path": "/api/queue/{item_id}/cancel"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "delete_queue_item",
+   "path": "/api/queue/{item_id}"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "get_video_result",
+   "path": "/api/result/{video_id}"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "cancel_video",
+   "path": "/api/result/{video_id}/cancel"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "favorite_video",
+   "path": "/api/result/{video_id}/favorite"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "trigger_cleanup",
+   "path": "/api/result/{video_id}/cleanup"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "cancel_cleanup",
+   "path": "/api/result/{video_id}/cleanup"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "trigger_reextract",
+   "path": "/api/result/{video_id}/reextract"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "stop_reextract_endpoint",
+   "path": "/api/result/{video_id}/reextract"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "trigger_summary",
+   "path": "/api/result/{video_id}/summary"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "cancel_summary",
+   "path": "/api/result/{video_id}/summary"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "trigger_mindmap",
+   "path": "/api/result/{video_id}/mindmap"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "cancel_mindmap",
+   "path": "/api/result/{video_id}/mindmap"
+  },
+  {
+   "methods": [
+    "PUT"
+   ],
+   "name": "save_chat",
+   "path": "/api/result/{video_id}/chat"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "clear_chat",
+   "path": "/api/result/{video_id}/chat"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "download_video",
+   "path": "/api/result/{video_id}/download"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "delete_result",
+   "path": "/api/result/{video_id}"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "list_history",
+   "path": "/api/history"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "search_history_texts",
+   "path": "/api/history/text-search"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "delete_results_bulk",
+   "path": "/api/history/delete-bulk"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "download_direct",
+   "path": "/api/download/direct"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "get_settings",
+   "path": "/api/settings"
+  },
+  {
+   "methods": [
+    "PUT"
+   ],
+   "name": "update_app_settings",
+   "path": "/api/settings/app"
+  },
+  {
+   "methods": [
+    "PUT"
+   ],
+   "name": "update_settings",
+   "path": "/api/settings/{stage}"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "reset_settings",
+   "path": "/api/settings/{stage}"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "get_ytdlp_version",
+   "path": "/api/settings/ytdlp-version"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "get_ytdlp_latest_version",
+   "path": "/api/settings/ytdlp-latest"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "update_ytdlp",
+   "path": "/api/settings/update-ytdlp"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "upload_cookies",
+   "path": "/api/settings/upload-cookies"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "get_storage_info",
+   "path": "/api/settings/storage"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "clear_uploads",
+   "path": "/api/settings/storage/uploads"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "health_check",
+   "path": "/api/health"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "list_models",
+   "path": "/api/models"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "chat_proxy",
+   "path": "/api/chat"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "get_mcp_status",
+   "path": "/api/mcp/status"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "post_mcp_connect",
+   "path": "/api/mcp/connect"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "delete_mcp_connect",
+   "path": "/api/mcp/connect"
+  },
+  {
+   "methods": [
+    "POST"
+   ],
+   "name": "start_benchmark_run",
+   "path": "/api/benchmark/run"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "list_all_benchmarks",
+   "path": "/api/benchmarks"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "get_benchmark",
+   "path": "/api/benchmark/{video_id}"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "get_benchmark_run_detail",
+   "path": "/api/benchmark/run/{run_id}"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "delete_benchmark_run_endpoint",
+   "path": "/api/benchmark/run/{run_id}"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "root",
+   "path": "/"
+  },
+  {
+   "methods": [
+    "GET"
+   ],
+   "name": "health_check",
+   "path": "/health"
+  }
+ ]
+}
