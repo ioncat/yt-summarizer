@@ -807,6 +807,44 @@
      "summary": "Download Direct"
     }
    },
+   "/api/downloads/{video_id}": {
+    "get": {
+     "description": "The file the queue's download stage saved for this video (data/downloads). Only the video id comes from the request; the\nfile is looked up by that id (plain id characters only), so no path can be asked for.",
+     "operationId": "get_saved_download_api_downloads__video_id__get",
+     "parameters": [
+      {
+       "in": "path",
+       "name": "video_id",
+       "required": true,
+       "schema": {
+        "title": "Video Id",
+        "type": "string"
+       }
+      }
+     ],
+     "responses": {
+      "200": {
+       "content": {
+        "application/json": {
+         "schema": {}
+        }
+       },
+       "description": "Successful Response"
+      },
+      "422": {
+       "content": {
+        "application/json": {
+         "schema": {
+          "$ref": "#/components/schemas/HTTPValidationError"
+         }
+        }
+       },
+       "description": "Validation Error"
+      }
+     },
+     "summary": "Get Saved Download"
+    }
+   },
    "/api/health": {
     "get": {
      "description": "Returns backend status and Ollama availability.",
@@ -2628,6 +2666,27 @@
   },
   {
    "methods": [
+    "PUT"
+   ],
+   "name": "save_chat",
+   "path": "/api/result/{video_id}/chat"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "clear_chat",
+   "path": "/api/result/{video_id}/chat"
+  },
+  {
+   "methods": [
+    "DELETE"
+   ],
+   "name": "delete_result",
+   "path": "/api/result/{video_id}"
+  },
+  {
+   "methods": [
     "POST"
    ],
    "name": "trigger_cleanup",
@@ -2684,17 +2743,10 @@
   },
   {
    "methods": [
-    "PUT"
+    "GET"
    ],
-   "name": "save_chat",
-   "path": "/api/result/{video_id}/chat"
-  },
-  {
-   "methods": [
-    "DELETE"
-   ],
-   "name": "clear_chat",
-   "path": "/api/result/{video_id}/chat"
+   "name": "get_saved_download",
+   "path": "/api/downloads/{video_id}"
   },
   {
    "methods": [
@@ -2702,13 +2754,6 @@
    ],
    "name": "download_video",
    "path": "/api/result/{video_id}/download"
-  },
-  {
-   "methods": [
-    "DELETE"
-   ],
-   "name": "delete_result",
-   "path": "/api/result/{video_id}"
   },
   {
    "methods": [

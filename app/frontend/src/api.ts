@@ -119,7 +119,7 @@ export interface ResultResponse {
   stages?: Partial<Record<StageName, StageRun>>   // NS-25: the newest run of each stage that has runs
 }
 
-export type StageName = 'extract' | 'transcribe' | 'cleanup' | 'summary' | 'mindmap'
+export type StageName = 'extract' | 'transcribe' | 'cleanup' | 'summary' | 'mindmap' | 'download'
 
 export interface StageRunDetail {
   attempt: number

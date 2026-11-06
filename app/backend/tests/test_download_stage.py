@@ -197,3 +197,28 @@ async def test_a_link_that_is_not_an_https_youtube_link_is_refused_before_yt_dlp
 
 async def test_the_old_browser_download_endpoint_is_untouched_by_the_stage(client, seeded_video):
     assert re.search(r"/result/\{video_id\}/download", str([r.path for r in __import__("main").app.routes]))
+
+
+# --- getting the saved file back --------------------------------------------------------------------------------------------
+
+async def test_the_saved_file_is_served_by_video_id_with_its_name_and_type(client):
+    (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp3").write_bytes(b"audio-bytes")
+    r = await client.get(f"/api/downloads/{VIDEO_ID}")
+    assert r.status_code == 200 and r.content == b"audio-bytes"
+    assert r.headers["content-type"].startswith("audio/mpeg")
+    assert f'filename="{VIDEO_ID}.mp3"' in r.headers["content-disposition"]
+    (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp3").unlink()
+    (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp4").write_bytes(b"video-bytes")
+    assert (await client.get(f"/api/downloads/{VIDEO_ID}")).headers["content-type"].startswith("video/mp4")
+
+
+@pytest.mark.parametrize("asked", ["nothingHere1", "..", "...", "a.b", "%2e%2e", "x" * 80, "id;rm", "C:"])
+async def test_no_file_and_no_odd_ids_give_404_and_never_a_path(client, asked):
+    (Path(ct.TEST_DOWNLOADS) / "secret.txt").write_bytes(b"not for the web")
+    r = await client.get(f"/api/downloads/{asked}")
+    assert r.status_code in (404, 422) and b"not for the web" not in r.content
+
+
+async def test_a_half_written_file_is_not_served(client):
+    (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp4.part").write_bytes(b"half")
+    assert (await client.get(f"/api/downloads/{VIDEO_ID}")).status_code == 404

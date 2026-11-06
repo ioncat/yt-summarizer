@@ -69,3 +69,24 @@ describe('StageTable (NS-25)', () => {
     expect(screen.queryByText(/\//)).toBeNull()
   })
 })
+
+describe('StageTable download row (NS-17 item 12)', () => {
+  const run = (over: Record<string, unknown>) => ({
+    attempt: 1, status: 'done', queue_item_id: 3, model: null, started_at: '2026-11-06T10:00:00', finished_at: '2026-11-06T10:01:00',
+    error_code: null, error_text: null, meta: {}, progress_done: null, progress_total: null, runs: 1, last_done: null, ...over,
+  })
+  const result = (download: unknown) => ({ video_id: 'abc12345678', stages: { download } }) as never
+
+  it('a finished download links to the saved file with its name and size', () => {
+    render(<StageTable result={result(run({ meta: { file: 'abc12345678.mp4', size: 5 * 1024 * 1024, format: 'mp4', quality: 'best' } }))} />)
+    const link = screen.getByRole('link', { name: /Get the saved file \(abc12345678\.mp4, 5\.0 MB\)/ })
+    expect(link.getAttribute('href')).toBe('/api/downloads/abc12345678')
+    expect(screen.getByText('Download')).toBeTruthy()
+  })
+
+  it('a failed download shows the reason and no link', () => {
+    render(<StageTable result={result(run({ status: 'failed', error_code: 'unexpected', error_text: 'yt-dlp failed: ERROR: Video unavailable' }))} />)
+    expect(screen.getByText(/Video unavailable/)).toBeTruthy()
+    expect(screen.queryByRole('link')).toBeNull()
+  })
+})

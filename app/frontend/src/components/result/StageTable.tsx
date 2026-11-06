@@ -1,9 +1,9 @@
 import { ResultResponse, StageName, StageRun, StageRunDetail } from '../../api'
 import { formatDate, formatDuration } from './helpers'
 
-const ORDER: StageName[] = ['extract', 'transcribe', 'cleanup', 'summary', 'mindmap']
+const ORDER: StageName[] = ['extract', 'transcribe', 'cleanup', 'summary', 'mindmap', 'download']
 const LABEL: Record<string, string> = {
-  extract: 'Subtitles', transcribe: 'Speech-to-text', cleanup: 'Cleanup', summary: 'Summary', mindmap: 'Mind map',
+  extract: 'Subtitles', transcribe: 'Speech-to-text', cleanup: 'Cleanup', summary: 'Summary', mindmap: 'Mind map', download: 'Download',
 }
 const STATUS: Record<string, { text: string; cls: string }> = {
   processing: { text: 'running', cls: 'text-secondary' },
@@ -34,7 +34,13 @@ function seconds(run: StageRunDetail): number | null {
   return Number.isFinite(s) && s >= 0 ? Math.round(s) : null
 }
 
-function Row({ stage, run }: { stage: string; run: StageRun }) {
+function megabytes(bytes: number): string {
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
+
+function Row({ stage, run, videoId }: { stage: string; run: StageRun; videoId: string }) {
+  const file = stage === 'download' && run.status === 'done' && typeof run.meta.file === 'string' ? run.meta.file : null
+  const fileSize = typeof run.meta.size === 'number' ? run.meta.size : null
   const st = STATUS[run.status] ?? { text: run.status, cls: 'text-on-surface-variant' }
   const shown = run.last_done            // the run the saved result came from
   const made: StageRunDetail = shown ?? run
@@ -60,6 +66,12 @@ function Row({ stage, run }: { stage: string; run: StageRun }) {
         )}
         {run.status === 'failed' && shown && <span className="block text-label-sm">Showing the earlier successful run{shown.model ? ` (${shown.model})` : ''}.</span>}
         {run.status === 'cancelled' && shown && <span>Showing the earlier successful run.</span>}
+        {file && (
+          <a href={`/api/downloads/${encodeURIComponent(videoId)}`} download={file}
+             className="font-semibold text-primary underline">
+            Get the saved file ({file}{fileSize != null && `, ${megabytes(fileSize)}`})
+          </a>
+        )}
         {run.runs > 1 && <span className="block text-label-sm opacity-70">{run.runs} runs so far</span>}
       </td>
     </tr>
@@ -87,7 +99,7 @@ export function StageTable({ result }: { result: ResultResponse }) {
               <th className="pb-1 font-medium">Details</th>
             </tr>
           </thead>
-          <tbody>{present.map(([s, run]) => <Row key={s} stage={s} run={run} />)}</tbody>
+          <tbody>{present.map(([s, run]) => <Row key={s} stage={s} run={run} videoId={result.video_id} />)}</tbody>
         </table>
       </div>
     </details>
