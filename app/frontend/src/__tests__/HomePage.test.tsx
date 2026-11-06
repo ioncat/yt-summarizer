@@ -676,6 +676,73 @@ ${list[1]}` } })
       expect(await screen.findByText(/The download could not be queued\./)).toBeTruthy()
     })
 
+    describe('the note follows the download (QA)', () => {
+      const dlItem = (status: string, extra: Record<string, unknown> = {}) => ({
+        id: 9, url: list[0], video_id: 'listVideo001', db_video_id: null, status, pipeline_stages: ['download'],
+        error_message: null, added_at: '2026-11-06T10:00:00', started_at: null, finished_at: null, sort_order: 9, progress: null, ...extra,
+      }) as never
+      const tick = (ms = 3000) => act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+
+      async function addProcessedWithDownload() {
+        vi.mocked(api.queueBulkAdd).mockResolvedValue(processedAnswer as never)
+        vi.mocked(api.queueBulkAddByIds).mockResolvedValue({ added: 1, ids: [9], invalid: [], duplicates: [], missing: [] })
+        renderHome()
+        fireEvent.click(screen.getByLabelText(/^Download/))
+        fireEvent.change(field(), { target: { value: list[0] } })
+        await act(async () => { fireEvent.submit(field().closest('form')!) })
+      }
+
+      beforeEach(() => { vi.useFakeTimers() })
+      afterEach(() => { vi.useRealTimers() })
+
+      it('"Download queued" turns into "Download done" with a link to the result when the item is done', async () => {
+        vi.mocked(api.getQueue).mockResolvedValue({ items: [dlItem('pending')], count: 1 })
+        await addProcessedWithDownload()
+        expect(screen.getByText(/Already processed\. Download queued\./)).toBeTruthy()
+        await tick()
+        expect(screen.getByText(/Download queued/)).toBeTruthy()                       // still waiting
+        vi.mocked(api.getQueue).mockResolvedValue({ items: [dlItem('processing')], count: 1 })
+        await tick()
+        expect(screen.getByText(/Download queued/)).toBeTruthy()                       // still running
+        vi.mocked(api.getQueue).mockResolvedValue({ items: [dlItem('done')], count: 1 })
+        await tick()
+        expect(screen.getByText(/Download done\./)).toBeTruthy()
+        expect(screen.queryByText(/Download queued/)).toBeNull()
+        expect(screen.getByRole('link', { name: /Open the result/ }).getAttribute('href')).toBe('/result/listVideo001')
+        const calls = vi.mocked(api.getQueue).mock.calls.length
+        await tick(10_000)
+        expect(vi.mocked(api.getQueue).mock.calls.length).toBe(calls)                  // the poll stopped with the item
+      })
+
+      it('a failed download turns the note into "Failed: <reason>" with a link to the queue', async () => {
+        vi.mocked(api.getQueue).mockResolvedValue({ items: [dlItem('partial', { error_message: 'Download failed: yt-dlp failed: ERROR: private video' })], count: 1 })
+        await addProcessedWithDownload()
+        await tick()
+        expect(screen.getByText(/Failed: Download failed: yt-dlp failed: ERROR: private video/)).toBeTruthy()
+        expect(screen.getByRole('link', { name: /View queue/ }).getAttribute('href')).toBe('/queue')
+      })
+
+      it('a cancelled download is reported as stopped, not as done', async () => {
+        vi.mocked(api.getQueue).mockResolvedValue({ items: [dlItem('skipped')], count: 1 })
+        await addProcessedWithDownload()
+        await tick()
+        expect(screen.getByText(/Failed: Stopped/)).toBeTruthy()
+        expect(screen.queryByText(/Download done/)).toBeNull()
+      })
+
+      it('nothing is followed when the download was already queued or could not be queued', async () => {
+        vi.mocked(api.queueBulkAdd).mockResolvedValue(processedAnswer as never)
+        vi.mocked(api.queueBulkAddByIds).mockResolvedValue({ added: 0, ids: [], invalid: [], duplicates: ['listVideo001'], missing: [] })
+        renderHome()
+        fireEvent.click(screen.getByLabelText(/^Download/))
+        fireEvent.change(field(), { target: { value: list[0] } })
+        await act(async () => { fireEvent.submit(field().closest('form')!) })
+        await tick(9000)
+        expect(api.getQueue).not.toHaveBeenCalled()
+        expect(screen.getByText(/Download already queued\./)).toBeTruthy()
+      })
+    })
+
     it('in a list the processed row says "download queued"; other rows and videos that are only queued get no download', async () => {
       vi.mocked(api.queueBulkAdd).mockResolvedValue({
         added: 1, ids: [3], invalid: [], duplicates: [list[0], list[2]],

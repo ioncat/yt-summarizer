@@ -20,7 +20,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [queueNote, setQueueNote] = useState<
-    { kind: 'added' | 'in_queue' } | { kind: 'invalid'; httpOnly?: boolean } | { kind: 'done'; videoId: string | null }
+    { kind: 'added' | 'in_queue' } | { kind: 'invalid'; httpOnly?: boolean } | { kind: 'done'; videoId: string | null; download?: boolean }
     | { kind: 'processed'; videoId: string | null; download?: DownloadAnswer }
     | { kind: 'failed'; reason: string } | null>(null)
   // The queue item the "Added to the queue" note follows: the note turns into "Done" / "Failed" when the item ends (no jump)
@@ -64,8 +64,15 @@ export default function HomePage() {
     const clearSent = () => setUrl(cur => withoutSentLinks(cur, sentText, sent))
     const report = reportOf(res)
     const processed = report.flatMap(e => (e.status === 'processed' && e.video_id ? [e.video_id] : []))
-    const downloads = autoDownload && processed.length ? await queueDownloadsForExisting(processed) : {}
-    if (links.length === 1) { afterQueueAdd(res, clearSent, downloads); return }
+    const queued = autoDownload && processed.length ? await queueDownloadsForExisting(processed) : { answers: {}, itemOf: {} }
+    const downloads = queued.answers
+    if (links.length === 1) {
+      afterQueueAdd(res, clearSent, downloads)
+      // the note follows the download like it follows an extract: it turns into "Download done" / "Failed: ..."
+      const followed = processed.length ? queued.itemOf[processed[0]] : undefined
+      if (followed !== undefined) setWatchedItem(followed)
+      return
+    }
     setBulkResult({ added: res.added, report, downloads })
     if (res.added > 0) clearSent()
   }
@@ -85,7 +92,7 @@ export default function HomePage() {
         const item = data.items.find(i => i.id === watchedItem)
         if (!item) { setWatchedItem(null); return }                         // taken out of the queue: nothing more to say
         if (item.status === 'done') {
-          setQueueNote({ kind: 'done', videoId: item.video_id })
+          setQueueNote({ kind: 'done', videoId: item.video_id, download: item.pipeline_stages.length === 1 && item.pipeline_stages[0] === 'download' })
           setWatchedItem(null)
         } else if (item.status === 'failed' || item.status === 'partial' || item.status === 'skipped') {
           setQueueNote({ kind: 'failed', reason: item.error_message || (item.status === 'skipped' ? 'Stopped' : 'no reason was recorded') })
@@ -311,7 +318,7 @@ export default function HomePage() {
                 {queueNote.kind === 'added' && <>Added to the queue. <Link to="/queue" className="font-semibold text-primary underline">View queue →</Link></>}
                 {queueNote.kind === 'in_queue' && <>Already in the queue. <Link to="/queue" className="font-semibold text-primary underline">View queue →</Link></>}
                 {queueNote.kind === 'processed' && <>Already processed.{queueNote.download && <> {DOWNLOAD_TEXT[queueNote.download][0].toUpperCase() + DOWNLOAD_TEXT[queueNote.download].slice(1)}.</>} <Link to={`/result/${queueNote.videoId}`} className="font-semibold text-primary underline">Open the result →</Link></>}
-                {queueNote.kind === 'done' && <>Done. {queueNote.videoId
+                {queueNote.kind === 'done' && <>{queueNote.download ? 'Download done.' : 'Done.'} {queueNote.videoId
                   ? <Link to={`/result/${queueNote.videoId}`} className="font-semibold text-primary underline">Open the result →</Link>
                   : <Link to="/queue" className="font-semibold text-primary underline">View queue →</Link>}</>}
                 {queueNote.kind === 'failed' && <><span className="text-error">Failed: {queueNote.reason}</span> <Link to="/queue" className="font-semibold text-primary underline">View queue →</Link></>}

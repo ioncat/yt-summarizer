@@ -4,18 +4,28 @@ import { queueBulkAddByIds } from '../../api'
  *  and queued nothing, so the download is queued by itself, by id. */
 export type DownloadAnswer = 'queued' | 'already' | 'failed'
 
-export async function queueDownloadsForExisting(videoIds: string[]): Promise<Record<string, DownloadAnswer>> {
+export interface QueuedDownloads {
+  answers: Record<string, DownloadAnswer>
+  /** The queue item of each download that was just queued, in the order of the videos that were queued (for one video: its item),
+   *  so the page can follow it. Only filled for videos whose answer is 'queued'. */
+  itemOf: Record<string, number>
+}
+
+export async function queueDownloadsForExisting(videoIds: string[]): Promise<QueuedDownloads> {
   const ids = [...new Set(videoIds)]
   const answers: Record<string, DownloadAnswer> = {}
+  const itemOf: Record<string, number> = {}
   try {
     const res = await queueBulkAddByIds(ids, ['download'])
+    const queued = ids.filter(id => !res.missing.includes(id) && !res.duplicates.includes(id))
     for (const id of ids) {
       answers[id] = res.missing.includes(id) ? 'failed' : res.duplicates.includes(id) ? 'already' : 'queued'
     }
+    queued.forEach((id, i) => { if (res.ids[i] !== undefined) itemOf[id] = res.ids[i] })     // ids come back in the order of the videos
   } catch {
     for (const id of ids) answers[id] = 'failed'
   }
-  return answers
+  return { answers, itemOf }
 }
 
 export const DOWNLOAD_TEXT: Record<DownloadAnswer, string> = {
