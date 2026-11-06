@@ -29,14 +29,18 @@ export default function MindmapView({ text, title, onRegenerate }: Props) {
     if (!svg) return
     let observer: ResizeObserver | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
+    const later: Array<ReturnType<typeof setTimeout>> = []      // retry and settle timers, all cleared when this effect ends
     let gone = false
     let fittedAt = ''
 
-    const refit = (mm: Markmap) => {
+    // Fit; if markmap has not positioned the nodes yet (its first layout is still going) try again a moment later.
+    const refit = (mm: Markmap, attempt = 0) => {
       if (gone || mmRef.current !== mm || !hasSize(svg)) return
       const { width, height } = svg.getBoundingClientRect()
       fittedAt = `${Math.round(width)}x${Math.round(height)}`
-      void fitMindmap(mm as never, svg)
+      void fitMindmap(mm as never, svg).then(fitted => {
+        if (!fitted && attempt < 6 && !gone && mmRef.current === mm) later.push(setTimeout(() => refit(mm, attempt + 1), 150))
+      })
     }
 
     const draw = () => {
@@ -44,6 +48,7 @@ export default function MindmapView({ text, title, onRegenerate }: Props) {
       const box = svg.getBoundingClientRect()
       fittedAt = `${Math.round(box.width)}x${Math.round(box.height)}`      // (the fit after setData is for this size)
       let mm = mmRef.current
+      const created = !mm
       if (!mm) {
         mm = Markmap.create(svg, {
           embedGlobalCSS: true,
@@ -56,6 +61,8 @@ export default function MindmapView({ text, title, onRegenerate }: Props) {
       }
       const shown = mm
       shown.setData(root).then(() => refit(shown))
+      if (!created) return
+      later.push(setTimeout(() => refit(shown), 450))             // once more when markmap's first transition (300 ms) is over
     }
 
     const sizeChanged = () => {
@@ -76,7 +83,7 @@ export default function MindmapView({ text, title, onRegenerate }: Props) {
     } else if (!hasSize(svg)) {
       draw()                                                      // (no ResizeObserver: draw as before)
     }
-    return () => { gone = true; if (timer) clearTimeout(timer); observer?.disconnect() }
+    return () => { gone = true; if (timer) clearTimeout(timer); later.forEach(clearTimeout); observer?.disconnect() }
   }, [text])
 
   useEffect(() => {

@@ -161,3 +161,117 @@ describe('wholeMapScale', () => {
     expect(wholeMapScale({ x1: 0, y1: 0, x2: 10, y2: 10 }, 0, 0)).toBe(1)
   })
 })
+
+// --- NS-17 item 7, reviewer's fix: one fit at a time, an absolute final scale, and nodes that are not laid out yet -------------
+
+import { fitMindmap, currentScale, isLaidOut } from '../components/mindmapFit'
+
+/** A map that behaves like markmap's: fit() and rescale() change the scale of the drawing's root group when their transition ends
+ *  (here: when the test lets them), rescale() MULTIPLIES the scale it finds, fit() sets an absolute one. */
+function fakeMap(svg: SVGSVGElement, rectNow: { x1: number; y1: number; x2: number; y2: number }) {
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+  g.setAttribute('transform', 'translate(0,0) scale(1)')
+  svg.appendChild(g)
+  const pending: Array<() => void> = []
+  const log: string[] = []
+  const wait = (apply: () => void) => new Promise<void>(res => { pending.push(() => { apply(); res() }) })
+  const mm = {
+    state: { rect: rectNow, data: { root: true } },
+    fit: vi.fn((max = 2) => {
+      const { width, height } = svg.getBoundingClientRect()
+      const k = Math.min(width / (mm.state.rect.x2 - mm.state.rect.x1) * 0.9, height / (mm.state.rect.y2 - mm.state.rect.y1) * 0.9, max)
+      log.push(`fit>${k.toFixed(2)}`)
+      return wait(() => g.setAttribute('transform', `translate(0,0) scale(${k})`))
+    }),
+    rescale: vi.fn((factor: number) => {
+      const k = (currentScale(svg) ?? 1) * factor
+      log.push(`rescale*${factor.toFixed(2)}`)
+      return wait(() => g.setAttribute('transform', `translate(0,0) scale(${k})`))
+    }),
+    ensureVisible: vi.fn(() => { log.push('visible'); return Promise.resolve() }),
+  }
+  const flush = async () => { while (pending.length) { pending.shift()!(); await Promise.resolve(); await Promise.resolve() } }
+  return { mm, flush, log, scale: () => currentScale(svg) }
+}
+
+describe('two overlapping fits (reviewer: wrong scale, sometimes far above the limit)', () => {
+  it('the older fit stops after its step; the map ends at the readable scale, never compounded', async () => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg') as SVGSVGElement
+    size = { width: 638, height: 800 }
+    const { mm, flush, scale } = fakeMap(svg, { x1: 0, y1: 0, x2: 1700, y2: 2000 })          // whole-map scale ~0.29
+    const first = fitMindmap(mm as never, svg)                                                // resize ...
+    const second = fitMindmap(mm as never, svg)                                               // ... and the tab becoming visible
+    await flush()
+    await flush()
+    await flush()
+    await Promise.all([first, second])
+    expect(scale()).toBeCloseTo(MIN_SCALE, 2)                                                 // not 0.8 * 2.7 * ...
+    expect(mm.rescale).toHaveBeenCalledTimes(1)                                               // the older fit did not rescale
+  })
+
+  it('a new size between two steps: the last fit decides, from the size it measured', async () => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg') as SVGSVGElement
+    size = { width: 638, height: 800 }
+    const { mm, flush, scale } = fakeMap(svg, { x1: 0, y1: 0, x2: 300, y2: 200 })             // small map: fits above 1.5 -> limited
+    const first = fitMindmap(mm as never, svg)
+    size = { width: 1400, height: 900 }
+    const second = fitMindmap(mm as never, svg)
+    await flush(); await flush(); await flush()
+    await Promise.all([first, second])
+    expect(scale()).toBeCloseTo(MAX_SCALE, 2)
+    expect(scale()!).toBeLessThanOrEqual(MAX_SCALE + 0.001)
+  })
+
+  it('three fits in a row (resize drag) leave one rescale at most and the right scale', async () => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg') as SVGSVGElement
+    size = { width: 638, height: 800 }
+    const { mm, flush, scale } = fakeMap(svg, { x1: 0, y1: 0, x2: 1700, y2: 2000 })
+    const all = [fitMindmap(mm as never, svg), fitMindmap(mm as never, svg), fitMindmap(mm as never, svg)]
+    for (let i = 0; i < 5; i++) await flush()
+    await Promise.all(all)
+    expect(scale()).toBeCloseTo(MIN_SCALE, 2)
+    expect(mm.rescale.mock.calls.length).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('nodes that are not laid out yet', () => {
+  it('isLaidOut: an empty, infinite or NaN rectangle is not a layout', () => {
+    expect(isLaidOut({ x1: 0, y1: 0, x2: 10, y2: 10 })).toBe(true)
+    for (const bad of [{ x1: 0, y1: 0, x2: 0, y2: 0 }, { x1: Infinity, y1: 0, x2: 1, y2: 1 }, { x1: NaN, y1: 0, x2: 1, y2: 1 }]) expect(isLaidOut(bad)).toBe(false)
+    expect(isLaidOut(undefined)).toBe(false)
+  })
+
+  it('fitMindmap does nothing and says so (false) while the layout is empty', async () => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg') as SVGSVGElement
+    size = { width: 638, height: 800 }
+    const { mm } = fakeMap(svg, { x1: 0, y1: 0, x2: 0, y2: 0 })
+    expect(await fitMindmap(mm as never, svg)).toBe(false)
+    expect(mm.fit).not.toHaveBeenCalled()
+  })
+
+  it('the view tries again until the nodes are positioned, then fits (a sized svg with an unlaid map)', async () => {
+    vi.useFakeTimers()
+    size = { width: 900, height: 800 }
+    rect = { x1: 0, y1: 0, x2: 0, y2: 0 }                                    // markmap has not positioned anything yet
+    render(<MindmapView text="# A" />)
+    await act(async () => { await vi.advanceTimersByTimeAsync(10) })
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(fit).not.toHaveBeenCalled()
+    await act(async () => { await vi.advanceTimersByTimeAsync(300) })       // a couple of retries: still nothing to fit
+    expect(fit).not.toHaveBeenCalled()
+    rect = { x1: 0, y1: 0, x2: 500, y2: 400 }                                // the first layout is done
+    await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+    expect(fit).toHaveBeenCalled()
+  })
+
+  it('after the first render a settling fit runs once more when markmap\'s first transition is over', async () => {
+    vi.useFakeTimers()
+    size = { width: 900, height: 800 }
+    render(<MindmapView text="# A" />)
+    await act(async () => { await vi.advanceTimersByTimeAsync(10) })
+    const afterFirst = fit.mock.calls.length
+    expect(afterFirst).toBeGreaterThanOrEqual(1)
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+    expect(fit.mock.calls.length).toBe(afterFirst + 1)
+  })
+})
