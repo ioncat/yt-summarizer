@@ -946,6 +946,9 @@ async def _run_download_stage(item_id: int, video_id: str, url: str) -> None:
     async with AsyncSessionLocal() as db:
         await stage_runs.begin(db, video_id, "download", queue_item_id=item_id)
         await db.commit()
+        previous = await downloader.saved_file(db, video_id)           # a good file from an earlier run is not ours to delete
+    keep = {previous.name} if previous is not None else set()
+    downloader.remove_leftovers(video_id, keep)                        # fragments of an earlier crashed run
     started = datetime.utcnow()
     try:
         if url.startswith(LOCAL_PREFIX):
@@ -965,7 +968,9 @@ async def _run_download_stage(item_id: int, video_id: str, url: str) -> None:
         async with AsyncSessionLocal() as db:
             await stage_runs.finish(db, video_id, "download", started_at=started, meta=meta)
             await db.commit()
+        downloader.remove_leftovers(video_id, {out.name})              # only the file the run names stays
     except StageCancelled:
+        downloader.remove_leftovers(video_id, keep)                    # a cancelled run leaves no file of its own
         async with AsyncSessionLocal() as db:
             await stage_runs.cancel(db, video_id, "download")
             await db.commit()
@@ -973,6 +978,7 @@ async def _run_download_stage(item_id: int, video_id: str, url: str) -> None:
     except Exception as exc:  # noqa: BLE001 - any failure of the download is the stage's failure, not the item's crash
         if not isinstance(exc, downloader.DownloadFailed):
             logger.exception("Queue worker: download of %s failed", video_id)
+        downloader.remove_leftovers(video_id, keep)                    # a failed or timed-out run leaves no fragments
         async with AsyncSessionLocal() as db:
             await stage_runs.fail(db, video_id, "download", str(exc)[:500])
             await db.commit()

@@ -29,11 +29,13 @@ async def _setup(client):
         f.unlink()
 
 
-def fake_ytdlp(returncode=0, stderr=b"", make_file=True, on_run=None, raises=None):
+def fake_ytdlp(returncode=0, stderr=b"", make_file=True, on_run=None, raises=None, fragments=()):
     calls: list[list[str]] = []
 
     def run(args, capture_output=False, timeout=None):
         calls.append(list(args))
+        for name in fragments:                                   # what yt-dlp leaves behind when it dies half way
+            (Path(ct.TEST_DOWNLOADS) / name.format(id=VIDEO_ID)).write_bytes(b"frag")
         if on_run:
             on_run()
         if raises:
@@ -201,14 +203,26 @@ async def test_the_old_browser_download_endpoint_is_untouched_by_the_stage(clien
 
 # --- getting the saved file back --------------------------------------------------------------------------------------------
 
+async def done_run(file, video_id=VIDEO_ID):
+    """A finished download run naming `file`, as the worker writes it."""
+    from models.database import AsyncSessionLocal
+    from services import stage_runs
+    async with AsyncSessionLocal() as db:
+        await stage_runs.begin(db, video_id, "download")
+        await stage_runs.finish(db, video_id, "download", meta={"file": file, "size": 1, "format": "mp4", "quality": "best"})
+        await db.commit()
+
+
 async def test_the_saved_file_is_served_by_video_id_with_its_name_and_type(client):
     (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp3").write_bytes(b"audio-bytes")
+    await done_run(f"{VIDEO_ID}.mp3")
     r = await client.get(f"/api/downloads/{VIDEO_ID}")
     assert r.status_code == 200 and r.content == b"audio-bytes"
     assert r.headers["content-type"].startswith("audio/mpeg")
     assert f'filename="{VIDEO_ID}.mp3"' in r.headers["content-disposition"]
     (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp3").unlink()
     (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp4").write_bytes(b"video-bytes")
+    await done_run(f"{VIDEO_ID}.mp4")                                                 # the newest done run decides
     assert (await client.get(f"/api/downloads/{VIDEO_ID}")).headers["content-type"].startswith("video/mp4")
 
 
@@ -219,9 +233,95 @@ async def test_no_file_and_no_odd_ids_give_404_and_never_a_path(client, asked):
     assert r.status_code in (404, 422) and b"not for the web" not in r.content
 
 
+async def test_a_file_in_the_folder_that_no_done_run_names_is_not_served(client):
+    (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp4").write_bytes(b"stray")                # no run at all
+    assert (await client.get(f"/api/downloads/{VIDEO_ID}")).status_code == 404
+    await done_run(f"{VIDEO_ID}.mp3")                                                   # a run names a file that is not there
+    assert (await client.get(f"/api/downloads/{VIDEO_ID}")).status_code == 404
+
+
+@pytest.mark.parametrize("name", ["{id}.f137.mp4", "{id}.mp4.part", "{id}.ytdl", "{id}.f251.webm", "{id}.temp.mp4", "../secret.txt", "{id}.exe"])
+async def test_fragments_and_odd_names_are_not_served_even_if_a_run_names_them(client, name):
+    real = name.format(id=VIDEO_ID)
+    if "/" not in real:
+        (Path(ct.TEST_DOWNLOADS) / real).write_bytes(b"fragment")
+    (Path(ct.TEST_DOWNLOADS).parent / "secret.txt").write_bytes(b"not for the web")
+    await done_run(real)
+    r = await client.get(f"/api/downloads/{VIDEO_ID}")
+    assert r.status_code == 404 and b"fragment" not in r.content and b"not for the web" not in r.content
+    (Path(ct.TEST_DOWNLOADS).parent / "secret.txt").unlink()
+
+
 async def test_a_half_written_file_is_not_served(client):
     (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp4.part").write_bytes(b"half")
+    await done_run(f"{VIDEO_ID}.mp4")
     assert (await client.get(f"/api/downloads/{VIDEO_ID}")).status_code == 404
+
+
+# --- leftovers (review: Low-Medium) --------------------------------------------------------------------------------------------
+
+def folder_names():
+    return sorted(os.listdir(ct.TEST_DOWNLOADS))
+
+
+async def test_a_stop_deletes_the_file_this_run_produced(client, seeded_video):
+    item = await add_item(["download"])
+    run, _ = fake_ytdlp(on_run=lambda: ITEM_CANCEL.add(item), fragments=["{id}.f137.mp4"])
+    with patch.object(downloader.subprocess, "run", run):
+        await run_worker([item])
+    assert (await get_item(item))["status"] == "skipped"
+    assert folder_names() == []                                           # neither the finished file nor the fragment
+
+
+async def test_a_stop_keeps_a_good_file_from_an_earlier_run(client, seeded_video):
+    (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp3").write_bytes(b"earlier good file")
+    await done_run(f"{VIDEO_ID}.mp3")
+    item = await add_item(["download"])
+    run, _ = fake_ytdlp(on_run=lambda: ITEM_CANCEL.add(item))             # mp4 by default: a different name from the earlier mp3
+    with patch.object(downloader.subprocess, "run", run):
+        await run_worker([item])
+    assert folder_names() == [f"{VIDEO_ID}.mp3"]
+    assert (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp3").read_bytes() == b"earlier good file"
+
+
+async def test_a_timeout_removes_the_fragments(client, seeded_video):
+    item = await add_item(["download"])
+    run, _ = fake_ytdlp(raises=subprocess.TimeoutExpired("yt-dlp", 890), fragments=["{id}.mp4.part", "{id}.f137.mp4", "{id}.ytdl"])
+    with patch.object(downloader.subprocess, "run", run):
+        await run_worker([item])
+    assert "Download timed out" in (await get_item(item))["error_message"]
+    assert folder_names() == []
+
+
+async def test_a_crash_removes_the_fragments_and_keeps_the_earlier_good_file(client, seeded_video):
+    (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp3").write_bytes(b"earlier good file")
+    await done_run(f"{VIDEO_ID}.mp3")
+    item = await add_item(["download"])
+    run, _ = fake_ytdlp(returncode=1, stderr=b"ERROR: boom", fragments=["{id}.f251.webm", "{id}.f137.mp4.part"])
+    with patch.object(downloader.subprocess, "run", run):
+        await run_worker([item])
+    assert (await get_item(item))["status"] == "partial"
+    assert folder_names() == [f"{VIDEO_ID}.mp3"]
+
+
+async def test_an_unexpected_error_also_cleans_up(client, seeded_video):
+    item = await add_item(["download"])
+    run, _ = fake_ytdlp(raises=RuntimeError("disk exploded"), fragments=["{id}.mp4.part"])
+    with patch.object(downloader.subprocess, "run", run):
+        await run_worker([item])
+    assert (await get_item(item))["status"] == "partial" and folder_names() == []
+
+
+async def test_stale_fragments_of_an_earlier_crash_are_removed_at_the_start_and_only_the_named_file_stays(client, seeded_video):
+    for stale in (f"{VIDEO_ID}.f137.mp4", f"{VIDEO_ID}.mp4.part", f"{VIDEO_ID}.ytdl"):
+        (Path(ct.TEST_DOWNLOADS) / stale).write_bytes(b"old")
+    (Path(ct.TEST_DOWNLOADS) / "otherVideo01.mp4").write_bytes(b"someone else's file")      # other videos are never touched
+    item = await add_item(["download"])
+    run, _ = fake_ytdlp(fragments=["{id}.f251.webm"])                                          # and a leftover of this very run
+    with patch.object(downloader.subprocess, "run", run):
+        await run_worker([item])
+    assert (await get_item(item))["status"] == "done"
+    assert folder_names() == sorted(["otherVideo01.mp4", f"{VIDEO_ID}.mp4"])
 
 
 # --- item 13: no subtitles, but the download was asked for --------------------------------------------------------------------

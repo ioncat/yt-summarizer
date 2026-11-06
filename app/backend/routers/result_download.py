@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTask
 
 from models.database import get_db
-from services.downloader import find_download
+from services.downloader import saved_file
 from services.subtitle_extractor import _ytdlp_cmd
 from services.video_service import get_app_setting, get_result
 from routers.download import _mp4_format_spec
@@ -27,10 +27,11 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 @router.get("/downloads/{video_id}")
-async def get_saved_download(video_id: str):
-    """The file the queue's download stage saved for this video (data/downloads). Only the video id comes from the request; the
-    file is looked up by that id (plain id characters only), so no path can be asked for."""
-    found = find_download(video_id)
+async def get_saved_download(video_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
+    """The file the queue's download stage saved for this video (data/downloads): the one named in its newest finished download run.
+    Only the video id comes from the request, so no path can be asked for, and fragments or other files in the folder are never
+    served."""
+    found = await saved_file(db, video_id)
     if found is None:
         raise HTTPException(status_code=404, detail="No downloaded file for this video")
     media = "audio/mpeg" if found.suffix.lower() == ".mp3" else "video/mp4"

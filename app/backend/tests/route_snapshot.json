@@ -809,7 +809,7 @@
    },
    "/api/downloads/{video_id}": {
     "get": {
-     "description": "The file the queue's download stage saved for this video (data/downloads). Only the video id comes from the request; the\nfile is looked up by that id (plain id characters only), so no path can be asked for.",
+     "description": "The file the queue's download stage saved for this video (data/downloads): the one named in its newest finished download run.\nOnly the video id comes from the request, so no path can be asked for, and fragments or other files in the folder are never\nserved.",
      "operationId": "get_saved_download_api_downloads__video_id__get",
      "parameters": [
       {

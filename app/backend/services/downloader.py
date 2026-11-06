@@ -26,7 +26,7 @@ MAX_FILESIZE = "4G"          # yt-dlp skips a bigger file instead of filling the
 TIMEOUT_SECONDS = 900        # the same limit as the browser download
 _SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _AUDIO_QUALITY = {"best": "320K", "high": "192K", "low": "128K"}
-_PARTIAL_SUFFIXES = (".part", ".ytdl", ".temp")
+_FINAL_EXTENSIONS = ("mp4", "mp3", "webm", "mkv", "m4a")     # what a finished download can be called; anything else is a fragment
 
 
 class DownloadFailed(RuntimeError):
@@ -62,17 +62,61 @@ def build_args(ytdlp_cmd: list[str], url: str, video_id: str, out_dir: str, fmt:
     return args + ["--", url]
 
 
-def find_download(video_id: str, folder: str | None = None) -> Path | None:
-    """The finished file of this video in the downloads folder (not a half-written one), or None."""
+def is_final_name(video_id: str, name: str) -> bool:
+    """Is `name` exactly <id>.<ext> with a finished-file extension? (Not <id>.f137.mp4, <id>.mp4.part, <id>.ytdl ...)"""
     try:
         base = safe_base_name(video_id)
     except DownloadFailed:
-        return None
+        return False
+    return re.fullmatch(re.escape(base) + r"\.(" + "|".join(_FINAL_EXTENSIONS) + ")", name) is not None
+
+
+def find_download(video_id: str, folder: str | None = None) -> Path | None:
+    """The finished file of this video in the downloads folder (never a fragment or a half-written file), or None."""
     root = Path(folder or downloads_dir())
     if not root.is_dir():
         return None
-    found = [p for p in root.iterdir() if p.is_file() and p.name.startswith(base + ".") and not p.name.endswith(_PARTIAL_SUFFIXES)]
+    found = [p for p in root.iterdir() if p.is_file() and is_final_name(video_id, p.name)]
     return max(found, key=lambda p: p.stat().st_mtime) if found else None
+
+
+def remove_leftovers(video_id: str, keep: set[str] | frozenset[str] = frozenset(), folder: str | None = None) -> list[str]:
+    """Delete every file of this video in the downloads folder (<id>.*: the file, .f<digits>. fragments, .part, .ytdl ...) except the
+    names in `keep`. Returns the names removed. Only names that start with "<id>." are touched."""
+    try:
+        base = safe_base_name(video_id)
+    except DownloadFailed:
+        return []
+    root = Path(folder or downloads_dir())
+    if not root.is_dir():
+        return []
+    removed = []
+    for p in root.iterdir():
+        if p.is_file() and p.name.startswith(base + ".") and p.name not in keep:
+            try:
+                p.unlink()
+                removed.append(p.name)
+            except OSError:
+                pass                                               # in use or already gone: the next run tries again
+    return removed
+
+
+async def saved_file(db, video_id: str, folder: str | None = None) -> Path | None:
+    """The file to serve for this video: the one named in the newest DONE download run (meta.file), if it is a finished-file name and
+    exists. Nothing else in the folder is ever served, whatever its name."""
+    import json
+    from sqlalchemy import text
+    raw = (await db.execute(
+        text("SELECT meta FROM processing_stages WHERE video_id = :v AND stage = 'download' AND status = 'done' "
+             "ORDER BY id DESC LIMIT 1"), {"v": video_id})).scalar()
+    try:
+        name = (json.loads(raw) if raw else {}).get("file")
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(name, str) or not is_final_name(video_id, name):
+        return None
+    path = Path(folder or downloads_dir()) / name
+    return path if path.is_file() else None
 
 
 def _run_blocking(args: list[str], video_id: str, out_dir: str) -> Path:
