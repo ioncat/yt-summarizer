@@ -1,5 +1,6 @@
 import { toggleFavorite, ResultResponse } from '../../api'
 import { Setter, formatDuration, formatDate } from './helpers'
+import { SourceBadge } from '../SourceBadge'
 
 interface ResultHeaderProps {
   result: ResultResponse
@@ -39,6 +40,7 @@ export function ResultHeader({ result, videoId, setResult, displayCharCount, cha
               {result.language && (
                 <div><span className="font-semibold text-on-surface">Language:</span> {result.language.toUpperCase()}</div>
               )}
+              <SourceBadge item={result} />   {/* STT results: where the audio came from, as in History (NS-17 item 8) */}
               {displayCharCount != null && (
                 <div><span className="font-semibold text-on-surface">Characters ({charCountOf}):</span> {displayCharCount.toLocaleString()}</div>
               )}

@@ -673,5 +673,21 @@ describe('ResultPage', () => {
       fireEvent.click(btn(/Summary/))
       expect(screen.getByText('Characters (summary):').parentElement!.textContent).toContain('230')
     })
+
+    it('item 8: a local audio file result shows the source badge in the meta row, as History does', async () => {
+      setResult({ video_id: 'file-1234', url: 'local://talk.mp3', subtitle_source: 'transcript', subtitles_type: null })
+      await renderPage()
+      expect(screen.getByTitle('Local audio file (STT)').textContent).toContain('STT')
+    })
+
+    it('item 8: a local video file says so, and a YouTube result with captions has no badge', async () => {
+      setResult({ video_id: 'file-5678', url: 'local://clip.mp4', subtitle_source: 'transcript', subtitles_type: null })
+      await renderPage()
+      expect(screen.getByTitle('Local video file (STT)')).toBeTruthy()
+      cleanup()
+      setResult()
+      await renderPage()
+      expect(screen.queryByTitle(/\(STT\)/)).toBeNull()
+    })
   })
 })
