@@ -9,6 +9,8 @@ function activeStage(progress: string | null): string | null {
   if (progress.startsWith('extracting')) return 'extract'
   if (progress.startsWith('cleanup')) return 'cleanup'
   if (progress.startsWith('summary')) return 'summary'
+  if (progress.startsWith('mindmap')) return 'mindmap'
+  if (progress.startsWith('download')) return 'download'
   return null
 }
 

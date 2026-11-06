@@ -705,5 +705,12 @@ describe('ResultPage', () => {
       await renderPage()
       expect(screen.queryByTitle(/\(STT\)/)).toBeNull()
     })
+
+    it('item 12: an old download intent in the browser does not download whatever video is opened first', async () => {
+      localStorage.setItem('yt_autoDownload', JSON.stringify({ format: 'mp4', quality: 'best' }))
+      await renderPage()
+      await new Promise(r => setTimeout(r, 400))
+      expect(m.downloadVideo).not.toHaveBeenCalled()
+    })
   })
 })

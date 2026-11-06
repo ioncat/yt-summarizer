@@ -4,7 +4,6 @@ import {
   getResult,
   getSettings, getModels,
   getSttModels,
-  downloadVideo,
   ResultResponse, SttModelInfo,
 } from '../api'
 import { Tab } from '../components/result/helpers'
@@ -145,24 +144,6 @@ export default function ResultPage() {
           chatHistoryLoadedRef.current = true
           if (data.chat_history && data.chat_history.length > 0) {
             setChatHistory(data.chat_history as Array<{ role: 'user' | 'assistant'; content: string }>)
-          }
-        }
-
-        if (isFirstLoad && data.formatted_text) {
-          const intent = localStorage.getItem('yt_autoDownload')
-          if (intent) {
-            try {
-              const { format, quality } = JSON.parse(intent) as { format: 'mp4' | 'mp3'; quality: string }
-              localStorage.removeItem('yt_autoDownload')
-              setDownloadFormat(format)
-              setDownloadQuality(quality)
-              // Trigger download after settings are applied
-              setTimeout(() => {
-                if (videoId) {
-                  downloadVideo(videoId, format, quality).catch(() => {})
-                }
-              }, 300)
-            } catch { localStorage.removeItem('yt_autoDownload') }
           }
         }
 

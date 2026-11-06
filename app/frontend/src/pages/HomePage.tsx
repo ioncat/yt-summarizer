@@ -6,7 +6,7 @@ import { InvalidLinkError, type QueueReportEntry } from '../api'
 import { parseLinks, withoutSentLinks } from '../utils/links'
 import { LANGUAGES, inputBase, selectBase } from '../components/home/common'
 import { AUTO_PIPELINE_KEY, PIPELINE_PRESETS, autoPipelineStages, readAutoPipeline, resolveStages } from '../utils/pipeline'
-import { getSettings, getHealth, getQueue, AllSettings, queueBulkAdd, QueueAddResult, downloadDirect } from '../api'
+import { getSettings, getHealth, getQueue, AllSettings, queueBulkAdd, QueueAddResult } from '../api'
 
 type InputMode = 'url' | 'file'
 
@@ -29,12 +29,6 @@ export default function HomePage() {
   const [autoPipeline, setAutoPipeline] = useState(readAutoPipeline)
   const [autoDownload, setAutoDownload] = useState(
     () => localStorage.getItem('yt_autoDownload_enabled') === 'true'
-  )
-  const [autoDownloadFormat, setAutoDownloadFormat] = useState<'mp4' | 'mp3'>(
-    () => (localStorage.getItem('yt_autoDownload_format') as 'mp4' | 'mp3') ?? 'mp4'
-  )
-  const [autoDownloadQuality, setAutoDownloadQuality] = useState(
-    () => localStorage.getItem('yt_autoDownload_quality') ?? 'best'
   )
   const [ollamaOnline, setOllamaOnline] = useState(false)
 
@@ -114,18 +108,13 @@ export default function HomePage() {
       .catch(err => { console.error('[Home] getSettings failed:', err) })
   }, [])
 
-  function storeAutoDownloadIntent() {
-    if (autoDownload) {
-      localStorage.setItem('yt_autoDownload', JSON.stringify({ format: autoDownloadFormat, quality: autoDownloadQuality }))
-    } else {
-      localStorage.removeItem('yt_autoDownload')
-    }
-  }
-
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     return submitLink()
   }
+
+  // "Download" is a stage of the queue item, run last: the file is saved on the server (format and quality from Settings)
+  const withDownload = (stages: string[]) => (autoDownload ? [...stages, 'download'] : stages)
 
   async function submitLink() {
     setError('')
@@ -133,19 +122,6 @@ export default function HomePage() {
     setWatchedItem(null)
     setBulkResult(null)
     if (links.length === 0) return
-
-    if (autoDownload && !autoPipeline && pipeline === 'extract') {
-      if (links.length > 1) { setError('Download works for one link at a time: leave one link in the field.'); return }
-      setLoading(true)
-      try {
-        await downloadDirect(links[0], autoDownloadFormat, autoDownloadQuality)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Download failed')
-      } finally {
-        setLoading(false)
-      }
-      return
-    }
 
     if (autoPipeline) {
       if (allSettings) {
@@ -159,9 +135,8 @@ export default function HomePage() {
         }
       }
       setLoading(true)
-      storeAutoDownloadIntent()
       try {
-        afterAdd(await queueBulkAdd(links, autoPipelineStages(useStt), false, language || undefined))
+        afterAdd(await queueBulkAdd(links, withDownload(autoPipelineStages(useStt)), false, language || undefined))
       } catch (err) {
         if (onAddError(err)) return
         console.error('[Home] queueBulkAdd failed:', err)
@@ -172,9 +147,8 @@ export default function HomePage() {
     } else {
       // Every pipeline, "extract only" too, is a queue item (NS-11 stage 7 / NS-24b): the page stays and says what happened. A link
       // that is already processed shows the "already processed" note with a link to the result instead of jumping there.
-      const stages = resolveStages(pipeline, useStt)
+      const stages = withDownload(resolveStages(pipeline, useStt))
       setLoading(true)
-      storeAutoDownloadIntent()
       try {
         afterAdd(await queueBulkAdd(links, stages, false, language || undefined))
       } catch (err) {
@@ -308,59 +282,22 @@ export default function HomePage() {
               </label>
             </div>
 
-            {/* Auto-download checkbox */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-3">
-                <input
-                  id="auto-download"
-                  type="checkbox"
-                  className="w-5 h-5 rounded border-outline-variant cursor-pointer accent-primary shrink-0"
-                  checked={autoDownload}
-                  onChange={e => {
-                    setAutoDownload(e.target.checked)
-                    localStorage.setItem('yt_autoDownload_enabled', String(e.target.checked))
-                  }}
-                />
-                <label htmlFor="auto-download" className="text-label-md text-on-surface cursor-pointer">
-                  Download
-                  <span className="text-secondary font-normal"> (auto-starts after processing)</span>
-                </label>
-              </div>
-              {autoDownload && (
-                <div className="flex items-center gap-3 ml-8">
-                  <div className="relative shrink-0 w-36">
-                    <select
-                      value={autoDownloadFormat}
-                      onChange={e => {
-                        const v = e.target.value as 'mp4' | 'mp3'
-                        setAutoDownloadFormat(v)
-                        localStorage.setItem('yt_autoDownload_format', v)
-                      }}
-                      className={selectBase}
-                    >
-                      <option value="mp4">Video (MP4)</option>
-                      <option value="mp3">Audio (MP3)</option>
-                    </select>
-                    <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-secondary text-[20px]">expand_more</span>
-                  </div>
-                  <div className="relative shrink-0 w-44">
-                    <select
-                      value={autoDownloadQuality}
-                      onChange={e => {
-                        setAutoDownloadQuality(e.target.value)
-                        localStorage.setItem('yt_autoDownload_quality', e.target.value)
-                      }}
-                      className={selectBase}
-                    >
-                      <option value="best">Best quality</option>
-                      <option value="1080p">1080p</option>
-                      <option value="720p">720p</option>
-                      <option value="480p">480p</option>
-                    </select>
-                    <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-secondary text-[20px]">expand_more</span>
-                  </div>
-                </div>
-              )}
+            {/* Download: a stage of the queue item (NS-17 items 12 / 13) */}
+            <div className="flex items-center gap-3">
+              <input
+                id="auto-download"
+                type="checkbox"
+                className="w-5 h-5 rounded border-outline-variant cursor-pointer accent-primary shrink-0"
+                checked={autoDownload}
+                onChange={e => {
+                  setAutoDownload(e.target.checked)
+                  localStorage.setItem('yt_autoDownload_enabled', String(e.target.checked))
+                }}
+              />
+              <label htmlFor="auto-download" className="text-label-md text-on-surface cursor-pointer">
+                Download
+                <span className="text-secondary font-normal"> (saved on the server in data/downloads, after processing; format and quality: Settings → General)</span>
+              </label>
             </div>
 
             {queueNote && (

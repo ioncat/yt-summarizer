@@ -569,3 +569,20 @@ describe('QueuePage row order (NS-17 item 6)', () => {
     expect(order1).toEqual(['order000005', 'order000004', 'order000003', 'order000002', 'order000001'])
   })
 })
+
+describe('QueuePage download stage (NS-17 item 12)', () => {
+  it('the pipeline column shows download, and the running banner marks it while it downloads', async () => {
+    vi.clearAllMocks()
+    const running = item(51, 'https://youtu.be/dlStage00001', {
+      status: 'processing', pipeline_stages: ['extract', 'cleanup', 'download'], progress: 'download: downloading…',
+    })
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [running], count: 1 })
+    const { container } = renderQueue()
+    await screen.findAllByText('dlStage00001')
+    const stages = Array.from(container.querySelectorAll('tbody tr td:nth-child(3) span span')).map(e => e.textContent)
+    expect(stages).toEqual(expect.arrayContaining(['extract', 'cleanup', 'download']))
+    const banner = screen.getAllByText('download').map(e => e.className).join(' ')
+    expect(banner).toContain('font-bold')                                   // the banner's current stage
+  })
+})
+

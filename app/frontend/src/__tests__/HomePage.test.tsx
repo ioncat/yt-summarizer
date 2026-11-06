@@ -599,6 +599,39 @@ describe('HomePage: one form for one link or a list', () => {
     expect(field().value).toBe(list[2])
   })
 
+  it('Download is a stage of the queue item: it is added last, for every pipeline, and nothing is kept in the browser', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({ added: 1, ids: [1], invalid: [], duplicates: [] })
+    localStorage.removeItem('yt_autoDownload')
+    renderHome()
+    fireEvent.click(screen.getByLabelText(/^Download/))
+    fireEvent.change(field(), { target: { value: list[0] } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add to queue' }))
+    await waitFor(() => expect(api.queueBulkAdd).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(api.queueBulkAdd).mock.calls[0][1]).toEqual(['extract', 'download'])
+    expect(localStorage.getItem('yt_autoDownload')).toBeNull()              // the old intent that downloaded whatever video opened first
+    fireEvent.change(screen.getByLabelText('Pipeline'), { target: { value: 'full' } })
+    fireEvent.change(field(), { target: { value: `${list[0]}
+${list[1]}` } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add all (2)' }))
+    await waitFor(() => expect(api.queueBulkAdd).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(api.queueBulkAdd).mock.calls[1][1]).toEqual(['extract', 'cleanup', 'summary', 'mindmap', 'download'])
+  })
+
+  it('without the Download box the stages have no download, and there are no format / quality fields (Settings decides)', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({ added: 1, ids: [1], invalid: [], duplicates: [] })
+    localStorage.removeItem('yt_autoDownload_enabled')
+    renderHome()
+    expect(screen.queryByText('Video (MP4)')).toBeNull()
+    fireEvent.click(screen.getByLabelText(/^Download/))
+    expect(screen.queryByText('Video (MP4)')).toBeNull()                    // ticking it adds no selects either
+    expect(screen.getByText(/format and quality: Settings/)).toBeTruthy()
+    fireEvent.click(screen.getByLabelText(/^Download/))
+    fireEvent.change(field(), { target: { value: list[0] } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add to queue' }))
+    await waitFor(() => expect(api.queueBulkAdd).toHaveBeenCalled())
+    expect(vi.mocked(api.queueBulkAdd).mock.calls[0][1]).toEqual(['extract'])
+  })
+
   it('an empty field cannot be sent', () => {
     renderHome()
     expect((screen.getByRole('button', { name: 'Add to queue' }) as HTMLButtonElement).disabled).toBe(true)
