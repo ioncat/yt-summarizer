@@ -6,9 +6,10 @@ interface ResultHeaderProps {
   videoId: string | undefined
   setResult: Setter<ResultResponse | null>
   displayCharCount: number | null
+  charCountOf: string   // which text the number counts: the number changes with the tab, so the label says whose it is (NS-17 item 3)
 }
 
-export function ResultHeader({ result, videoId, setResult, displayCharCount }: ResultHeaderProps) {
+export function ResultHeader({ result, videoId, setResult, displayCharCount, charCountOf }: ResultHeaderProps) {
   return (
           <div className="p-6 border-b border-outline-variant">
             <div className="flex justify-between items-start mb-4 gap-3">
@@ -39,7 +40,7 @@ export function ResultHeader({ result, videoId, setResult, displayCharCount }: R
                 <div><span className="font-semibold text-on-surface">Language:</span> {result.language.toUpperCase()}</div>
               )}
               {displayCharCount != null && (
-                <div><span className="font-semibold text-on-surface">Characters:</span> {displayCharCount.toLocaleString()}</div>
+                <div><span className="font-semibold text-on-surface">Characters ({charCountOf}):</span> {displayCharCount.toLocaleString()}</div>
               )}
               <div><span className="font-semibold text-on-surface">Saved:</span> {formatDate(result.created_at)}</div>
             </div>

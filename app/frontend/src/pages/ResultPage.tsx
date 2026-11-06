@@ -333,6 +333,7 @@ export default function ResultPage() {
   const displayCharCount =
     activeTab === 'summary' ? summaryCount :
     activeTab === 'cleaned' ? cleanedCount : subtitlesCount
+  const charCountOf = activeTab === 'summary' ? 'summary' : activeTab === 'cleaned' ? 'cleaned text' : 'subtitles'
 
 
   return (
@@ -341,7 +342,7 @@ export default function ResultPage() {
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden">
 
           {/* ── Card header: title + star ── */}
-          <ResultHeader result={result} videoId={videoId} setResult={setResult} displayCharCount={displayCharCount} />
+          <ResultHeader result={result} videoId={videoId} setResult={setResult} displayCharCount={displayCharCount} charCountOf={charCountOf} />
 
           <MetaRibbons
             result={result}

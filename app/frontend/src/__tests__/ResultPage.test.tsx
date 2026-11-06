@@ -659,5 +659,19 @@ describe('ResultPage', () => {
       fireEvent.click(btn(/Summary/))
       expect(screen.getByText(/Added to queue/)).toBeTruthy()                  // still there, on its own tab
     })
+
+    it('item 3: the character count says which text it counts, so it can change with the tab without looking wrong', async () => {
+      setResult({
+        char_count: 247, formatted_text: 'x'.repeat(247), cleanup_status: 'done', cleaned_text: 'c'.repeat(243),
+        summary_status: 'done', summary_text: 's'.repeat(230),
+      })
+      await renderPage()
+      fireEvent.click(btn('Subtitles'))
+      expect(screen.getByText('Characters (subtitles):').parentElement!.textContent).toContain('247')
+      fireEvent.click(btn('Cleaned'))
+      expect(screen.getByText('Characters (cleaned text):').parentElement!.textContent).toContain('243')
+      fireEvent.click(btn(/Summary/))
+      expect(screen.getByText('Characters (summary):').parentElement!.textContent).toContain('230')
+    })
   })
 })
