@@ -232,3 +232,57 @@ async def test_the_per_stage_stop_of_a_running_stage_stops_it(client, seeded_vid
         gate.release.set()
         await worker
     assert (await get_item(item))["status"] == "skipped"
+
+
+# --- review fixes -------------------------------------------------------------------------------------------------------------------
+
+THREE = ["cleanup", "summary", "mindmap"]
+
+
+@pytest.mark.parametrize("how", ["queue row", "result page"])
+async def test_cancel_of_a_running_three_stage_item_stops_the_stage_that_is_running(client, seeded_video, how):
+    """Queued through the real endpoint, so every stage has an open run row from the start (a set_fmt shortcut hides the bug:
+    the flag of the LAST open row, the mind map, was set while the cleanup ran on)."""
+    r = await client.post("/api/queue/bulk", json={"video_ids": [VIDEO_ID], "pipeline_stages": THREE})
+    (item,) = r.json()["ids"]
+    queued = (await client.get(f"/api/result/{VIDEO_ID}")).json()["stages"]
+    assert [queued[s]["status"] for s in THREE] == ["processing"] * 3          # the three run rows exist from queue time
+    gate = Gate(result="NEW")
+    with patch("services.text_cleaner.clean_text", gate.llm()):
+        worker = asyncio.create_task(run_worker([item]))
+        await gate.wait_started()
+        assert gate.calls[0]["is_cancelled"]() is False
+        if how == "queue row":
+            assert (await client.post(f"/api/queue/{item}/cancel")).json()["status"] == "stopping"
+        else:
+            assert (await client.post(f"/api/result/{VIDEO_ID}/cancel")).json()["stopping"] == 1
+        assert gate.calls[0]["is_cancelled"]() is True                          # the RUNNING cleanup sees its flag
+        gate.release.set()
+        await worker
+    assert (await get_item(item))["status"] == "skipped"
+    row = await fmt_row()
+    assert (row["cleanup_status"], row["summary_status"], row["mindmap_status"]) == (None, None, None)
+    done = (await client.get(f"/api/result/{VIDEO_ID}")).json()["stages"]
+    assert [done[s]["status"] for s in THREE] == ["cancelled"] * 3
+    assert not CLEANUP_CANCEL and not SUMMARY_CANCEL and not MINDMAP_CANCEL and not ITEM_CANCEL     # no flag waits for a later run
+
+
+async def test_cancel_during_the_summary_of_a_three_stage_item_skips_the_mind_map(client, seeded_video):
+    r = await client.post("/api/queue/bulk", json={"video_ids": [VIDEO_ID], "pipeline_stages": THREE})
+    (item,) = r.json()["ids"]
+    clean, summary, ran = Gate(result="CLEAN"), Gate(result=("NEW", "single", 1)), []
+    clean.release.set()
+
+    async def mindmap(*a, **k):
+        ran.append("mindmap")
+        return "MAP"
+
+    with patch("services.text_cleaner.clean_text", clean.llm()), patch("services.text_summarizer.summarize_text", summary.llm()),             patch("services.text_mindmapper.generate_mindmap", mindmap):
+        worker = asyncio.create_task(run_worker([item]))
+        await summary.wait_started()
+        await client.post(f"/api/queue/{item}/cancel")
+        assert summary.calls[0]["is_cancelled"]() is True
+        summary.release.set()
+        await worker
+    assert ran == [] and (await get_item(item))["status"] == "skipped"
+    assert (await fmt_row())["mindmap_status"] is None

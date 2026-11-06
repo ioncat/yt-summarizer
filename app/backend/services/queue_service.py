@@ -1017,6 +1017,9 @@ async def queue_worker() -> None:
             await _set_skipped(item_id, str(e))
             # the stages that were queued with it and never ran go back to idle (the one that was stopped reset itself)
             await _release_unrun_stages(item.get("video_id"), url, pipeline_stages, str(e), cancelled=True)
+            if item.get("video_id"):                  # the Stop flags set for stages that never started must not wait for the next run
+                for flags in (CLEANUP_CANCEL, SUMMARY_CANCEL, MINDMAP_CANCEL):
+                    flags.discard(item["video_id"])
 
         except Exception as e:
             logger.error("Queue worker: item %d failed: %s", item_id, e, exc_info=True)

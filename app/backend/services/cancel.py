@@ -20,7 +20,7 @@ _STAGE_FLAGS = {"cleanup": CLEANUP_CANCEL, "summary": SUMMARY_CANCEL, "mindmap":
 
 
 async def _signal(db, item_id: int, video_id: str | None, stages: list[str], url: str) -> None:
-    """Tell the running item to stop: the item's own flag (checked between stages) and the flag of the stage it is in."""
+    """Tell the running item to stop: the item's own flag (checked between stages) and the flags of its stages."""
     from services.file_stt import LOCAL_PREFIX
     from services.subtitle_extractor import extract_video_id
 
@@ -31,12 +31,12 @@ async def _signal(db, item_id: int, video_id: str | None, stages: list[str], url
     if "reextract" in stages or (url or "").startswith(LOCAL_PREFIX):
         TRANSCRIBE_CANCEL.add(video_id)                      # a re-extract or an uploaded file: the segment loop polls this one
         return
-    stage = (await db.execute(
-        text("SELECT stage FROM processing_stages WHERE queue_item_id = :i AND status = 'processing' ORDER BY id DESC LIMIT 1"),
-        {"i": item_id},
-    )).scalar()
-    if stage in _STAGE_FLAGS:
-        _STAGE_FLAGS[stage].add(video_id)
+    # Every LLM stage of the item gets its flag. Which one is running cannot be read from the run rows: all of an item's stages
+    # have an open row from the moment it was queued. The stages that come later discard their flag when they start, and
+    # ITEM_CANCEL ends the item before they begin, so the extra flags do nothing.
+    for stage in stages:
+        if stage in _STAGE_FLAGS:
+            _STAGE_FLAGS[stage].add(video_id)
 
 
 async def cancel_item(db, item_id: int, upload_message: str = CANCELLED_MESSAGE) -> str:
