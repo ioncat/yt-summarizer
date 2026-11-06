@@ -13,6 +13,7 @@ import { MetaRibbons } from '../components/result/MetaRibbons'
 import { ActionsBar } from '../components/result/ActionsBar'
 import { ErrorBanners } from '../components/result/ErrorBanners'
 import { JobsBanner } from '../components/result/JobsBanner'
+import { CleanupFirstPrompt } from '../components/result/CleanupFirstPrompt'
 import { queuedLineVisible, queuedStagesRunning, QueuedMsg } from '../components/result/queuedMessage'
 import { TabsBar } from '../components/result/TabsBar'
 import { TabContent } from '../components/result/TabContent'
@@ -58,6 +59,7 @@ export default function ResultPage() {
 
   const [ollamaUrl, setOllamaUrl]   = useState('')
   const [queuedMsg, setQueuedMsg] = useState<string | null>(null)
+  const [askCleanupFirst, setAskCleanupFirst] = useState(false)    // Summarize pressed before any cleanup: ask in the page
 
   const {
     chatHistory, setChatHistory, chatInput, setChatInput, isChatting, chatCopied,
@@ -296,7 +298,7 @@ export default function ResultPage() {
   const {
     handleCopy, handleCancelCleanup, handleCancelSummary, handleStopAll, handleDelete, handleDownload,
     handleReextract, handleCleanupModelChange, handleSummaryModelChange, handleChatModelChange,
-    handleCleanup, handleSummarize, handleMindmap,
+    handleCleanup, handleSummarize, handleCleanupThenSummarize, handleSummarizeAnyway, handleMindmap,
   } = useResultHandlers({
     videoId, result, navigate, displayText, setCopied,
     stopPolling, stopCleanupTimer, stopSummaryPolling, stopSummaryTimer, stopMindmapPolling,
@@ -305,7 +307,7 @@ export default function ResultPage() {
     setResult, setDownloadError, setIsDownloading, downloadFormat, downloadQuality,
     isLocalFile, reextractLang, sttModel, setReextractError, loadResult,
     setCleanupModel, cleanupPromptsRef, setSummaryModel, summaryPromptsRef, setChatModel,
-    requestNotifyPermission, setCleanupError, setSummaryError, setMindmapError, setQueuedMsg,
+    requestNotifyPermission, setCleanupError, setSummaryError, setMindmapError, setQueuedMsg, setAskCleanupFirst,
     pollRef, summaryPollRef, mindmapPollRef,
   })
 
@@ -388,6 +390,11 @@ export default function ResultPage() {
               downloadQuality={downloadQuality} setDownloadQuality={setDownloadQuality}
               handleDelete={handleDelete}
             />
+
+            {askCleanupFirst && activeTab === 'summary' && (
+              <CleanupFirstPrompt result={result} onCleanupThenSummarize={handleCleanupThenSummarize}
+                onSummarizeAnyway={handleSummarizeAnyway} onCancel={() => setAskCleanupFirst(false)} />
+            )}
 
             {/* What is waiting or running for this video, with one Stop (NS-16) */}
             <JobsBanner result={result} handleStopAll={handleStopAll} />

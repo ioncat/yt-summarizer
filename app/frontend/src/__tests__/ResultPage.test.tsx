@@ -211,12 +211,12 @@ describe('ResultPage', () => {
     expect(m.queueBulkAdd).not.toHaveBeenCalledWith(expect.anything(), ['summary'], expect.anything())  // not the URL queue path
   })
 
-  it('Summarize before any cleanup: after the confirm ONE item with both stages is queued by the video id', async () => {
+  it('Summarize before any cleanup: after choosing Run cleanup, then summarize ONE item with both stages is queued by the video id', async () => {
     m.queueBulkAddByIds.mockResolvedValue({ added: 1, ids: [5], invalid: [], duplicates: [], missing: [] })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     await renderPage()                                             // base: no cleanup yet
     fireEvent.click(btn(/Summary/))
     fireEvent.click(btn(/Summarize/))
+    fireEvent.click(await screen.findByRole('button', { name: /Run cleanup, then summarize/ }))
     await waitFor(() => expect(m.queueBulkAddByIds).toHaveBeenCalledWith([base.video_id], ['cleanup', 'summary']))
     expect(m.startCleanup).not.toHaveBeenCalled()                  // no client-side chain any more
     expect(m.queueBulkAdd).not.toHaveBeenCalled()
@@ -225,28 +225,44 @@ describe('ResultPage', () => {
 
   it('Summarize before any cleanup: a local file takes the same path (no URL needed)', async () => {
     m.queueBulkAddByIds.mockResolvedValue({ added: 1, ids: [5], invalid: [], duplicates: [], missing: [] })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     setResult({ video_id: 'file-1234', url: 'local://talk.mp3', subtitle_source: 'transcript', subtitles_type: null })
     await renderPage()
     fireEvent.click(btn(/Summary/))
     fireEvent.click(btn(/Summarize/))
+    fireEvent.click(await screen.findByRole('button', { name: /Run cleanup, then summarize/ }))
     await waitFor(() => expect(m.queueBulkAddByIds).toHaveBeenCalledWith([base.video_id], ['cleanup', 'summary']))
   })
 
-  it('Summarize before any cleanup: declining the confirm queues nothing', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
+  it('Summarize before any cleanup: the page asks (no browser dialog) and Cancel queues nothing', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm')
     await renderPage()
     fireEvent.click(btn(/Summary/))
     fireEvent.click(btn(/Summarize/))
+    expect(await screen.findByText(/AI cleanup has not been run on this video yet/)).toBeTruthy()   // feedback at once
+    expect(confirmSpy).not.toHaveBeenCalled()
+    fireEvent.click(btn('Cancel'))
+    expect(screen.queryByText(/AI cleanup has not been run on this video yet/)).toBeNull()
     expect(m.queueBulkAddByIds).not.toHaveBeenCalled()
+    expect(m.startSummary).not.toHaveBeenCalled()
+  })
+
+  it('Summarize before any cleanup: "Summarize anyway" summarizes the subtitles without queueing a cleanup', async () => {
+    m.startSummary.mockResolvedValue(undefined as never)
+    await renderPage()
+    fireEvent.click(btn(/Summary/))
+    fireEvent.click(btn(/Summarize/))
+    fireEvent.click(await screen.findByRole('button', { name: /Summarize anyway/ }))
+    await waitFor(() => expect(m.startSummary).toHaveBeenCalledWith(base.video_id))
+    expect(m.queueBulkAddByIds).not.toHaveBeenCalled()
+    expect(screen.queryByText(/AI cleanup has not been run on this video yet/)).toBeNull()
   })
 
   it('Summarize before any cleanup: a video that already has a queue item says so instead of showing "queued"', async () => {
     m.queueBulkAddByIds.mockResolvedValue({ added: 0, ids: [], invalid: [], duplicates: [base.video_id], missing: [] })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     await renderPage()
     fireEvent.click(btn(/Summary/))
     fireEvent.click(btn(/Summarize/))
+    fireEvent.click(await screen.findByRole('button', { name: /Run cleanup, then summarize/ }))
     expect((await screen.findAllByText(/already has an item in the queue/)).length).toBeGreaterThan(0)
     expect(screen.queryByText(/cleanup → summary/)).toBeNull()
   })
@@ -254,10 +270,10 @@ describe('ResultPage', () => {
   it('Summarize before any cleanup: when stages are already queued the message names them (NS-25)', async () => {
     m.queueBulkAddByIds.mockResolvedValue({ added: 0, ids: [], invalid: [], duplicates: [base.video_id], missing: [],
       duplicate_details: [{ url: null, video_id: base.video_id, reason: 'in_queue', stages: ['cleanup', 'summary'] }] })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     await renderPage()
     fireEvent.click(btn(/Summary/))
     fireEvent.click(btn(/Summarize/))
+    fireEvent.click(await screen.findByRole('button', { name: /Run cleanup, then summarize/ }))
     expect((await screen.findAllByText(/cleanup and summary are already in the queue/)).length).toBeGreaterThan(0)
   })
 
@@ -265,10 +281,10 @@ describe('ResultPage', () => {
     m.queueBulkAddByIds.mockResolvedValue({ added: 0, ids: [], invalid: [], duplicates: [base.video_id], missing: [],
       duplicate_details: [{ url: null, video_id: base.video_id, reason: 'order', stages: ['summary'],
         message: 'A summary is already queued and would run before the cleanup and summary: wait for it or remove it on the Queue page, then try again.' }] })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     await renderPage()
     fireEvent.click(btn(/Summary/))
     fireEvent.click(btn(/Summarize/))
+    fireEvent.click(await screen.findByRole('button', { name: /Run cleanup, then summarize/ }))
     expect((await screen.findAllByText(/summary is already queued and would run before the cleanup and summary: wait for it or remove it/)).length).toBeGreaterThan(0)
   })
 

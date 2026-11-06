@@ -48,6 +48,7 @@ interface UseResultHandlersParams {
   setSummaryError: Setter<string>
   setMindmapError: Setter<string>
   setQueuedMsg: Setter<string | null>
+  setAskCleanupFirst: Setter<boolean>
   pollRef: Interval
   summaryPollRef: Interval
   mindmapPollRef: Interval
@@ -61,7 +62,7 @@ export function useResultHandlers({
   setResult, setDownloadError, setIsDownloading, downloadFormat, downloadQuality,
   isLocalFile, reextractLang, sttModel, setReextractError, loadResult,
   setCleanupModel, cleanupPromptsRef, setSummaryModel, summaryPromptsRef, setChatModel,
-  requestNotifyPermission, setCleanupError, setSummaryError, setMindmapError, setQueuedMsg,
+  requestNotifyPermission, setCleanupError, setSummaryError, setMindmapError, setQueuedMsg, setAskCleanupFirst,
   pollRef, summaryPollRef, mindmapPollRef,
 }: UseResultHandlersParams) {
   async function handleCopy() {
@@ -208,38 +209,53 @@ export function useResultHandlers({
     }
   }
 
+  // Summarize before any cleanup: the choice is asked IN THE PAGE (a browser dialog can be blocked or dismissed without a trace, and
+  // then the button seemed to do nothing - NS-17 item 18)
   async function handleSummarize() {
     if (!videoId || !result) return
     if (!result.cleanup_status && !result.cleaned_text) {
-      const confirmed = window.confirm(
-        'AI Cleanup has not been run yet.\n\nTo get a quality summary, cleanup should run first.\n\nRun cleanup → summarize pipeline now?'
-      )
-      if (!confirmed) return
-      try {
-        setSummaryError('')
-        // One queue item for both stages, queued by the video's id: it works for local files too (no URL needed) and the
-        // server runs summary right after cleanup even if this page is closed (no client-side chain; NS-11 stage 4a)
-        const res = await queueBulkAddByIds([videoId], ['cleanup', 'summary'])
-        if (res.added === 0) {
-          const queued = (res.duplicate_details ?? []).flatMap(d => d.stages ?? [])
-          const wrongOrder = (res.duplicate_details ?? []).find(d => d.reason === 'order')
-          setSummaryError(res.missing.length
-            ? 'This video was not found in History.'
-            : wrongOrder
-              ? (wrongOrder.message ?? 'A later step is already queued and would run first: wait for it or remove it on the Queue page, then try again.')
-              : `${queued.length ? `${[...new Set(queued)].join(' and ')} ${queued.length > 1 ? 'are' : 'is'} already in the queue` : 'This video already has an item in the queue'}: wait for it or remove it on the Queue page.`)
-          return
-        }
-        setResult(r => r ? withQueuedProcessing(r, ['cleanup', 'summary']) : r)
-        setQueuedMsg('cleanup+summary')
-        stopPolling()
-        pollRef.current = setInterval(() => loadResult(false), 3000)
-      } catch (err: unknown) {
-        console.error('[Pipeline] failed:', err)
-        setSummaryError(err instanceof Error ? err.message : 'Unknown error')
-      }
+      setSummaryError('')
+      setAskCleanupFirst(true)
       return
     }
+    await summarizeNow()
+  }
+
+  async function handleCleanupThenSummarize() {
+    if (!videoId || !result) return
+    setAskCleanupFirst(false)
+    try {
+      setSummaryError('')
+      // One queue item for both stages, queued by the video's id: it works for local files too (no URL needed) and the
+      // server runs summary right after cleanup even if this page is closed (no client-side chain; NS-11 stage 4a)
+      const res = await queueBulkAddByIds([videoId], ['cleanup', 'summary'])
+      if (res.added === 0) {
+        const queued = (res.duplicate_details ?? []).flatMap(d => d.stages ?? [])
+        const wrongOrder = (res.duplicate_details ?? []).find(d => d.reason === 'order')
+        setSummaryError(res.missing.length
+          ? 'This video was not found in History.'
+          : wrongOrder
+            ? (wrongOrder.message ?? 'A later step is already queued and would run first: wait for it or remove it on the Queue page, then try again.')
+            : `${queued.length ? `${[...new Set(queued)].join(' and ')} ${queued.length > 1 ? 'are' : 'is'} already in the queue` : 'This video already has an item in the queue'}: wait for it or remove it on the Queue page.`)
+        return
+      }
+      setResult(r => r ? withQueuedProcessing(r, ['cleanup', 'summary']) : r)
+      setQueuedMsg('cleanup+summary')
+      stopPolling()
+      pollRef.current = setInterval(() => loadResult(false), 3000)
+    } catch (err: unknown) {
+      console.error('[Pipeline] failed:', err)
+      setSummaryError(err instanceof Error ? err.message : 'Unknown error')
+    }
+  }
+
+  async function handleSummarizeAnyway() {
+    setAskCleanupFirst(false)
+    await summarizeNow()
+  }
+
+  async function summarizeNow() {
+    if (!videoId || !result) return
     requestNotifyPermission()
     try {
       setSummaryError('')
@@ -283,6 +299,6 @@ export function useResultHandlers({
   return {
     handleCopy, handleCancelCleanup, handleCancelSummary, handleStopAll, handleDelete, handleDownload,
     handleReextract, handleCleanupModelChange, handleSummaryModelChange, handleChatModelChange,
-    handleCleanup, handleSummarize, handleMindmap,
+    handleCleanup, handleSummarize, handleCleanupThenSummarize, handleSummarizeAnyway, handleMindmap,
   }
 }
