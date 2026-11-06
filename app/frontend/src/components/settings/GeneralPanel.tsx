@@ -7,6 +7,16 @@ interface GeneralPanelProps {
   onSaved: (s: AppSettings) => void
 }
 
+const CHAT_CTX_VALUES = ['4096', '8192', '16384', '32768', '65536', '131072']
+const LLM_CTX_VALUES = ['4096', '8192', '16384', '32768', '65536']
+
+/** A stored value that is not one of the listed sizes (typed into the database or an older version, say 7000) would show as the first
+ *  option and look like a different setting. It gets its own line, "custom: 7000", and stays selected until another is picked. */
+function customOption(stored: string | null | undefined, listed: string[]) {
+  if (!stored || listed.includes(stored)) return null
+  return <option value={stored}>custom: {stored}</option>
+}
+
 export function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
   const [ollamaUrl, setOllamaUrl]           = useState(initial.ollama_url ?? '')
   const [useCustomYtdlp, setUseCustomYtdlp] = useState(!!initial.ytdlp_path)
@@ -162,6 +172,7 @@ export function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
           value={chatNumCtx}
           onChange={e => setChatNumCtx(e.target.value)}
         >
+          {customOption(initial.chat_num_ctx, CHAT_CTX_VALUES)}
           <option value="4096">4K — minimal (short clips only)</option>
           <option value="8192">8K</option>
           <option value="16384">16K</option>
@@ -185,6 +196,7 @@ export function GeneralPanel({ initial, onSaved }: GeneralPanelProps) {
           value={llmMaxNumCtx}
           onChange={e => setLlmMaxNumCtx(e.target.value)}
         >
+          {customOption(initial.llm_max_num_ctx, LLM_CTX_VALUES)}
           <option value="4096">4K — tiny inputs only</option>
           <option value="8192">8K</option>
           <option value="16384">16K</option>

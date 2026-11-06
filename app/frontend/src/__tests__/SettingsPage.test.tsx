@@ -122,6 +122,32 @@ describe('SettingsPage', () => {
     expect(m.saveAppSettings.mock.calls[0][0]).toMatchObject({ llm_max_num_ctx: '65536', chat_num_ctx: '32768' })
   })
 
+  it('General tab: a stored context value that is not one of the sizes is shown as "custom: ..." and stays selected (NS-26 review)', async () => {
+    m.getSettings.mockResolvedValue({
+      app: { ...appSettings, llm_max_num_ctx: '7000', chat_num_ctx: '50000' },
+      cleanup: stage('cleanup', 'llama3'), summarization: stage('summarization', 'llama3'),
+      summarization_extract: stage('summarization_extract'), summarization_combine: stage('summarization_combine'), chat: stage('chat'),
+    } as never)
+    await renderPage()
+    const limit = screen.getByLabelText('Context limit for cleanup, summary and mind map') as HTMLSelectElement
+    expect(limit.value).toBe('7000')                                                      // not silently the first size
+    expect(Array.from(limit.options).map(o => o.textContent)[0]).toBe('custom: 7000')
+    expect(limit.options.length).toBe(6)
+    const chat = screen.getByText('Chat context window (minimum)').parentElement!.querySelector('select') as HTMLSelectElement
+    expect(chat.value).toBe('50000')
+    expect(chat.options[0].textContent).toBe('custom: 50000')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))                          // saving without touching them keeps the value
+    await waitFor(() => expect(m.saveAppSettings).toHaveBeenCalledTimes(1))
+    expect(m.saveAppSettings.mock.calls[0][0]).toMatchObject({ llm_max_num_ctx: '7000', chat_num_ctx: '50000' })
+  })
+
+  it('General tab: the listed sizes get no custom line', async () => {
+    await renderPage()
+    const limit = screen.getByLabelText('Context limit for cleanup, summary and mind map') as HTMLSelectElement
+    expect(limit.options.length).toBe(5)
+    expect(Array.from(limit.options).some(o => /custom/.test(o.textContent ?? ''))).toBe(false)
+  })
+
   it('AI Cleanup tab: model change and Save call saveSettings', async () => {
     await renderPage()
     await openTab('AI Cleanup')
