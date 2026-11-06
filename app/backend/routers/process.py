@@ -378,6 +378,19 @@ async def retry_queue_item(item_id: int, db: Annotated[AsyncSession, Depends(get
     return {"retried": item_id}
 
 
+@router.post("/queue/{item_id}/cancel")
+async def cancel_queue_item(item_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+    """The Cancel button of a queue row (NS-16): a waiting item is taken out of the queue, a running one is told to stop (it ends
+    `skipped` when its current step returns; what it had saved stays)."""
+    from services.cancel import cancel_item
+    outcome = await cancel_item(db, item_id)
+    if outcome == "not_found":
+        raise HTTPException(status_code=404, detail="Item not found")
+    if outcome == "not_active":
+        raise HTTPException(status_code=409, detail="This item is already over: nothing to cancel")
+    return {"status": outcome, "id": item_id}
+
+
 @router.delete("/queue/{item_id}")
 async def delete_queue_item(item_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
     """Delete a single pending queue item."""

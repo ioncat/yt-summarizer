@@ -10,6 +10,8 @@ CLEANUP_CANCEL: set[str] = set()  # video ids whose running cleanup must stop (a
 MINDMAP_CANCEL: set[str] = set()  # video ids whose running mind map must stop
 TRANSCRIBE_CANCEL: set[str] = set()  # video ids (file-...) whose running transcription must stop (NS-11 stage 5)
 SUMMARY_CANCEL: set[str] = set()  # video ids whose running summarization must stop
+ITEM_CANCEL: set[int] = set()  # queue item ids to stop (NS-16): the worker checks it between the stages of an item, so a step that
+                               # cannot be cut short (yt-dlp) still ends the item before the next stage starts
 # (The live paragraph / chunk counters of a running cleanup / summary are no longer here: they are on the stage's run row in
 # processing_stages, services/stage_progress.py - NS-11 decision 2.)
 

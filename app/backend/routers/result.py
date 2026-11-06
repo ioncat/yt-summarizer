@@ -68,6 +68,15 @@ async def get_video_result(video_id: str, db: Annotated[AsyncSession, Depends(ge
     return result
 
 
+@router.post("/result/{video_id}/cancel")
+async def cancel_video(video_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
+    """The result page's Stop (NS-16): cancels every waiting or running job of this video, whatever its stage. Waiting ones leave
+    the queue, a running one is told to stop. Nothing running is not an error (the job may have just finished)."""
+    from services.cancel import cancel_video_jobs
+    counts = await cancel_video_jobs(db, video_id)
+    return {"status": "cancelling" if counts["removed"] or counts["stopping"] else "idle", **counts}
+
+
 @router.post("/result/{video_id}/favorite")
 async def favorite_video(
     video_id: str,

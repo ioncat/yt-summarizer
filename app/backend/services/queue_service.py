@@ -27,7 +27,7 @@ from services.reextract import release_reextract, run_queued_reextract
 from services.stage_progress import ProgressWriter
 from services.queue_by_id import STAGE_COLUMNS, release_stage_status
 from services.stage_control import (
-    CLEANUP_CANCEL, MINDMAP_CANCEL, SUMMARY_CANCEL, StageCancelled,
+    CLEANUP_CANCEL, ITEM_CANCEL, MINDMAP_CANCEL, SUMMARY_CANCEL, StageCancelled,
 )
 
 logger = logging.getLogger("queue_service")
@@ -467,7 +467,9 @@ async def _set_done(item_id: int, video_id: str | None, db_video_id: str | None)
 _STAGE_LABELS = {"cleanup": "Cleanup", "summary": "Summary", "mindmap": "Mind map"}
 
 
-async def _release_unrun_stages(video_id: str | None, url: str, stages: list[str], reason: str) -> None:
+async def _release_unrun_stages(video_id: str | None, url: str, stages: list[str], reason: str, cancelled: bool = False) -> None:
+    """Give the status back of the stages of a stopped / failed item that never ran: idle after a cancel, failed after an error.
+    Call it AFTER the item is marked skipped / failed: a stage held by another pending / processing item is left alone."""
     wanted = [s for s in STAGE_COLUMNS if s in stages]
     if not wanted:
         return
@@ -480,8 +482,8 @@ async def _release_unrun_stages(video_id: str | None, url: str, stages: list[str
         try:
             async with AsyncSessionLocal() as db:
                 await release_stage_status(
-                    db, video_id, stage, status="failed",
-                    error=f"{_STAGE_LABELS[stage]} did not run: an earlier stage failed ({reason[:300]})")
+                    db, video_id, stage, status=None if cancelled else "failed",
+                    error=None if cancelled else f"{_STAGE_LABELS[stage]} did not run: an earlier stage failed ({reason[:300]})")
         except Exception:  # noqa: BLE001 - the item is already marked failed; this is only tidying
             logger.exception("Queue worker: could not release the %s status of %s", stage, video_id)
 
@@ -918,6 +920,12 @@ async def _run_mindmap_stage(yt_video_id: str, item_id: int) -> None:
 # Queue worker
 # ---------------------------------------------------------------------------
 
+def _check_item_cancel(item_id: int) -> None:
+    """Between the stages of an item: a Stop that arrived while a step that cannot be cut short was running ends the item here."""
+    if item_id in ITEM_CANCEL:
+        raise StageCancelled("Cancelled")
+
+
 async def queue_worker() -> None:
     """Main queue worker loop. Call once from lifespan(). Runs forever."""
     global _WORKER_STOP
@@ -936,6 +944,7 @@ async def queue_worker() -> None:
         pipeline_stages: list[str] = item["pipeline_stages"]
         item_language: str = item.get("language") or "auto"
         logger.info("Queue worker: processing item %d url=%s stages=%s language=%s", item_id, url, pipeline_stages, item_language)
+        ITEM_CANCEL.discard(item_id)      # a Stop meant for an earlier life of this id must not stop this run
         await _set_processing(item_id)
 
         try:
@@ -979,14 +988,17 @@ async def queue_worker() -> None:
 
             # Stage 2: cleanup (optional)
             if "cleanup" in pipeline_stages:
+                _check_item_cancel(item_id)
                 await _run_cleanup_stage(yt_video_id, item_id)
 
             # Stage 3: summary (optional)
             if "summary" in pipeline_stages:
+                _check_item_cancel(item_id)
                 await _run_summary_stage(yt_video_id, item_id)
 
             # Stage 4: mindmap (optional)
             if "mindmap" in pipeline_stages:
+                _check_item_cancel(item_id)
                 await _run_mindmap_stage(yt_video_id, item_id)
 
             async with AsyncSessionLocal() as db:
@@ -1003,6 +1015,8 @@ async def queue_worker() -> None:
         except StageCancelled as e:
             logger.info("Queue worker: item %d cancelled: %s", item_id, e)
             await _set_skipped(item_id, str(e))
+            # the stages that were queued with it and never ran go back to idle (the one that was stopped reset itself)
+            await _release_unrun_stages(item.get("video_id"), url, pipeline_stages, str(e), cancelled=True)
 
         except Exception as e:
             logger.error("Queue worker: item %d failed: %s", item_id, e, exc_info=True)
@@ -1011,6 +1025,9 @@ async def queue_worker() -> None:
             # because an earlier stage failed: say so instead of leaving 'processing' without an owner. A failure of the
             # stage itself already set 'failed', so nothing changes then.
             await _release_unrun_stages(item.get("video_id"), url, pipeline_stages, str(e))
+
+        finally:
+            ITEM_CANCEL.discard(item_id)
 
         # Brief pause between items to avoid hammering Ollama immediately
         await asyncio.sleep(1)
