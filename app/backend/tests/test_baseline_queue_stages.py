@@ -564,7 +564,9 @@ async def test_bulk_add_skips_already_processed_video_unless_forced(client, seed
 async def test_bulk_add_pending_duplicate_and_same_url_twice_in_one_batch(client):
     url = "https://www.youtube.com/watch?v=dupCheck001"
     r = await client.post("/api/queue/bulk", json={"urls": [url, url]})
-    assert r.json()["added"] == 1 and r.json()["invalid"] == [url]  # intra-batch duplicate counted invalid
+    # NS-24: an intra-batch duplicate is a duplicate with its own reason (it used to be counted "invalid")
+    assert r.json()["added"] == 1 and r.json()["invalid"] == [] and r.json()["duplicates"] == [url]
+    assert r.json()["duplicate_details"][0]["reason"] == "in_list"
     r2 = await client.post("/api/queue/bulk", json={"urls": [url]})
     assert r2.json()["added"] == 0 and r2.json()["duplicates"] == [url]  # already pending
 

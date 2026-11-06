@@ -213,6 +213,10 @@ async def queue_bulk_add(
 ):
     """Add multiple URLs to the processing queue. Skips duplicates (already processed or in queue).
 
+    Every skipped link has an explicit reason: `invalid` lists the links that are not YouTube links; `duplicates` lists the rest
+    and `duplicate_details` gives each one's video id and reason: "processed", "in_queue", "in_list" (the same video is earlier
+    in this very list) or, for video_ids, "order". The links that were added come back in `ids`, in the order they were sent.
+
     `video_ids` queues results that are already in History by id (the only way to queue a local file);
     they can only run the LLM stages (cleanup, summary, mindmap).
 
@@ -243,7 +247,8 @@ async def queue_bulk_add(
     valid_urls: list[str] = []      # the canonical links that are queued
     typed: dict[str, str] = {}      # canonical link -> the link as it was sent (the answer names it that way)
     valid_vid_ids: list[str] = []
-    invalid: list[str] = []
+    invalid: list[str] = []         # not a YouTube link
+    in_list: list[tuple[str, str]] = []   # (the link as typed, its video id): the same video was already earlier in this list
     for raw_url in body.urls:
         raw = raw_url.strip()
         if not raw:
@@ -257,7 +262,7 @@ async def queue_bulk_add(
         if not vid:
             invalid.append(url)
         elif vid in seen_video_ids:
-            invalid.append(url)  # intra-batch duplicate → treat as invalid
+            in_list.append((url, vid))   # a duplicate in the list is not an invalid link (NS-24): it gets its own reason
         else:
             seen_video_ids.add(vid)
             valid_urls.append(canonical)
@@ -281,6 +286,10 @@ async def queue_bulk_add(
                 duplicate_details.append({"url": typed[url], "video_id": vid, "reason": duplicate_vids[vid]})
             else:
                 new_urls.append(url)
+
+    for url, vid in in_list:
+        duplicates.append(url)
+        duplicate_details.append({"url": url, "video_id": vid, "reason": "in_list"})
 
     # Step 3: determine pipeline_stages
     if body.pipeline_stages is not None:
