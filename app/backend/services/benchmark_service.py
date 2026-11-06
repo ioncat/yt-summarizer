@@ -149,7 +149,14 @@ async def _run_one_model(
 ) -> None:
     """Run one model benchmark, update its DB row when done."""
     from models.database import AsyncSessionLocal
+    from services.ollama_options import begin_llm_run
     from services.text_cleaner import clean_text
+    from services.video_service import get_app_setting
+
+    # The same context limit as the queue's stages (Settings -> General); the benchmark task runs outside any stage, so without
+    # this it used the built-in default whatever the setting says (NS-26)
+    async with AsyncSessionLocal() as db:
+        begin_llm_run(await get_app_setting(db, "llm_max_num_ctx"))
 
     # Flip from 'queued' → 'processing' just before doing work
     await _mark_run_status(run_id, "processing")
