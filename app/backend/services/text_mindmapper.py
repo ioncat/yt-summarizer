@@ -9,7 +9,7 @@ import logging
 import httpx
 from services.http_client import http_client
 
-from .ollama_options import build_options, empty_answer_message, record_failure_reason, record_llm_exception
+from .ollama_options import ContextTooSmall, build_options, empty_answer_message, record_failure_reason, record_llm_exception
 
 logger = logging.getLogger("mindmapper")
 
@@ -54,10 +54,14 @@ async def generate_mindmap(
     clean_text = re.sub(r'\n{3,}', '\n\n', clean_text)
     user_msg = user_tmpl.replace("{text}", clean_text)
 
+    try:
+        options = build_options(sys_prompt, user_msg, temperature=0.3)
+    except ContextTooSmall:
+        return None                       # (the reason is recorded: the stage ends failed with it)
     payload = {
         "model": model,
         "stream": True,
-        "options": build_options(sys_prompt, user_msg, temperature=0.3),
+        "options": options,
         "messages": [
             {"role": "system", "content": sys_prompt},
             {"role": "user", "content": user_msg},

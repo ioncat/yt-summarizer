@@ -111,12 +111,26 @@ def compute_num_ctx(*texts: str, reserve_tokens: int = DEFAULT_RESERVE_TOKENS, m
     return cap
 
 
+class ContextTooSmall(Exception):
+    """The input does not fit the context limit with room left for the answer. Ollama would cut the input off without a word and
+    the model would answer from half a text, so the call is not made (NS-26); the reason is recorded for the stage."""
+
+
+def too_long_message(tokens: int, cap: int) -> str:
+    return (f"The input (~{tokens} tokens) is too long for the context limit ({cap}): the answer would be cut off. "
+            "Raise the context limit in Settings → General, or use a shorter text.")
+
+
 def build_options(*texts: str, reserve_tokens: int = DEFAULT_RESERVE_TOKENS, max_ctx: int | None = None,
                   **options) -> dict:
-    """Ollama `options` dict: the given options plus a `num_ctx` sized to the prompt `texts`."""
-    num_ctx = compute_num_ctx(*texts, reserve_tokens=reserve_tokens, max_ctx=max_ctx)
+    """Ollama `options` dict: the given options plus a `num_ctx` sized to the prompt `texts`.
+
+    Raises ContextTooSmall (after recording its reason) when the prompt plus the room for the answer is above the limit."""
     cap = clamp_num_ctx(max_ctx) if max_ctx is not None else _max_num_ctx.get()
-    if estimate_tokens(*texts) + reserve_tokens > cap:
-        logger.warning("prompt of ~%d tokens does not leave room for the answer in num_ctx cap %d",
-                       estimate_tokens(*texts), cap)
-    return {**options, "num_ctx": num_ctx}
+    tokens = estimate_tokens(*texts)
+    if tokens + reserve_tokens > cap:
+        message = too_long_message(tokens, cap)
+        logger.warning("%s", message)
+        record_failure_reason(message)
+        raise ContextTooSmall(message)
+    return {**options, "num_ctx": compute_num_ctx(*texts, reserve_tokens=reserve_tokens, max_ctx=max_ctx)}

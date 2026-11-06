@@ -154,16 +154,25 @@ async def test_chat_proxy_floor_is_chat_num_ctx_and_cap_is_the_larger_of_it_and_
         assert r.status_code == 200
         return seen[-1]["options"]["num_ctx"]
 
+    async def too_long(messages, chat_ctx, llm_ctx):
+        """The input does not fit the cap: nothing is sent to Ollama, the chat gets one error line saying how to fix it."""
+        await client.put("/api/settings/app", json={"chat_num_ctx": chat_ctx, "llm_max_num_ctx": llm_ctx})
+        sent_before = len(seen)
+        r = await client.post("/api/chat", json={"model": "m", "messages": messages})
+        assert r.status_code == 200 and len(seen) == sent_before
+        error = json.loads(r.content)["error"]
+        return "too long for the context limit" in error and "Settings → General" in error
+
     try:
         assert await chat(short, "32768", "32768") == 32768    # short chat: the old fixed value
         assert await chat(long_, "32768", "32768") == 32768    # bucket changes inside the floor: no reload
-        assert await chat(huge, "32768", "32768") == 32768     # cap = max(32768, 32768): no growth beyond it
+        assert await too_long(huge, "32768", "32768")          # cap = max(32768, 32768): the input does not fit -> an error line (NS-26)
         assert await chat(huge, "32768", "65536") == 65536     # llm_max_num_ctx raises the cap above the floor
         assert await chat(long_, "8192", "32768") == 16384     # computed value above a small floor
-        assert await chat(huge, "8192", "32768") == 32768      # llm_max_num_ctx is the cap
-        assert await chat(long_, "4096", "8192") == 8192       # ... also when it is small
+        assert await too_long(huge, "8192", "32768")           # llm_max_num_ctx is the cap: too long for it
+        assert await too_long(long_, "4096", "8192")           # ... also when it is small: a text that needs 16K does not fit 8K
         assert await chat(short, "8192", "4096") == 8192       # floor never lowered by a small llm cap
-        assert await chat(huge, "8192", "4096") == 8192        # cap = max(chat, llm)
+        assert await too_long(huge, "8192", "4096")            # cap = max(chat, llm) = 8192: too long
     finally:
         await client.put("/api/settings/app", json={"chat_num_ctx": "32768", "llm_max_num_ctx": "32768"})
 

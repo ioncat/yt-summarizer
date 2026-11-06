@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import get_db
-from services.ollama_options import build_options, parse_max_num_ctx
+from services.ollama_options import ContextTooSmall, build_options, parse_max_num_ctx
 from services.video_service import get_app_setting
 
 from services.mcp_connect import (
@@ -78,12 +78,19 @@ async def chat_proxy(body: ChatRequest, db: Annotated[AsyncSession, Depends(get_
     # chat_num_ctx is the floor; the window grows with the chat up to max(chat_num_ctx, llm_max_num_ctx)
     chat_floor = parse_max_num_ctx(await get_app_setting(db, "chat_num_ctx"))
     llm_cap = parse_max_num_ctx(await get_app_setting(db, "llm_max_num_ctx"))
+    try:
+        sized = build_options(*(m.content for m in body.messages), max_ctx=max(chat_floor, llm_cap))["num_ctx"]
+    except ContextTooSmall as exc:
+        message = str(exc)                                       # (exc is gone once this block ends)
+
+        async def too_long():
+            yield json.dumps({"error": message}).encode()      # the chat shows an error line (it used to be cut off silently)
+        return StreamingResponse(too_long(), media_type="application/x-ndjson")
     payload = {
         "model": body.model,
         "stream": True,
         "messages": [{"role": m.role, "content": m.content} for m in body.messages],
-        "options": {"num_ctx": max(chat_floor, build_options(
-            *(m.content for m in body.messages), max_ctx=max(chat_floor, llm_cap))["num_ctx"])},
+        "options": {"num_ctx": max(chat_floor, sized)},
     }
 
     async def stream_ollama():
