@@ -289,6 +289,16 @@ describe('add and poll calls give up instead of hanging (NS-28)', () => {
     expect(err).not.toBeInstanceOf(UncertainAddError)
     expect(err.message).toBe('No valid YouTube URLs')   // Home shows this text as before
     expect(err.invalid).toEqual(['https://example.com/x'])
+    expect(err.report).toEqual([])                       // an older server sends no report
+  })
+
+  it('the 400 carries each refused link with its reason (NS-24)', async () => {
+    const report = [{ url: 'http://youtu.be/a', video_id: null, status: 'invalid', reason: 'http_only' }]
+    const body = { detail: { message: 'No valid YouTube URLs', invalid: ['http://youtu.be/a'], report } }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse(body, 400)))
+    const err = await queueBulkAdd(['http://youtu.be/a']).catch(e => e)
+    expect(err).toBeInstanceOf(InvalidLinkError)
+    expect(err.report).toEqual(report)
   })
 
   it('other 400s keep being plain errors with their text', async () => {

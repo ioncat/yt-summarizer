@@ -81,3 +81,13 @@ async def test_an_http_link_to_youtube_is_refused_with_its_own_reason(client):
     assert [(e["status"], e.get("reason")) for e in body["report"]] == [
         ("added", None), ("invalid", "http_only"), ("invalid", "not_youtube"), ("invalid", "http_only")]
     assert [i["video_id"] for i in (await client.get("/api/queue")).json()["items"]] == [vid(1)]    # nothing was queued for http
+
+
+async def test_a_list_where_every_link_is_refused_answers_400_with_each_links_reason(client):
+    http = f"http://www.youtube.com/watch?v={vid(2)}"
+    r = await client.post("/api/queue/bulk", json={"urls": ["nonsense", http]})
+    assert r.status_code == 400
+    detail = r.json()["detail"]
+    assert detail["message"] == "No valid YouTube URLs" and detail["invalid"] == ["nonsense", http]      # (as before)
+    assert [(e["url"], e["status"], e["reason"]) for e in detail["report"]] == [
+        ("nonsense", "invalid", "not_youtube"), (http, "invalid", "http_only")]

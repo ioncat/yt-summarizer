@@ -32,6 +32,9 @@ vi.mock('../api', () => ({
   processFile: vi.fn(),
   queueBulkAdd: vi.fn(),
   getQueue: vi.fn(),
+  InvalidLinkError: class InvalidLinkError extends Error {
+    constructor(public invalid: string[] = [], public report: unknown[] = []) { super('No valid YouTube URLs') }
+  },
   VideoAlreadyExistsError: class VideoAlreadyExistsError extends Error {
     constructor(public readonly videoId: string) {
       super('Video already processed')
@@ -490,6 +493,38 @@ describe('HomePage: one form for one link or a list', () => {
     const rows = Array.from(box.querySelectorAll('li')).map(r => r.textContent)
     expect(rows[1]).toBe(`remove${http}only https links are accepted`)
     expect(rows[2]).toBe('removenonsensenot a YouTube link')
+  })
+
+  it('a list where every link is refused (400) shows each link with its reason and keeps the text', async () => {
+    const http = 'http://www.youtube.com/watch?v=listVideo002'
+    vi.mocked(api.queueBulkAdd).mockRejectedValue(new api.InvalidLinkError(['nonsense', http], [
+      { url: 'nonsense', video_id: null, status: 'invalid', reason: 'not_youtube' },
+      { url: http, video_id: null, status: 'invalid', reason: 'http_only' },
+    ]))
+    renderHome()
+    fireEvent.change(field(), { target: { value: `nonsense\n${http}` } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add all (2)' }))
+    const box = await screen.findByTestId('bulk-report')
+    expect(box.textContent).toContain('Nothing was added, skipped 2.')
+    expect(Array.from(box.querySelectorAll('li')).map(r => r.textContent)).toEqual([
+      'removenonsensenot a YouTube link', `remove${http}only https links are accepted`])
+    expect(screen.queryByRole('alert')).toBeNull()               // not only the generic error
+    expect(field().value).toBe(`nonsense\n${http}`)
+  })
+
+  it('one refused link: the line says why (https only / not a YouTube link) and the text stays', async () => {
+    vi.mocked(api.queueBulkAdd).mockRejectedValueOnce(new api.InvalidLinkError(['http://youtu.be/a'], [
+      { url: 'http://youtu.be/a', video_id: null, status: 'invalid', reason: 'http_only' }]))
+    renderHome()
+    fireEvent.change(field(), { target: { value: 'http://youtu.be/a' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add to queue' }))
+    expect(await screen.findByText('Only https links are accepted.')).toBeTruthy()
+    expect(field().value).toBe('http://youtu.be/a')
+    vi.mocked(api.queueBulkAdd).mockRejectedValueOnce(new api.InvalidLinkError(['x'], [
+      { url: 'x', video_id: null, status: 'invalid', reason: 'not_youtube' }]))
+    fireEvent.change(field(), { target: { value: 'x' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add to queue' }))
+    expect(await screen.findByText('Not a YouTube link.')).toBeTruthy()
   })
 
   it('fifty links are all in the report, in order', async () => {

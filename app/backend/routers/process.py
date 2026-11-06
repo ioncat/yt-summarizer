@@ -280,7 +280,8 @@ async def queue_bulk_add(
             valid_vid_ids.append(vid)
 
     if body.urls and not valid_urls and not body.video_ids:
-        raise HTTPException(status_code=400, detail={"message": "No valid YouTube URLs", "invalid": invalid})
+        # (every link was refused: `report` carries each one's reason, as the 200 answer does)
+        raise HTTPException(status_code=400, detail={"message": "No valid YouTube URLs", "invalid": invalid, "report": entries})
 
     # Step 2: check against DB (skip if force=True — re-run mode from History)
     new_urls: list[str] = []

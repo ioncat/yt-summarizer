@@ -10,7 +10,7 @@ const POLL_TIMEOUT_HINT = 'The server may be busy or not running.'
 
 /** The server refused every link of an add as not a YouTube link (400 "No valid YouTube URLs"). Not a failure to retry. */
 export class InvalidLinkError extends Error {
-  constructor(public readonly invalid: string[] = []) {
+  constructor(public readonly invalid: string[] = [], public readonly report: QueueReportEntry[] = []) {
     super('No valid YouTube URLs')
     this.name = 'InvalidLinkError'
   }
@@ -639,7 +639,9 @@ export async function queueBulkAdd(
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     if (res.status === 400 && body?.detail?.message === 'No valid YouTube URLs') {
-      throw new InvalidLinkError(Array.isArray(body.detail.invalid) ? body.detail.invalid : [])
+      throw new InvalidLinkError(
+        Array.isArray(body.detail.invalid) ? body.detail.invalid : [],
+        Array.isArray(body.detail.report) ? body.detail.report : [])
     }
     throw new Error(errorText(body, 'Failed to add to queue'))
   }

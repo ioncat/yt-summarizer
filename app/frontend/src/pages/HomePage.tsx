@@ -2,7 +2,7 @@ import { useState, useEffect, FormEvent, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { FileUploadForm } from '../components/home/FileUploadForm'
 import { BulkReport, reportOf } from '../components/home/BulkReport'
-import type { QueueReportEntry } from '../api'
+import { InvalidLinkError, type QueueReportEntry } from '../api'
 import { parseLinks, withoutSentLinks } from '../utils/links'
 import { LANGUAGES, inputBase, selectBase } from '../components/home/common'
 import { AUTO_PIPELINE_KEY, PIPELINE_PRESETS, autoPipelineStages, readAutoPipeline, resolveStages } from '../utils/pipeline'
@@ -19,7 +19,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [queueNote, setQueueNote] = useState<
-    { kind: 'added' | 'in_queue' | 'invalid' } | { kind: 'processed' | 'done'; videoId: string | null }
+    { kind: 'added' | 'in_queue' } | { kind: 'invalid'; httpOnly?: boolean } | { kind: 'processed' | 'done'; videoId: string | null }
     | { kind: 'failed'; reason: string } | null>(null)
   // The queue item the "Added to the queue" note follows: the note turns into "Done" / "Failed" when the item ends (no jump)
   const [watchedItem, setWatchedItem] = useState<number | null>(null)
@@ -52,6 +52,15 @@ export default function HomePage() {
   }
 
   // One link: the line above ("Added" / "Already processed" ...) and the follow of its queue item. Two or more: the report of the list.
+  // The server refused every link (400): one link gets the line above, a list the same report as a mixed one; the text stays for editing.
+  // An answer without a report keeps the plain error message.
+  function onAddError(err: unknown): boolean {
+    if (!(err instanceof InvalidLinkError) || err.report.length === 0) return false
+    if (links.length === 1) setQueueNote({ kind: 'invalid', httpOnly: err.report[0].reason === 'http_only' })
+    else setBulkResult({ added: 0, report: err.report })
+    return true
+  }
+
   // The field is only emptied of what was sent: a link pasted while the request ran stays.
   function afterAdd(res: QueueAddResult) {
     const sentText = url, sent = links
@@ -154,6 +163,7 @@ export default function HomePage() {
       try {
         afterAdd(await queueBulkAdd(links, autoPipelineStages(useStt), false, language || undefined))
       } catch (err) {
+        if (onAddError(err)) return
         console.error('[Home] queueBulkAdd failed:', err)
         setError(err instanceof Error ? err.message : 'Failed to add to queue')
       } finally {
@@ -168,6 +178,7 @@ export default function HomePage() {
       try {
         afterAdd(await queueBulkAdd(links, stages, false, language || undefined))
       } catch (err) {
+        if (onAddError(err)) return
         console.error('[Home] queueBulkAdd failed:', err)
         setError(err instanceof Error ? err.message : 'Failed to add to queue')
       } finally {
@@ -361,7 +372,7 @@ export default function HomePage() {
                   ? <Link to={`/result/${queueNote.videoId}`} className="font-semibold text-primary underline">Open the result →</Link>
                   : <Link to="/queue" className="font-semibold text-primary underline">View queue →</Link>}</>}
                 {queueNote.kind === 'failed' && <><span className="text-error">Failed: {queueNote.reason}</span> <Link to="/queue" className="font-semibold text-primary underline">View queue →</Link></>}
-                {queueNote.kind === 'invalid' && <span className="text-error">Not a YouTube link.</span>}
+                {queueNote.kind === 'invalid' && <span className="text-error">{queueNote.httpOnly ? 'Only https links are accepted.' : 'Not a YouTube link.'}</span>}
               </div>
             )}
 
