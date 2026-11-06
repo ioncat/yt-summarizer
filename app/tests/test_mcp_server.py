@@ -576,3 +576,47 @@ async def test_run_cleanup_timeout_says_the_job_is_not_lost_and_how_to_check_it(
     assert result.startswith("ERROR: Cleanup is still not finished after 300s")
     assert "not lost" in result
     assert "get_result(video_id='vidC', parts=['status'])" in result and "parts=['cleaned']" in result
+
+
+# ─── process_video goes through the queue (NS-11 stage 7) ─────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_process_video_tool_text_says_it_may_wait_behind_the_queue_for_300_s():
+    import mcp_server
+    tools = await mcp_server.mcp.list_tools()
+    text = next(t for t in tools if t.name == "process_video").description
+    assert "queue" in text and "300 s" in text and "NOT lost" in text
+    assert 'get_result(video_id, parts=["status"])' in text
+
+
+@pytest.mark.asyncio
+async def test_process_video_timeout_says_the_job_is_not_lost_and_how_to_check_it():
+    with respx.mock(assert_all_called=False) as mock, patch("asyncio.sleep", _noop_sleep):
+        mock.post(f"{BASE}/api/process").mock(return_value=httpx.Response(200, json={"task_id": "taskQ", "video_id": "vidQ"}))
+        mock.get(f"{BASE}/api/status/taskQ").mock(
+            return_value=httpx.Response(200, json={"status": "pending", "progress_text": "waiting in the queue"}))
+        result = await process_video("https://youtube.com/watch?v=vidQ")
+    assert result.startswith("ERROR: Timed out after 300s")
+    assert "waiting behind other work" in result and "NOT lost" in result
+    assert "get_result(video_id='vidQ', parts=['status'])" in result and "get_result(video_id='vidQ')" in result
+
+
+@pytest.mark.asyncio
+async def test_process_video_failure_gives_the_message_and_the_languages_the_video_has():
+    with respx.mock(assert_all_called=False) as mock, patch("asyncio.sleep", _noop_sleep):
+        mock.post(f"{BASE}/api/process").mock(return_value=httpx.Response(200, json={"task_id": "taskF", "video_id": "vidF"}))
+        mock.get(f"{BASE}/api/status/taskF").mock(return_value=httpx.Response(200, json={
+            "status": "failed", "error_message": "No subtitles in ru", "available_languages": ["en", "de"]}))
+        result = await process_video("https://youtube.com/watch?v=vidF", language="ru")
+    assert result.startswith("ERROR: No subtitles in ru")
+    assert "Available languages: en, de" in result and "language" in result
+
+
+@pytest.mark.asyncio
+async def test_process_video_failure_without_languages_is_just_the_message():
+    with respx.mock(assert_all_called=False) as mock, patch("asyncio.sleep", _noop_sleep):
+        mock.post(f"{BASE}/api/process").mock(return_value=httpx.Response(200, json={"task_id": "taskG", "video_id": "vidG"}))
+        mock.get(f"{BASE}/api/status/taskG").mock(return_value=httpx.Response(200, json={
+            "status": "failed", "error_message": "Removed from the queue", "available_languages": None}))
+        result = await process_video("https://youtube.com/watch?v=vidG")
+    assert result == "ERROR: Removed from the queue"

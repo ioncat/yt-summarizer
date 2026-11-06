@@ -41,10 +41,16 @@ async def _poll_task(client: httpx.AsyncClient, task_id: str, video_id: str) -> 
             r = await client.get(f"/api/result/{video_id}")
             return r.json()
         if status == "failed":
-            raise RuntimeError(data.get("error_message") or "Processing failed")
+            message = data.get("error_message") or "Processing failed"
+            languages = data.get("available_languages") or []
+            if languages:
+                message += f" Available languages: {', '.join(languages)}: call process_video again with one of them as `language`."
+            raise RuntimeError(message)
         await asyncio.sleep(POLL_INTERVAL)
         elapsed += POLL_INTERVAL
-    raise TimeoutError(f"Timed out after {POLL_TIMEOUT}s. Retrieve later with get_result(video_id='{video_id}')")
+    raise TimeoutError(
+        f"Timed out after {POLL_TIMEOUT}s. The extraction is queued or running in the app and may be waiting behind other work: it is "
+        f"NOT lost. Check later with get_result(video_id='{video_id}', parts=['status']) and read it with get_result(video_id='{video_id}')")
 
 
 async def _poll_cleanup(client: httpx.AsyncClient, video_id: str) -> dict:
@@ -202,7 +208,9 @@ def _format_result(data: dict, include_text: bool = False) -> str:
 @mcp.tool()
 async def process_video(url: str, language: str = "auto") -> str:
     """Extract subtitles from a YouTube video and return the result.
-    If the video was already processed, returns the existing result immediately.
+    If the video was already processed, returns the existing result immediately. The extraction is a queue item: it may wait behind
+    other queued work, and this tool waits up to 300 s; if it is not finished by then the job is NOT lost: check it later with
+    get_result(video_id, parts=["status"]) and read it with get_result(video_id).
 
     Args:
         url: YouTube video URL (youtube.com/watch or youtu.be)
