@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import ResultPage from '../pages/ResultPage'
 import * as api from '../api'
@@ -601,6 +601,27 @@ describe('ResultPage', () => {
       setResult({ mindmap_status: null, mindmap_text: '# Saved map' })
       fireEvent.click(btn(/Cancel all jobs/))
       await waitFor(() => expect(screen.queryByRole('button', { name: /Cancel all jobs/ })).toBeNull())
+    })
+  })
+
+  describe('NS-17: small result page fixes', () => {
+
+    it('item 1: after "Clean with AI" the page refreshes by itself when the job ends and shows the cleaned text', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      try {
+        m.startCleanup.mockResolvedValue(undefined as never)
+        await renderPage()
+        fireEvent.click(btn('Cleaned'))
+        setResult({ cleanup_status: 'processing' })                    // the server: the job is queued / running
+        fireEvent.click(btn(/Clean with AI/))
+        await waitFor(() => expect(m.startCleanup).toHaveBeenCalled())
+        setResult({ cleanup_status: 'done', cleaned_text: 'Fresh cleaned paragraph', cleanup_duration_seconds: 4, cleanup_model: 'llama3' })
+        await act(async () => { await vi.advanceTimersByTimeAsync(3200) })    // the page's own poll, no reload
+        expect(await screen.findByText('Fresh cleaned paragraph')).toBeTruthy()
+        expect(screen.queryByText(/No cleaned version yet/)).toBeNull()
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 })
