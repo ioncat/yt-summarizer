@@ -79,7 +79,7 @@ describe('StageTable download row (NS-17 item 12)', () => {
 
   it('a finished download links to the saved file with its name and size', () => {
     render(<StageTable result={result(run({ meta: { file: 'abc12345678.mp4', size: 5 * 1024 * 1024, format: 'mp4', quality: 'best' } }))} />)
-    const link = screen.getByRole('link', { name: /Get the saved file \(abc12345678\.mp4, 5\.0 MB\)/ })
+    const link = screen.getByRole('link', { name: /Get the saved file \(abc12345678\.mp4, mp4 best, 5\.0 MB\)/ })
     expect(link.getAttribute('href')).toBe('/api/downloads/abc12345678')
     expect(screen.getByText('Download')).toBeTruthy()
   })
@@ -124,5 +124,22 @@ describe('StageTable stored file vs the choice now (review)', () => {
   it('says nothing for an old run without format / quality in its meta', () => {
     table({ ...made('mp4', 'best'), meta: { file: 'abc12345678.mp4', size: 1024 } }, { format: 'mp3', quality: 'best' })
     expect(screen.queryByText(/Made as/)).toBeNull()
+  })
+})
+
+describe('StageTable link text shows the format and quality (QA)', () => {
+  const base = { attempt: 1, status: 'done', queue_item_id: 3, model: null, started_at: null, finished_at: null, error_code: null,
+    error_text: null, progress_done: null, progress_total: null, runs: 1, last_done: null }
+  const link = (meta: Record<string, unknown>) => {
+    render(<StageTable result={{ video_id: 'abc12345678', stages: { download: { ...base, meta } } } as never} />)
+    return screen.getByRole('link').textContent
+  }
+
+  it('names the format and the quality next to the file', () => {
+    expect(link({ file: 'abc12345678.mp4', size: 3 * 1024 * 1024, format: 'mp4', quality: '720p' })).toBe('Get the saved file (abc12345678.mp4, mp4 720p, 3.0 MB)')
+  })
+
+  it('an older run without them keeps the short text', () => {
+    expect(link({ file: 'abc12345678.mp3', size: 2048 })).toBe('Get the saved file (abc12345678.mp3, 2 KB)')
   })
 })

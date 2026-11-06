@@ -26,7 +26,7 @@ router = APIRouter()
 # Download by video_id
 # ---------------------------------------------------------------------------
 
-@router.get("/downloads/{video_id}")
+@router.api_route("/downloads/{video_id}", methods=["GET", "HEAD"])   # (HEAD: a client may ask for the size and name first)
 async def get_saved_download(video_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
     """The file the queue's download stage saved for this video (data/downloads): the one named in its newest finished download run.
     Only the video id comes from the request, so no path can be asked for, and fragments or other files in the folder are never

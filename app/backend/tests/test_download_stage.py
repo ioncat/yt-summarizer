@@ -532,3 +532,31 @@ async def test_a_stop_that_makes_yt_dlp_raise_is_a_stop_too(client, seeded_video
     with patch.object(downloader.subprocess, "run", run):
         await run_worker([item])
     assert (await get_item(item))["status"] == "skipped" and (await stage_of(client))["status"] == "cancelled"
+
+
+# --- QA: HEAD on the download endpoint --------------------------------------------------------------------------------------------
+
+async def test_head_answers_like_get_without_a_body(client):
+    (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp4").write_bytes(b"video-bytes")
+    await done_run(f"{VIDEO_ID}.mp4")
+    got = await client.get(f"/api/downloads/{VIDEO_ID}")
+    head = await client.request("HEAD", f"/api/downloads/{VIDEO_ID}")
+    assert head.status_code == 200 and head.content == b""
+    assert head.headers["content-type"] == got.headers["content-type"]
+    assert head.headers["content-length"] == got.headers["content-length"] == str(len(b"video-bytes"))
+    assert head.headers["content-disposition"] == got.headers["content-disposition"]
+
+
+async def test_head_has_the_same_checks_as_get(client):
+    (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp4").write_bytes(b"stray")                  # no done run names it
+    assert (await client.request("HEAD", f"/api/downloads/{VIDEO_ID}")).status_code == 404
+    await done_run(f"{VIDEO_ID}.f137.mp4")                                               # a fragment name
+    (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.f137.mp4").write_bytes(b"frag")
+    assert (await client.request("HEAD", f"/api/downloads/{VIDEO_ID}")).status_code == 404
+    assert (await client.request("HEAD", "/api/downloads/..")).status_code in (404, 422)
+    assert (await client.request("HEAD", "/api/downloads/nothingHere1")).status_code == 404
+
+
+async def test_other_methods_on_the_download_endpoint_are_still_refused(client):
+    for method in ("POST", "PUT", "DELETE", "PATCH"):
+        assert (await client.request(method, f"/api/downloads/{VIDEO_ID}")).status_code == 405

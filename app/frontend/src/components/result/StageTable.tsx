@@ -49,6 +49,8 @@ export interface DownloadChoice { format: string; quality: string }
 function Row({ stage, run, videoId, chosen }: { stage: string; run: StageRun; videoId: string; chosen?: DownloadChoice }) {
   const file = stage === 'download' && run.status === 'done' && typeof run.meta.file === 'string' ? run.meta.file : null
   const fileSize = typeof run.meta.size === 'number' ? run.meta.size : null
+  const kind = file && typeof run.meta.format === 'string' && typeof run.meta.quality === 'string'
+    ? `${run.meta.format} ${run.meta.quality}` : null              // "mp4 720p": what it was made as (older runs have none)
   // The file is kept as it was made; if the format / quality chosen now differ, say so (it is not downloaded again by itself)
   const madeAs = file && chosen && typeof run.meta.format === 'string' && typeof run.meta.quality === 'string'
     && (run.meta.format !== chosen.format || run.meta.quality !== chosen.quality)
@@ -81,7 +83,7 @@ function Row({ stage, run, videoId, chosen }: { stage: string; run: StageRun; vi
         {file && (
           <a href={`/api/downloads/${encodeURIComponent(videoId)}`} download={file}
              className="font-semibold text-primary underline">
-            Get the saved file ({file}{fileSize != null && `, ${megabytes(fileSize)}`})
+            Get the saved file ({file}{kind && `, ${kind}`}{fileSize != null && `, ${megabytes(fileSize)}`})
           </a>
         )}
         {madeAs && (
