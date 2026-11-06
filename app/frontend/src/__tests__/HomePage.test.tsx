@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import HomePage from '../pages/HomePage'
 import * as api from '../api'
@@ -31,6 +31,7 @@ vi.mock('../api', () => ({
   processVideo: vi.fn(),   // (Home no longer calls it: "extract only" goes through the queue, NS-11 stage 7)
   processFile: vi.fn(),
   queueBulkAdd: vi.fn(),
+  getQueue: vi.fn(),
   VideoAlreadyExistsError: class VideoAlreadyExistsError extends Error {
     constructor(public readonly videoId: string) {
       super('Video already processed')
@@ -217,5 +218,154 @@ describe('HomePage: "Extract only" is a queue item too (NS-11 stage 7 / NS-24b)'
     await submitExtractOnly('https://youtu.be/failExtract1')
     expect((await screen.findByRole('alert')).textContent).toContain('Failed to add to queue')
     expect(api.processVideo).not.toHaveBeenCalled()
+  })
+})
+
+
+// --- the note follows the queued item (stage 7 QA) ---------------------------------------------------------------------------
+
+const queueItem = (id: number, status: string, extra: Record<string, unknown> = {}) => ({
+  id, url: 'https://www.youtube.com/watch?v=follow00001', video_id: 'follow00001', db_video_id: null, status, pipeline_stages: ['extract'],
+  error_message: null, added_at: '2026-11-06T10:00:00', started_at: null, finished_at: null, sort_order: id, progress: null, ...extra,
+}) as never
+
+function renderHome() {
+  return render(
+    <MemoryRouter>
+      <Routes>
+        <Route path="*" element={<><HomePage /><Where /></>} />
+      </Routes>
+    </MemoryRouter>
+  )
+}
+
+async function addLink(url: string) {
+  fireEvent.change(screen.getByPlaceholderText(/youtube\.com\/watch/i), { target: { value: url } })
+  await act(async () => { fireEvent.submit(screen.getByPlaceholderText(/youtube\.com\/watch/i).closest('form')!) })
+}
+
+const tick = (ms = 3000) => act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+
+describe('HomePage: the note follows the queued item', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.clearAllMocks() })
+  afterEach(() => { vi.useRealTimers() })
+
+  const added = (id: number) => ({ added: 1, ids: [id], invalid: [], duplicates: [], duplicate_details: [] })
+
+  it('turns "Added to the queue" into "Done" with a link to the result when the item is done, without leaving Home', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue(added(5))
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [queueItem(5, 'pending')], count: 1 } as never)
+    renderHome()
+    await addLink('https://youtu.be/follow00001')
+    expect(screen.getByText(/Added to the queue/)).toBeTruthy()
+    await tick()
+    expect(screen.getByText(/Added to the queue/)).toBeTruthy()                       // still waiting
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [queueItem(5, 'processing')], count: 1 } as never)
+    await tick()
+    expect(screen.getByText(/Added to the queue/)).toBeTruthy()                       // still running
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [queueItem(5, 'done')], count: 1 } as never)
+    await tick()
+    expect(screen.getByText(/Done\./)).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Open the result/ }).getAttribute('href')).toBe('/result/follow00001')
+    expect(screen.queryByText(/Added to the queue/)).toBeNull()
+    expect(screen.getByTestId('where').textContent).toBe('/')
+    const calls = vi.mocked(api.getQueue).mock.calls.length
+    await tick(10_000)
+    expect(vi.mocked(api.getQueue).mock.calls.length).toBe(calls)                      // the poll stopped with the item
+  })
+
+  it('turns into "Failed: <reason>" with a link to the queue when the item fails', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue(added(6))
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [queueItem(6, 'failed', { error_message: 'This video has no subtitles available.' })], count: 1 } as never)
+    renderHome()
+    await addLink('https://youtu.be/follow00001')
+    await tick()
+    expect(screen.getByText(/Failed: This video has no subtitles available\./)).toBeTruthy()
+    expect(screen.getByRole('link', { name: /View queue/ }).getAttribute('href')).toBe('/queue')
+    expect(screen.getByTestId('where').textContent).toBe('/')
+  })
+
+  it('a partly failed item is a failure with its message', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue(added(7))
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [queueItem(7, 'partial', { error_message: 'Summary failed: the model returned nothing' })], count: 1 } as never)
+    renderHome()
+    await addLink('https://youtu.be/follow00001')
+    await tick()
+    expect(screen.getByText(/Failed: Summary failed: the model returned nothing/)).toBeTruthy()
+  })
+
+  it('asks one question at a time: a slow answer is awaited, not overtaken by the next tick', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue(added(8))
+    let answer!: (v: never) => void
+    vi.mocked(api.getQueue).mockReturnValue(new Promise(res => { answer = res }) as never)
+    renderHome()
+    await addLink('https://youtu.be/follow00001')
+    await tick(3000)
+    await tick(9000)
+    expect(api.getQueue).toHaveBeenCalledTimes(1)
+    answer({ items: [queueItem(8, 'done')], count: 1 } as never)
+    await tick(0)
+    expect(screen.getByText(/Done\./)).toBeTruthy()
+  })
+
+  it('an answer about an earlier link is ignored once another link was added', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValueOnce(added(10)).mockResolvedValueOnce(added(11))
+    let slow!: (v: never) => void
+    vi.mocked(api.getQueue).mockReturnValueOnce(new Promise(res => { slow = res }) as never)
+      .mockResolvedValue({ items: [queueItem(10, 'done'), queueItem(11, 'pending')], count: 2 } as never)
+    renderHome()
+    await addLink('https://youtu.be/follow00001')
+    await tick(3000)                                                                   // the question about item 10 is in the air
+    await addLink('https://youtu.be/follow00002')                                      // another link: the note now belongs to item 11
+    slow({ items: [queueItem(10, 'done')], count: 1 } as never)                        // the old answer arrives late
+    await tick(0)
+    expect(screen.getByText(/Added to the queue/)).toBeTruthy()
+    expect(screen.queryByText(/Done\./)).toBeNull()
+  })
+
+  it('stops asking when the page is left', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue(added(12))
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [queueItem(12, 'pending')], count: 1 } as never)
+    const view = renderHome()
+    await addLink('https://youtu.be/follow00001')
+    await tick()
+    const calls = vi.mocked(api.getQueue).mock.calls.length
+    view.unmount()
+    await tick(12_000)
+    expect(vi.mocked(api.getQueue).mock.calls.length).toBe(calls)
+  })
+
+  it('an item taken out of the queue ends the follow without a false "Done"', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue(added(13))
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [], count: 0 } as never)
+    renderHome()
+    await addLink('https://youtu.be/follow00001')
+    await tick()
+    expect(screen.queryByText(/Done\./)).toBeNull()
+    const calls = vi.mocked(api.getQueue).mock.calls.length
+    await tick(9000)
+    expect(vi.mocked(api.getQueue).mock.calls.length).toBe(calls)
+  })
+
+  it('a failed poll request is tried again at the next tick', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue(added(14))
+    vi.mocked(api.getQueue).mockRejectedValueOnce(new Error('network')).mockResolvedValue({ items: [queueItem(14, 'done')], count: 1 } as never)
+    renderHome()
+    await addLink('https://youtu.be/follow00001')
+    await tick()
+    expect(screen.getByText(/Added to the queue/)).toBeTruthy()
+    await tick()
+    expect(screen.getByText(/Done\./)).toBeTruthy()
+  })
+
+  it('a link that is already processed has nothing to follow', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({
+      added: 0, ids: [], invalid: [], duplicates: ['https://youtu.be/follow00001'],
+      duplicate_details: [{ url: 'https://youtu.be/follow00001', video_id: 'follow00001', reason: 'processed' }],
+    })
+    renderHome()
+    await addLink('https://youtu.be/follow00001')
+    await tick(9000)
+    expect(api.getQueue).not.toHaveBeenCalled()
   })
 })

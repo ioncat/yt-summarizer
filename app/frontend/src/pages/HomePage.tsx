@@ -1,7 +1,7 @@
 import { useState, useEffect, FormEvent, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { AUTO_PIPELINE_KEY, PIPELINE_PRESETS, autoPipelineStages, readAutoPipeline, resolveStages } from '../utils/pipeline'
-import { processFile, getSettings, getHealth, AllSettings, queueBulkAdd, QueueAddResult, downloadDirect } from '../api'
+import { processFile, getSettings, getHealth, getQueue, AllSettings, queueBulkAdd, QueueAddResult, downloadDirect } from '../api'
 
 type InputMode = 'url' | 'file'
 
@@ -21,7 +21,11 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [queueNote, setQueueNote] = useState<
-    { kind: 'added' | 'in_queue' | 'invalid' } | { kind: 'processed'; videoId: string } | null>(null)
+    { kind: 'added' | 'in_queue' | 'invalid' } | { kind: 'processed' | 'done'; videoId: string | null }
+    | { kind: 'failed'; reason: string } | null>(null)
+  // The queue item the "Added to the queue" note follows: the note turns into "Done" / "Failed" when the item ends (no jump)
+  const [watchedItem, setWatchedItem] = useState<number | null>(null)
+  const watchedRef = useRef<number | null>(null)
   const [missingConfig, setMissingConfig] = useState<string[]>([])
   const [allSettings, setAllSettings] = useState<AllSettings | null>(null)
   const [autoPipeline, setAutoPipeline] = useState(readAutoPipeline)
@@ -58,9 +62,39 @@ export default function HomePage() {
     const dup = res.duplicate_details?.[0]
     if (dup?.reason === 'processed') setQueueNote({ kind: 'processed', videoId: dup.video_id })
     else if (dup) setQueueNote({ kind: 'in_queue' })
-    else if (res.added > 0) { setQueueNote({ kind: 'added' }); setUrl('') }
+    else if (res.added > 0) { setQueueNote({ kind: 'added' }); setUrl(''); if (res.ids?.length === 1) setWatchedItem(res.ids[0]) }
     else setQueueNote({ kind: 'invalid' })
   }
+
+  // Follow the queued item: one request at a time, an answer that arrives after the watch ended or changed is ignored, and the
+  // poll stops with the page.
+  useEffect(() => {
+    watchedRef.current = watchedItem
+    if (watchedItem == null) return
+    let busy = false
+    const id = setInterval(async () => {
+      if (busy) return
+      busy = true
+      try {
+        const data = await getQueue()
+        if (watchedRef.current !== watchedItem) return                      // stale answer
+        const item = data.items.find(i => i.id === watchedItem)
+        if (!item) { setWatchedItem(null); return }                         // taken out of the queue: nothing more to say
+        if (item.status === 'done') {
+          setQueueNote({ kind: 'done', videoId: item.video_id })
+          setWatchedItem(null)
+        } else if (item.status === 'failed' || item.status === 'partial' || item.status === 'skipped') {
+          setQueueNote({ kind: 'failed', reason: item.error_message || (item.status === 'skipped' ? 'Stopped' : 'no reason was recorded') })
+          setWatchedItem(null)
+        }
+      } catch {
+        // the next tick asks again
+      } finally {
+        busy = false
+      }
+    }, 3000)
+    return () => { clearInterval(id); watchedRef.current = null }
+  }, [watchedItem])
 
   function extractUrlFromLine(line: string): string {
     const match = line.match(/https?:\/\/[^\s|"'<>]+/)
@@ -117,6 +151,7 @@ export default function HomePage() {
   async function submitLink() {
     setError('')
     setQueueNote(null)
+    setWatchedItem(null)
     const trimmedUrl = url.trim()
 
     if (autoDownload && !autoPipeline && pipeline === 'extract') {
@@ -372,6 +407,10 @@ export default function HomePage() {
                 {queueNote.kind === 'added' && <>Added to the queue. <Link to="/queue" className="font-semibold text-primary underline">View queue →</Link></>}
                 {queueNote.kind === 'in_queue' && <>Already in the queue. <Link to="/queue" className="font-semibold text-primary underline">View queue →</Link></>}
                 {queueNote.kind === 'processed' && <>Already processed. <Link to={`/result/${queueNote.videoId}`} className="font-semibold text-primary underline">Open the result →</Link></>}
+                {queueNote.kind === 'done' && <>Done. {queueNote.videoId
+                  ? <Link to={`/result/${queueNote.videoId}`} className="font-semibold text-primary underline">Open the result →</Link>
+                  : <Link to="/queue" className="font-semibold text-primary underline">View queue →</Link>}</>}
+                {queueNote.kind === 'failed' && <><span className="text-error">Failed: {queueNote.reason}</span> <Link to="/queue" className="font-semibold text-primary underline">View queue →</Link></>}
                 {queueNote.kind === 'invalid' && <span className="text-error">Not a YouTube link.</span>}
               </div>
             )}
