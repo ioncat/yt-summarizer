@@ -617,7 +617,7 @@ async def test_process_existing_video_is_409_with_video_id(client, seeded_video)
     assert r.json()["detail"] == {"message": "Video already processed", "video_id": VIDEO_ID}
 
 
-async def test_process_default_language_is_ru_while_queue_default_is_auto(client):
+async def test_process_default_language_is_auto_like_the_queue(client):
     seen = {}
 
     def fake(url, language, cookies, ytdlp):
@@ -627,7 +627,7 @@ async def test_process_default_language_is_ru_while_queue_default_is_auto(client
     with patch("services.subtitle_extractor.extract_subtitles", fake):
         r = await client.post("/api/process", json={"url": "https://www.youtube.com/watch?v=bgLang00001"})
         await run_extract_items("bgLang00001")      # NS-11 stage 7: a queue item
-    assert r.status_code == 200 and seen["language"] == "ru"
+    assert r.status_code == 200 and seen["language"] == "auto"      # NS-11 stage 7 (decision 8); it was "ru" (BASELINE)
     await client.delete("/api/result/bgLang00001")
 
 

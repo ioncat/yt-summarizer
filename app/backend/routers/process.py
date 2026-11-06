@@ -38,7 +38,7 @@ _TRAIL_RE = re.compile(r'[,;.:!?]+$')
 
 class ProcessRequest(BaseModel):
     url: str
-    language: str = "ru"
+    language: str = "auto"      # decision 8: auto everywhere (it used to be "ru" here only)
 
 
 async def _run_processing(task_id: str, url: str, language: str) -> None:

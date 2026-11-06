@@ -137,8 +137,8 @@ async def test_an_invalid_link_is_400_and_an_unknown_task_404(client):
     assert (await client.get("/api/status/no-such-task")).status_code == 404
 
 
-async def test_the_default_language_of_the_request_is_ru(client):
-    # BASELINE: changes in stage 7 (decision 8: default language auto everywhere)
+async def test_the_default_language_of_the_request_is_auto_and_a_chosen_one_is_kept(client):
+    # NS-11 stage 7 (decision 8): the default used to be "ru" here while the queue's was "auto" (BASELINE)
     seen = {}
 
     def fake(url, language, cookies, ytdlp):
@@ -148,7 +148,12 @@ async def test_the_default_language_of_the_request_is_ru(client):
     with patch("services.subtitle_extractor.extract_subtitles", fake):
         await client.post("/api/process", json={"url": URL})
         await run_extract_items(NEW)
-    assert seen["language"] == "ru"
+    assert seen["language"] == "auto"
+    await forget()
+    with patch("services.subtitle_extractor.extract_subtitles", fake):
+        await client.post("/api/process", json={"url": URL, "language": "uk"})
+        await run_extract_items(NEW)
+    assert seen["language"] == "uk"
     await forget()
 
 
