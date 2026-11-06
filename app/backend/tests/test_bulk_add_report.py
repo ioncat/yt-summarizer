@@ -56,3 +56,17 @@ async def test_a_duplicate_in_the_list_is_not_invalid_and_the_first_copy_is_the_
     assert body["duplicates"] == [a, b, a]                             # in the order the repeats appear in the list
     assert [d["reason"] for d in body["duplicate_details"]] == ["in_list"] * 3
     assert [i["url"] for i in (await client.get("/api/queue")).json()["items"]] == [a, b]
+
+
+async def test_the_report_has_one_entry_per_link_in_the_order_sent(client, seeded_video):
+    queued = URL.format("queued00001")
+    await client.post("/api/queue/bulk", json={"urls": [queued]})
+    a = URL.format(vid(1))
+    links = [a, URL.format(VIDEO_ID), "nonsense", a, queued, URL.format(vid(2)), f"https://youtu.be/{vid(2)}"]
+    body = (await client.post("/api/queue/bulk", json={"urls": links, "pipeline_stages": ["extract"]})).json()
+    assert [(e["url"], e["status"]) for e in body["report"]] == [
+        (a, "added"), (URL.format(VIDEO_ID), "processed"), ("nonsense", "invalid"), (a, "in_list"), (queued, "in_queue"),
+        (URL.format(vid(2)), "added"), (f"https://youtu.be/{vid(2)}", "in_list"),
+    ]
+    assert [e["video_id"] for e in body["report"]] == [vid(1), VIDEO_ID, None, vid(1), "queued00001", vid(2), vid(2)]
+    assert sum(e["status"] == "added" for e in body["report"]) == body["added"] == 2

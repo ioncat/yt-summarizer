@@ -216,6 +216,8 @@ async def queue_bulk_add(
     Every skipped link has an explicit reason: `invalid` lists the links that are not YouTube links; `duplicates` lists the rest
     and `duplicate_details` gives each one's video id and reason: "processed", "in_queue", "in_list" (the same video is earlier
     in this very list) or, for video_ids, "order". The links that were added come back in `ids`, in the order they were sent.
+    `report` repeats it as one entry per link in the order sent: {url, video_id, status} with status added / processed / in_queue /
+    in_list / invalid (the page shows it as it is).
 
     `video_ids` queues results that are already in History by id (the only way to queue a local file);
     they can only run the LLM stages (cleanup, summary, mindmap).
@@ -249,6 +251,7 @@ async def queue_bulk_add(
     valid_vid_ids: list[str] = []
     invalid: list[str] = []         # not a YouTube link
     in_list: list[tuple[str, str]] = []   # (the link as typed, its video id): the same video was already earlier in this list
+    entries: list[dict] = []        # one per link of the list, in the order sent: the page's per-link report
     for raw_url in body.urls:
         raw = raw_url.strip()
         if not raw:
@@ -261,9 +264,12 @@ async def queue_bulk_add(
         vid = extract_video_id(canonical) if canonical else None
         if not vid:
             invalid.append(url)
+            entries.append({"url": url, "video_id": None, "status": "invalid"})
         elif vid in seen_video_ids:
             in_list.append((url, vid))   # a duplicate in the list is not an invalid link (NS-24): it gets its own reason
+            entries.append({"url": url, "video_id": vid, "status": "in_list"})
         else:
+            entries.append({"url": url, "video_id": vid, "status": "new"})
             seen_video_ids.add(vid)
             valid_urls.append(canonical)
             typed[canonical] = url
@@ -325,8 +331,11 @@ async def queue_bulk_add(
             for v in by_id["duplicates"]]
         missing = by_id["missing"]
 
+    # the per-link report: "new" turns into "added", or into the reason it was skipped (processed / in_queue)
+    skipped = {d["video_id"]: d["reason"] for d in duplicate_details if d["url"] is not None and d["reason"] != "in_list"}
+    report = [{**e, "status": skipped.get(e["video_id"], "added") if e["status"] == "new" else e["status"]} for e in entries]
     return {"added": len(ids), "ids": ids, "invalid": invalid, "duplicates": duplicates,
-            "duplicate_details": duplicate_details, "missing": missing}
+            "duplicate_details": duplicate_details, "missing": missing, "report": report}
 
 
 @router.get("/queue")
