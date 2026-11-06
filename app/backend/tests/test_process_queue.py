@@ -228,3 +228,62 @@ async def test_twins_on_a_file_database_get_one_task_and_one_placeholder(tmp_pat
         assert (await db.execute(text("SELECT COUNT(*) FROM videos"))).scalar() == 1
         assert (await db.execute(text("SELECT COUNT(*) FROM processing_tasks WHERE status = 'pending'"))).scalar() == 1
     await engine.dispose()
+
+
+# --- the bulk add checks and stores links like /api/process (stage 7 review) -----------------------------------------------
+
+async def _bulk(client, urls, stages=("extract",)):
+    return await client.post("/api/queue/bulk", json={"urls": urls, "pipeline_stages": list(stages)})
+
+
+async def test_bulk_add_stores_the_canonical_watch_link_for_every_accepted_form(client):
+    forms = {
+        "stg7Bulk001": "https://youtu.be/stg7Bulk001?t=30",
+        "stg7Bulk002": "https://www.youtube.com/shorts/stg7Bulk002",
+        "stg7Bulk003": "https://m.youtube.com/watch?v=stg7Bulk003&list=PL123&index=2",
+        "stg7Bulk004": "https://www.youtube.com/watch?v=stg7Bulk004",
+    }
+    r = await _bulk(client, list(forms.values()))
+    assert r.json()["added"] == 4 and r.json()["invalid"] == []
+    stored = {i["video_id"]: i["url"] for i in await _items(client)}
+    assert stored == {vid: f"https://www.youtube.com/watch?v={vid}" for vid in forms}
+
+
+async def test_bulk_add_refuses_plain_http_and_other_hosts_like_the_process_endpoint(client):
+    bad = ["http://www.youtube.com/watch?v=stg7Bulk010", "https://example.com/watch?v=stg7Bulk011",
+           "https://notyoutube.com/watch?v=stg7Bulk012", "ftp://youtu.be/stg7Bulk013"]
+    r = await _bulk(client, bad + ["https://youtu.be/stg7Bulk014"])
+    body = r.json()
+    assert body["added"] == 1 and body["invalid"] == bad                   # the typed links are reported, nothing else is queued
+    assert [i["video_id"] for i in await _items(client)] == ["stg7Bulk014"]
+    only_bad = await _bulk(client, bad)
+    assert only_bad.status_code == 400 and only_bad.json()["detail"]["message"] == "No valid YouTube URLs"
+    # the single endpoint agrees on every one of them
+    for url in bad:
+        assert (await client.post("/api/process", json={"url": url})).status_code == 400
+
+
+async def test_a_duplicate_is_reported_with_the_link_as_it_was_sent_but_found_through_the_canonical_one(client):
+    typed = "https://youtu.be/stg7Bulk020?t=5"
+    await _bulk(client, [typed])
+    again = await _bulk(client, ["https://www.youtube.com/watch?v=stg7Bulk020"])
+    body = again.json()
+    assert body["added"] == 0 and body["duplicates"] == ["https://www.youtube.com/watch?v=stg7Bulk020"]
+    assert body["duplicate_details"] == [{"url": "https://www.youtube.com/watch?v=stg7Bulk020", "video_id": "stg7Bulk020", "reason": "in_queue"}]
+    third = await _bulk(client, [typed])
+    assert third.json()["duplicates"] == [typed] and third.json()["duplicate_details"][0]["url"] == typed
+
+
+async def test_the_worker_extracts_a_bulk_added_http_link_through_its_canonical_form(client):
+    seen = {}
+
+    def fake(url, language, cookies, ytdlp):
+        seen["url"] = url
+        return extraction("stg7Bulk030")
+
+    await _bulk(client, ["https://youtu.be/stg7Bulk030?si=abc"])
+    with patch("services.subtitle_extractor.extract_subtitles", fake):
+        (item,) = await _items(client)
+        await run_worker([item["id"]])
+    assert seen["url"] == "https://www.youtube.com/watch?v=stg7Bulk030"
+    await forget("stg7Bulk030")

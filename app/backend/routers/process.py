@@ -240,7 +240,8 @@ async def queue_bulk_add(
 
     # Step 1: validate + deduplicate within batch
     seen_video_ids: set[str] = set()
-    valid_urls: list[str] = []      # URL → (url, video_id)
+    valid_urls: list[str] = []      # the canonical links that are queued
+    typed: dict[str, str] = {}      # canonical link -> the link as it was sent (the answer names it that way)
     valid_vid_ids: list[str] = []
     invalid: list[str] = []
     for raw_url in body.urls:
@@ -250,14 +251,17 @@ async def queue_bulk_add(
         # Extract URL from line — handles "URL | title", trailing punctuation, etc.
         m = _URL_RE.search(raw)
         url = _TRAIL_RE.sub('', m.group(0)) if m else raw
-        vid = extract_video_id(url)
+        # the same check as POST /api/process: https and a YouTube host only, stored in the canonical watch?v= form
+        canonical = validate_youtube_url(url)
+        vid = extract_video_id(canonical) if canonical else None
         if not vid:
             invalid.append(url)
         elif vid in seen_video_ids:
             invalid.append(url)  # intra-batch duplicate → treat as invalid
         else:
             seen_video_ids.add(vid)
-            valid_urls.append(url)
+            valid_urls.append(canonical)
+            typed[canonical] = url
             valid_vid_ids.append(vid)
 
     if body.urls and not valid_urls and not body.video_ids:
@@ -273,8 +277,8 @@ async def queue_bulk_add(
         duplicate_vids = await retry_locked(lambda: get_duplicate_reasons(db, valid_vid_ids), db, "queue add: duplicate check")
         for url, vid in zip(valid_urls, valid_vid_ids):
             if vid in duplicate_vids:
-                duplicates.append(url)
-                duplicate_details.append({"url": url, "video_id": vid, "reason": duplicate_vids[vid]})
+                duplicates.append(typed[url])
+                duplicate_details.append({"url": typed[url], "video_id": vid, "reason": duplicate_vids[vid]})
             else:
                 new_urls.append(url)
 
@@ -295,8 +299,8 @@ async def queue_bulk_add(
         ids, raced = await retry_locked(
             lambda: add_items_unique(db, new_urls, stages, language=body.language or None), db, "queue add: insert")
         for url, vid in raced:
-            duplicates.append(url)
-            duplicate_details.append({"url": url, "video_id": vid, "reason": "in_queue"})
+            duplicates.append(typed.get(url, url))
+            duplicate_details.append({"url": typed.get(url, url), "video_id": vid, "reason": "in_queue"})
 
     missing: list[str] = []
     if body.video_ids:
