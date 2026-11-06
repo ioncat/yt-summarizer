@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { QueueAddResult, QueueReportEntry } from '../../api'
+import { DOWNLOAD_TEXT, DownloadAnswer } from './downloadForExisting'
 
 export type ReportStatus = QueueReportEntry['status']
 
@@ -33,7 +34,7 @@ export function reportOf(res: QueueAddResult): QueueReportEntry[] {
 }
 
 /** What a list of links came to: a line with the counts, then every link with its own status. */
-export function BulkReport({ added, report }: { added: number; report: QueueReportEntry[] }) {
+export function BulkReport({ added, report, downloads = {} }: { added: number; report: QueueReportEntry[]; downloads?: Record<string, DownloadAnswer> }) {
   const skipped = report.filter(e => e.status !== 'added').length
   return (
     <div className="flex flex-col gap-2" data-testid="bulk-report">
@@ -56,6 +57,9 @@ export function BulkReport({ added, report }: { added: number; report: QueueRepo
               <span className={`italic shrink-0 ${e.status === 'added' ? 'text-tertiary' : e.status === 'invalid' ? 'text-error' : 'text-secondary'}`}>
                 {statusText(e)}
               </span>
+              {e.status === 'processed' && e.video_id && downloads[e.video_id] && (
+                <span className="italic shrink-0 text-tertiary">· {DOWNLOAD_TEXT[downloads[e.video_id]]}</span>
+              )}
               {e.status === 'processed' && e.video_id && (
                 <Link to={`/result/${e.video_id}`} className="shrink-0 font-semibold text-primary underline">Open the result →</Link>
               )}

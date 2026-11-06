@@ -4,6 +4,7 @@ import { FileUploadForm } from '../components/home/FileUploadForm'
 import { BulkReport, reportOf } from '../components/home/BulkReport'
 import { InvalidLinkError, type QueueReportEntry } from '../api'
 import { parseLinks, withoutSentLinks } from '../utils/links'
+import { queueDownloadsForExisting, DOWNLOAD_TEXT, DownloadAnswer } from '../components/home/downloadForExisting'
 import { LANGUAGES, inputBase, selectBase } from '../components/home/common'
 import { AUTO_PIPELINE_KEY, PIPELINE_PRESETS, autoPipelineStages, readAutoPipeline, resolveStages } from '../utils/pipeline'
 import { getSettings, getHealth, getQueue, AllSettings, queueBulkAdd, QueueAddResult } from '../api'
@@ -19,7 +20,8 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [queueNote, setQueueNote] = useState<
-    { kind: 'added' | 'in_queue' } | { kind: 'invalid'; httpOnly?: boolean } | { kind: 'processed' | 'done'; videoId: string | null }
+    { kind: 'added' | 'in_queue' } | { kind: 'invalid'; httpOnly?: boolean } | { kind: 'done'; videoId: string | null }
+    | { kind: 'processed'; videoId: string | null; download?: DownloadAnswer }
     | { kind: 'failed'; reason: string } | null>(null)
   // The queue item the "Added to the queue" note follows: the note turns into "Done" / "Failed" when the item ends (no jump)
   const [watchedItem, setWatchedItem] = useState<number | null>(null)
@@ -33,13 +35,13 @@ export default function HomePage() {
   const [ollamaOnline, setOllamaOnline] = useState(false)
 
   // The report of a list (two or more links): what was added and why each other link was skipped
-  const [bulkResult, setBulkResult] = useState<{ added: number; report: QueueReportEntry[] } | null>(null)
+  const [bulkResult, setBulkResult] = useState<{ added: number; report: QueueReportEntry[]; downloads: Record<string, DownloadAnswer> } | null>(null)
 
   // The page stays: a line says what happened, so the next link can be pasted at once.
   // A duplicate carries its video id from the server (links like /live/, youtu.be/ and /shorts/ have no ?v=)
-  function afterQueueAdd(res: QueueAddResult, clearSent: () => void) {
+  function afterQueueAdd(res: QueueAddResult, clearSent: () => void, downloads: Record<string, DownloadAnswer> = {}) {
     const dup = res.duplicate_details?.[0]
-    if (dup?.reason === 'processed') setQueueNote({ kind: 'processed', videoId: dup.video_id })
+    if (dup?.reason === 'processed') setQueueNote({ kind: 'processed', videoId: dup.video_id, download: downloads[dup.video_id] })
     else if (dup) setQueueNote({ kind: 'in_queue' })
     else if (res.added > 0) { setQueueNote({ kind: 'added' }); clearSent(); if (res.ids?.length === 1) setWatchedItem(res.ids[0]) }
     else setQueueNote({ kind: 'invalid' })
@@ -51,16 +53,20 @@ export default function HomePage() {
   function onAddError(err: unknown): boolean {
     if (!(err instanceof InvalidLinkError) || err.report.length === 0) return false
     if (links.length === 1) setQueueNote({ kind: 'invalid', httpOnly: err.report[0].reason === 'http_only' })
-    else setBulkResult({ added: 0, report: err.report })
+    else setBulkResult({ added: 0, report: err.report, downloads: {} })
     return true
   }
 
   // The field is only emptied of what was sent: a link pasted while the request ran stays.
-  function afterAdd(res: QueueAddResult) {
+  // A video that is already processed is not added again, but if "Download" is ticked its download is queued by id.
+  async function afterAdd(res: QueueAddResult) {
     const sentText = url, sent = links
     const clearSent = () => setUrl(cur => withoutSentLinks(cur, sentText, sent))
-    if (links.length === 1) { afterQueueAdd(res, clearSent); return }
-    setBulkResult({ added: res.added, report: reportOf(res) })
+    const report = reportOf(res)
+    const processed = report.flatMap(e => (e.status === 'processed' && e.video_id ? [e.video_id] : []))
+    const downloads = autoDownload && processed.length ? await queueDownloadsForExisting(processed) : {}
+    if (links.length === 1) { afterQueueAdd(res, clearSent, downloads); return }
+    setBulkResult({ added: res.added, report, downloads })
     if (res.added > 0) clearSent()
   }
 
@@ -136,7 +142,7 @@ export default function HomePage() {
       }
       setLoading(true)
       try {
-        afterAdd(await queueBulkAdd(links, withDownload(autoPipelineStages(useStt)), false, language || undefined))
+        await afterAdd(await queueBulkAdd(links, withDownload(autoPipelineStages(useStt)), false, language || undefined))
       } catch (err) {
         if (onAddError(err)) return
         console.error('[Home] queueBulkAdd failed:', err)
@@ -150,7 +156,7 @@ export default function HomePage() {
       const stages = withDownload(resolveStages(pipeline, useStt))
       setLoading(true)
       try {
-        afterAdd(await queueBulkAdd(links, stages, false, language || undefined))
+        await afterAdd(await queueBulkAdd(links, stages, false, language || undefined))
       } catch (err) {
         if (onAddError(err)) return
         console.error('[Home] queueBulkAdd failed:', err)
@@ -304,7 +310,7 @@ export default function HomePage() {
               <div role="status" className="bg-surface-container-low border border-outline-variant rounded-lg px-4 py-3 text-body-sm text-on-surface">
                 {queueNote.kind === 'added' && <>Added to the queue. <Link to="/queue" className="font-semibold text-primary underline">View queue →</Link></>}
                 {queueNote.kind === 'in_queue' && <>Already in the queue. <Link to="/queue" className="font-semibold text-primary underline">View queue →</Link></>}
-                {queueNote.kind === 'processed' && <>Already processed. <Link to={`/result/${queueNote.videoId}`} className="font-semibold text-primary underline">Open the result →</Link></>}
+                {queueNote.kind === 'processed' && <>Already processed.{queueNote.download && <> {DOWNLOAD_TEXT[queueNote.download][0].toUpperCase() + DOWNLOAD_TEXT[queueNote.download].slice(1)}.</>} <Link to={`/result/${queueNote.videoId}`} className="font-semibold text-primary underline">Open the result →</Link></>}
                 {queueNote.kind === 'done' && <>Done. {queueNote.videoId
                   ? <Link to={`/result/${queueNote.videoId}`} className="font-semibold text-primary underline">Open the result →</Link>
                   : <Link to="/queue" className="font-semibold text-primary underline">View queue →</Link>}</>}
@@ -313,7 +319,7 @@ export default function HomePage() {
               </div>
             )}
 
-            {bulkResult && <BulkReport added={bulkResult.added} report={bulkResult.report} />}
+            {bulkResult && <BulkReport added={bulkResult.added} report={bulkResult.report} downloads={bulkResult.downloads} />}
 
             {error && (
               <div role="alert" className="bg-error-container border border-error/30 rounded-lg px-4 py-3 flex items-center gap-3 flex-wrap">

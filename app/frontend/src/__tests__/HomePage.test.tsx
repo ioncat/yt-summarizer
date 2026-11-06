@@ -31,6 +31,7 @@ vi.mock('../api', () => ({
   processVideo: vi.fn(),   // (Home no longer calls it: "extract only" goes through the queue, NS-11 stage 7)
   processFile: vi.fn(),
   queueBulkAdd: vi.fn(),
+  queueBulkAddByIds: vi.fn(),
   getQueue: vi.fn(),
   InvalidLinkError: class InvalidLinkError extends Error {
     constructor(public invalid: string[] = [], public report: unknown[] = []) { super('No valid YouTube URLs') }
@@ -630,6 +631,72 @@ ${list[1]}` } })
     fireEvent.click(screen.getByRole('button', { name: 'Add to queue' }))
     await waitFor(() => expect(api.queueBulkAdd).toHaveBeenCalled())
     expect(vi.mocked(api.queueBulkAdd).mock.calls[0][1]).toEqual(['extract'])
+  })
+
+  describe('Download for a video that is already processed (review)', () => {
+    const processedAnswer = {
+      added: 0, ids: [], invalid: [], duplicates: [list[0]],
+      duplicate_details: [{ url: list[0], video_id: 'listVideo001', reason: 'processed' }],
+      report: [{ url: list[0], video_id: 'listVideo001', status: 'processed' }],
+    }
+
+    beforeEach(() => { localStorage.removeItem('yt_autoDownload_enabled') })
+
+    it('the download is queued by itself, by id, and the line says so', async () => {
+      vi.mocked(api.queueBulkAdd).mockResolvedValue(processedAnswer as never)
+      vi.mocked(api.queueBulkAddByIds).mockResolvedValue({ added: 1, ids: [9], invalid: [], duplicates: [], missing: [] })
+      renderHome()
+      fireEvent.click(screen.getByLabelText(/^Download/))
+      fireEvent.change(field(), { target: { value: list[0] } })
+      fireEvent.click(screen.getByRole('button', { name: 'Add to queue' }))
+      expect(await screen.findByText(/Already processed\. Download queued\./)).toBeTruthy()
+      expect(api.queueBulkAddByIds).toHaveBeenCalledWith(['listVideo001'], ['download'])
+      expect(screen.getByRole('link', { name: /Open the result/ }).getAttribute('href')).toBe('/result/listVideo001')
+    })
+
+    it('without the Download box nothing is queued for a processed video', async () => {
+      vi.mocked(api.queueBulkAdd).mockResolvedValue(processedAnswer as never)
+      renderHome()
+      fireEvent.change(field(), { target: { value: list[0] } })
+      fireEvent.click(screen.getByRole('button', { name: 'Add to queue' }))
+      expect(await screen.findByText(/Already processed/)).toBeTruthy()
+      expect(api.queueBulkAddByIds).not.toHaveBeenCalled()
+    })
+
+    it('a download that is already queued says so, and a refusal says it could not be queued', async () => {
+      vi.mocked(api.queueBulkAdd).mockResolvedValue(processedAnswer as never)
+      vi.mocked(api.queueBulkAddByIds).mockResolvedValueOnce({ added: 0, ids: [], invalid: [], duplicates: ['listVideo001'], missing: [] })
+      renderHome()
+      fireEvent.click(screen.getByLabelText(/^Download/))
+      fireEvent.change(field(), { target: { value: list[0] } })
+      fireEvent.click(screen.getByRole('button', { name: 'Add to queue' }))
+      expect(await screen.findByText(/Download already queued\./)).toBeTruthy()
+      vi.mocked(api.queueBulkAddByIds).mockRejectedValueOnce(new Error('boom'))
+      fireEvent.click(screen.getByRole('button', { name: 'Add to queue' }))
+      expect(await screen.findByText(/The download could not be queued\./)).toBeTruthy()
+    })
+
+    it('in a list the processed row says "download queued"; other rows and videos that are only queued get no download', async () => {
+      vi.mocked(api.queueBulkAdd).mockResolvedValue({
+        added: 1, ids: [3], invalid: [], duplicates: [list[0], list[2]],
+        report: [
+          { url: list[0], video_id: 'listVideo001', status: 'processed' },
+          { url: list[1], video_id: 'listVideo002', status: 'added' },
+          { url: list[2], video_id: 'listVideo003', status: 'in_queue' },
+        ],
+      } as never)
+      vi.mocked(api.queueBulkAddByIds).mockResolvedValue({ added: 1, ids: [9], invalid: [], duplicates: [], missing: [] })
+      renderHome()
+      fireEvent.click(screen.getByLabelText(/^Download/))
+      fireEvent.change(field(), { target: { value: list.join('\n') } })
+      fireEvent.click(screen.getByRole('button', { name: 'Add all (3)' }))
+      const box = await screen.findByTestId('bulk-report')
+      const rows = Array.from(box.querySelectorAll('li')).map(r => r.textContent)
+      expect(rows[0]).toContain('· download queued')
+      expect(rows[1]).not.toContain('download queued')
+      expect(rows[2]).not.toContain('download queued')
+      expect(api.queueBulkAddByIds).toHaveBeenCalledWith(['listVideo001'], ['download'])      // only the processed video
+    })
   })
 
   it('an empty field cannot be sent', () => {

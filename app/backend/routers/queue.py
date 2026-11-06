@@ -48,7 +48,7 @@ async def queue_bulk_add(
     only https links are accepted) or "not_youtube".
 
     `video_ids` queues results that are already in History by id (the only way to queue a local file);
-    they can only run the LLM stages (cleanup, summary, mindmap).
+    they can only run the LLM stages (cleanup, summary, mindmap) and the download.
 
     `force` applies to `urls` only: it skips the "already processed / already in the queue" check so a
     video can be re-run. `video_ids` ignore it: an id that is already pending or processing is always
@@ -68,9 +68,10 @@ async def queue_bulk_add(
         raise HTTPException(status_code=400, detail="video_ids contains an empty id")
     if body.video_ids:
         by_id_stages = body.pipeline_stages
-        if not by_id_stages or any(s not in RESULT_STAGES for s in by_id_stages):
+        allowed = (*RESULT_STAGES, "download")        # "download": save the video of a result that is already in History (NS-17 item 12)
+        if not by_id_stages or any(s not in allowed for s in by_id_stages):
             raise HTTPException(status_code=400, detail={
-                "message": "Results already in History can only run: " + ", ".join(RESULT_STAGES)})
+                "message": "Results already in History can only run: " + ", ".join(allowed)})
 
     # Step 1: validate + deduplicate within batch
     seen_video_ids: set[str] = set()

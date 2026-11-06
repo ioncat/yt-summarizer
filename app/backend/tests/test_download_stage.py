@@ -462,3 +462,40 @@ async def test_a_run_that_fails_with_no_file_has_the_download_code(client, seede
     with patch.object(downloader.subprocess, "run", fake_ytdlp(make_file=False)[0]):
         await run_worker([item])
     assert (await stage_of(client))["error_code"] == "download_failed"
+
+
+# --- a download for a video that is already in History (review: Low, behaviour) ----------------------------------------------------
+
+async def test_a_download_only_item_can_be_queued_by_id_and_runs(client, seeded_video):
+    r = await client.post("/api/queue/bulk", json={"video_ids": [VIDEO_ID], "pipeline_stages": ["download"]})
+    assert r.status_code == 200 and r.json()["added"] == 1 and r.json()["duplicates"] == []
+    (item_row,) = (await client.get("/api/queue")).json()["items"]
+    assert item_row["pipeline_stages"] == ["download"] and item_row["video_id"] == VIDEO_ID and item_row["url"] == URL
+    run, calls = fake_ytdlp()
+    with patch.object(downloader.subprocess, "run", run):
+        await run_worker([item_row["id"]])
+    assert (await get_item(item_row["id"]))["status"] == "done"
+    assert (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp4").exists() and calls[0][-1] == URL
+    assert (await stage_of(client))["status"] == "done"
+
+
+async def test_a_second_download_request_is_a_duplicate_but_other_stages_still_go_in(client, seeded_video):
+    await client.post("/api/queue/bulk", json={"video_ids": [VIDEO_ID], "pipeline_stages": ["download"]})
+    again = (await client.post("/api/queue/bulk", json={"video_ids": [VIDEO_ID], "pipeline_stages": ["download"]})).json()
+    assert again["added"] == 0 and again["duplicates"] == [VIDEO_ID]
+    assert again["duplicate_details"][0]["reason"] == "in_queue" and again["duplicate_details"][0]["stages"] == ["download"]
+    mixed = (await client.post("/api/queue/bulk", json={"video_ids": [VIDEO_ID], "pipeline_stages": ["summary", "download"]})).json()
+    assert mixed["added"] == 1                                              # the summary goes in; the download is already covered
+
+
+async def test_a_queued_summary_does_not_block_a_download(client, seeded_video):
+    await client.post("/api/queue/bulk", json={"video_ids": [VIDEO_ID], "pipeline_stages": ["mindmap"]})
+    r = (await client.post("/api/queue/bulk", json={"video_ids": [VIDEO_ID], "pipeline_stages": ["download"]})).json()
+    assert r["added"] == 1 and r["duplicates"] == []                          # download has no place in the cleanup < summary < mind map order
+
+
+async def test_the_other_stages_are_still_refused_for_a_result_in_history(client, seeded_video):
+    for stages in (["extract"], ["transcribe"], ["download", "extract"], ["rm -rf"], []):
+        r = await client.post("/api/queue/bulk", json={"video_ids": [VIDEO_ID], "pipeline_stages": stages})
+        assert r.status_code == 400, stages
+        assert "download" in r.json()["detail"]["message"] or stages == []
