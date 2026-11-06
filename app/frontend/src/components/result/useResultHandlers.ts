@@ -1,7 +1,7 @@
 import { MutableRefObject } from 'react'
 import type { NavigateFunction } from 'react-router-dom'
 import {
-  deleteResult, startCleanup, cancelCleanup, startSummary, cancelSummary,
+  deleteResult, startCleanup, cancelCleanup, startSummary, cancelSummary, cancelVideoJobs,
   startMindmap, reextractSubtitles, saveSettings, queueBulkAddByIds, downloadVideo,
   ResultResponse,
 } from '../../api'
@@ -86,6 +86,27 @@ export function useResultHandlers({
     setSummaryElapsedSeconds(null); summaryElapsedRef.current = null; setLocalSummaryDuration(null)
     // the saved summary (and its time) stays, as above
     setResult(prev => prev ? withStageStopped({ ...prev, summary_status: null }, 'summary') : prev)
+  }
+
+  // One Stop for whatever is waiting or running for this video, on any tab (NS-16): the server cancels every job of the video;
+  // what each stage had saved before stays (the run ends, not an earlier result)
+  async function handleStopAll() {
+    if (!videoId) return
+    try { await cancelVideoJobs(videoId) } catch (err) { console.error('[Result] cancelVideoJobs failed:', err) }
+    stopPolling(); stopCleanupTimer(); stopSummaryPolling(); stopSummaryTimer(); stopMindmapPolling()
+    setCleanupElapsedSeconds(null); cleanupElapsedRef.current = null; setLocalCleanupDuration(null)
+    setSummaryElapsedSeconds(null); summaryElapsedRef.current = null; setLocalSummaryDuration(null)
+    setResult(prev => {
+      if (!prev) return prev
+      const idle = <T extends string | null | undefined>(s: T) => (s === 'processing' ? null : s)
+      let next: ResultResponse = {
+        ...prev, cleanup_status: idle(prev.cleanup_status), summary_status: idle(prev.summary_status),
+        mindmap_status: idle(prev.mindmap_status), reextract_in_progress: false,
+      }
+      for (const stage of ['cleanup', 'summary', 'mindmap'] as const) next = withStageStopped(next, stage)
+      return next
+    })
+    loadResult(false)                                    // the server's word on how it ended
   }
 
   async function handleDelete() {
@@ -256,7 +277,7 @@ export function useResultHandlers({
   }
 
   return {
-    handleCopy, handleCancelCleanup, handleCancelSummary, handleDelete, handleDownload,
+    handleCopy, handleCancelCleanup, handleCancelSummary, handleStopAll, handleDelete, handleDownload,
     handleReextract, handleCleanupModelChange, handleSummaryModelChange, handleChatModelChange,
     handleCleanup, handleSummarize, handleMindmap,
   }

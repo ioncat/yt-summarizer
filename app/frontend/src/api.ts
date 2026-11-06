@@ -270,6 +270,16 @@ export async function cancelMindmap(videoId: string): Promise<void> {
   await fetch(`${BASE}/result/${encodeURIComponent(videoId)}/mindmap`, { method: 'DELETE' })
 }
 
+/** The result page's Stop (NS-16): cancels every waiting or running job of the video, whatever its stage. */
+export async function cancelVideoJobs(videoId: string): Promise<{ status: 'cancelling' | 'idle'; removed: number; stopping: number }> {
+  const res = await fetch(`${BASE}/result/${encodeURIComponent(videoId)}/cancel`, { method: 'POST' })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(errorText(body, 'Failed to stop'))
+  }
+  return res.json()
+}
+
 export async function startCleanup(videoId: string): Promise<void> {
   const res = await fetch(`${BASE}/result/${encodeURIComponent(videoId)}/cleanup`, { method: 'POST' })
   if (!res.ok) {

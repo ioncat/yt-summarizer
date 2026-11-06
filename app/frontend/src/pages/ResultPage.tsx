@@ -12,6 +12,7 @@ import { ResultHeader } from '../components/result/ResultHeader'
 import { MetaRibbons } from '../components/result/MetaRibbons'
 import { ActionsBar } from '../components/result/ActionsBar'
 import { ErrorBanners } from '../components/result/ErrorBanners'
+import { JobsBanner } from '../components/result/JobsBanner'
 import { TabsBar } from '../components/result/TabsBar'
 import { TabContent } from '../components/result/TabContent'
 import { StageTable } from '../components/result/StageTable'
@@ -287,7 +288,7 @@ export default function ResultPage() {
   const isLocalFile = result?.subtitle_source === 'transcript' && result?.video_id?.startsWith('file-')
 
   const {
-    handleCopy, handleCancelCleanup, handleCancelSummary, handleDelete, handleDownload,
+    handleCopy, handleCancelCleanup, handleCancelSummary, handleStopAll, handleDelete, handleDownload,
     handleReextract, handleCleanupModelChange, handleSummaryModelChange, handleChatModelChange,
     handleCleanup, handleSummarize, handleMindmap,
   } = useResultHandlers({
@@ -380,6 +381,9 @@ export default function ResultPage() {
               downloadQuality={downloadQuality} setDownloadQuality={setDownloadQuality}
               handleDelete={handleDelete}
             />
+
+            {/* What is waiting or running for this video, with one Stop (NS-16) */}
+            <JobsBanner result={result} handleStopAll={handleStopAll} />
 
             {/* Error banners */}
             <ErrorBanners

@@ -8,6 +8,7 @@ import {
   queueBulkAddByIds,
   deleteQueueItem,
   cancelQueueItem,
+  cancelVideoJobs,
   errorText,
   toggleFavorite,
   deleteResult,
@@ -165,6 +166,11 @@ describe('error messages from the server (NS-24a review)', () => {
     await expect(cancelQueueItem(1)).rejects.toThrow('This item is already over: nothing to cancel')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({}, 500)))
     await expect(cancelQueueItem(1)).rejects.toThrow('Failed to cancel')
+    await expect(cancelVideoJobs('abc123')).rejects.toThrow('Failed to stop')
+    const fetchMock = vi.fn().mockResolvedValue(makeResponse({ status: 'idle', removed: 0, stopping: 0 }, 200))
+    vi.stubGlobal('fetch', fetchMock)
+    expect((await cancelVideoJobs('abc123')).status).toBe('idle')
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/result/abc123/cancel'), { method: 'POST' })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({ detail: { weird: true } }, 500)))
     await expect(queueBulkAdd(['x'])).rejects.toThrow('Failed to add to queue')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse({}, 500)))

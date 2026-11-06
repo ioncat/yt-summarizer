@@ -16,6 +16,7 @@ vi.mock('../api', () => ({
   cancelCleanup: vi.fn(),
   startSummary: vi.fn(),
   cancelSummary: vi.fn(),
+  cancelVideoJobs: vi.fn(),
   startMindmap: vi.fn(),
   cancelMindmap: vi.fn(),
   reextractSubtitles: vi.fn(),
@@ -554,6 +555,52 @@ describe('ResultPage', () => {
       await waitFor(() => expect(m.cancelMindmap).toHaveBeenCalledWith('abc123'))
       await waitFor(() => expect(screen.queryByText('running')).toBeNull())
       expect(screen.getByText('stopped')).toBeTruthy()
+    })
+  })
+
+  describe('one Cancel for every job of the video (NS-16)', () => {
+    const running = (model: string) => ({
+      attempt: 1, status: 'processing', queue_item_id: 1, model, started_at: '2026-11-01T10:00:00', finished_at: null,
+      error_code: null, error_text: null, meta: {}, progress_done: null, progress_total: null, runs: 1, last_done: null,
+    })
+
+    it('no banner while nothing is waiting or running', async () => {
+      setResult({ cleanup_status: 'done', cleaned_text: 'Clean' })
+      await renderPage()
+      expect(screen.queryByRole('button', { name: /Cancel all jobs/ })).toBeNull()
+    })
+
+    it('lists the jobs and cancels them all from any tab, then freezes the page and reloads', async () => {
+      m.cancelVideoJobs.mockResolvedValue({ status: 'cancelling', removed: 1, stopping: 1 })
+      setResult({ cleanup_status: 'processing', summary_status: 'processing', stages: { cleanup: running('llama3'), summary: running('llama3') } })
+      await renderPage()                                      // the Subtitles tab is open: no per-tab Stop is on screen
+      expect(screen.getByText(/In progress: AI cleanup, summary/)).toBeTruthy()
+      setResult({ cleanup_status: null, summary_status: null })     // what the server says after the cancel (the reload)
+      fireEvent.click(btn(/Cancel all jobs/))
+      await waitFor(() => expect(m.cancelVideoJobs).toHaveBeenCalledWith('abc123'))
+      await waitFor(() => expect(screen.queryByRole('button', { name: /Cancel all jobs/ })).toBeNull())
+      expect(screen.queryByText('running')).toBeNull()
+      expect(m.cancelCleanup).not.toHaveBeenCalled()          // one request, not one per stage
+      expect(m.cancelSummary).not.toHaveBeenCalled()
+    })
+
+    it('a running re-extract is a job too', async () => {
+      m.cancelVideoJobs.mockResolvedValue({ status: 'cancelling', removed: 0, stopping: 1 })
+      setResult({ reextract_in_progress: true, retranscribe_progress: 'starting…' })
+      await renderPage()
+      expect(screen.getByText(/In progress: re-extract/)).toBeTruthy()
+      fireEvent.click(btn(/Cancel all jobs/))
+      await waitFor(() => expect(m.cancelVideoJobs).toHaveBeenCalledWith('abc123'))
+    })
+
+    it('a failing request is logged and the page is still freed (the reload shows the truth)', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      m.cancelVideoJobs.mockRejectedValue(new Error('boom'))
+      setResult({ mindmap_status: 'processing', mindmap_text: '# Saved map', stages: { mindmap: running('llama3') } })
+      await renderPage()
+      setResult({ mindmap_status: null, mindmap_text: '# Saved map' })
+      fireEvent.click(btn(/Cancel all jobs/))
+      await waitFor(() => expect(screen.queryByRole('button', { name: /Cancel all jobs/ })).toBeNull())
     })
   })
 })
