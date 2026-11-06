@@ -500,3 +500,35 @@ async def test_the_other_stages_are_still_refused_for_a_result_in_history(client
         r = await client.post("/api/queue/bulk", json={"video_ids": [VIDEO_ID], "pipeline_stages": stages})
         assert r.status_code == 400, stages
         assert "download" in r.json()["detail"]["message"] or stages == []
+
+
+# --- QA: a Stop that kills yt-dlp is a Stop, not a failed download ----------------------------------------------------------------
+
+async def test_a_stop_that_kills_yt_dlp_ends_the_stage_cancelled_and_the_item_skipped(client, seeded_video):
+    item = await add_item(["download"])
+    run, _ = fake_ytdlp(returncode=1, stderr=b"ERROR: Interrupted by user", on_run=lambda: ITEM_CANCEL.add(item),
+                        fragments=["{id}.mp4.part", "{id}.f137.mp4"])
+    with patch.object(downloader.subprocess, "run", run):
+        await run_worker([item])
+    row = await get_item(item)
+    assert row["status"] == "skipped" and "Download failed" not in (row["error_message"] or "")
+    stage = await stage_of(client)
+    assert stage["status"] == "cancelled" and stage["error_code"] != "download_failed"
+    assert folder_names() == []                                           # and nothing is left behind
+    assert not ITEM_CANCEL
+
+
+async def test_the_same_crash_without_a_stop_is_still_a_failed_download(client, seeded_video):
+    item = await add_item(["download"])
+    with patch.object(downloader.subprocess, "run", fake_ytdlp(returncode=1, stderr=b"ERROR: Interrupted by user")[0]):
+        await run_worker([item])
+    assert (await get_item(item))["status"] == "partial"
+    assert (await stage_of(client))["status"] == "failed"
+
+
+async def test_a_stop_that_makes_yt_dlp_raise_is_a_stop_too(client, seeded_video):
+    item = await add_item(["download"])
+    run, _ = fake_ytdlp(raises=RuntimeError("process killed"), on_run=lambda: ITEM_CANCEL.add(item))
+    with patch.object(downloader.subprocess, "run", run):
+        await run_worker([item])
+    assert (await get_item(item))["status"] == "skipped" and (await stage_of(client))["status"] == "cancelled"

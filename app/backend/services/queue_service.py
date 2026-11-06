@@ -976,6 +976,13 @@ async def _run_download_stage(item_id: int, video_id: str, url: str) -> None:
             await db.commit()
         raise
     except Exception as exc:  # noqa: BLE001 - any failure of the download is the stage's failure, not the item's crash
+        if item_id in ITEM_CANCEL:
+            # The user pressed Cancel and yt-dlp died with it ("Interrupted by user"): that is a Stop, not a failed download
+            downloader.remove_leftovers(video_id, keep)
+            async with AsyncSessionLocal() as db:
+                await stage_runs.cancel(db, video_id, "download")
+                await db.commit()
+            raise StageCancelled("Cancelled") from exc
         if not isinstance(exc, downloader.DownloadFailed):
             logger.exception("Queue worker: download of %s failed", video_id)
         downloader.remove_leftovers(video_id, keep)                    # a failed or timed-out run leaves no fragments
