@@ -39,9 +39,20 @@ function megabytes(bytes: number): string {
   return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
 }
 
-function Row({ stage, run, videoId }: { stage: string; run: StageRun; videoId: string }) {
+/** "MP4, best" for the note that a stored file was made with other settings than the ones chosen now. */
+function describeChoice(format: unknown, quality: unknown): string {
+  return `${String(format).toUpperCase()}, ${String(quality)}`
+}
+
+export interface DownloadChoice { format: string; quality: string }
+
+function Row({ stage, run, videoId, chosen }: { stage: string; run: StageRun; videoId: string; chosen?: DownloadChoice }) {
   const file = stage === 'download' && run.status === 'done' && typeof run.meta.file === 'string' ? run.meta.file : null
   const fileSize = typeof run.meta.size === 'number' ? run.meta.size : null
+  // The file is kept as it was made; if the format / quality chosen now differ, say so (it is not downloaded again by itself)
+  const madeAs = file && chosen && typeof run.meta.format === 'string' && typeof run.meta.quality === 'string'
+    && (run.meta.format !== chosen.format || run.meta.quality !== chosen.quality)
+    ? { made: describeChoice(run.meta.format, run.meta.quality), now: describeChoice(chosen.format, chosen.quality) } : null
   const st = STATUS[run.status] ?? { text: run.status, cls: 'text-on-surface-variant' }
   const shown = run.last_done            // the run the saved result came from
   const made: StageRunDetail = shown ?? run
@@ -73,13 +84,16 @@ function Row({ stage, run, videoId }: { stage: string; run: StageRun; videoId: s
             Get the saved file ({file}{fileSize != null && `, ${megabytes(fileSize)}`})
           </a>
         )}
+        {madeAs && (
+          <span className="block text-label-sm">Made as {madeAs.made}; the choice now is {madeAs.now} (not downloaded again by itself).</span>
+        )}
         {run.runs > 1 && <span className="block text-label-sm opacity-70">{run.runs} runs so far</span>}
       </td>
     </tr>
   )
 }
 
-export function StageTable({ result }: { result: ResultResponse }) {
+export function StageTable({ result, chosenDownload }: { result: ResultResponse; chosenDownload?: DownloadChoice }) {
   const stages = result.stages ?? {}
   const present = ORDER.flatMap((s): Array<[StageName, StageRun]> => { const run = stages[s]; return run ? [[s, run]] : [] })
   if (present.length === 0) return null
@@ -100,7 +114,7 @@ export function StageTable({ result }: { result: ResultResponse }) {
               <th className="pb-1 font-medium">Details</th>
             </tr>
           </thead>
-          <tbody>{present.map(([s, run]) => <Row key={s} stage={s} run={run} videoId={result.video_id} />)}</tbody>
+          <tbody>{present.map(([s, run]) => <Row key={s} stage={s} run={run} videoId={result.video_id} chosen={chosenDownload} />)}</tbody>
         </table>
       </div>
     </details>

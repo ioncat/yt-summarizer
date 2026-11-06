@@ -101,3 +101,28 @@ describe('StageTable download reason (review)', () => {
     expect(screen.getByText(/HTTP Error 404/)).toBeTruthy()
   })
 })
+
+describe('StageTable stored file vs the choice now (review)', () => {
+  const made = (format: string, quality: string) => ({
+    attempt: 1, status: 'done', queue_item_id: 3, model: null, started_at: null, finished_at: null, error_code: null, error_text: null,
+    meta: { file: 'abc12345678.mp4', size: 1024, format, quality }, progress_done: null, progress_total: null, runs: 1, last_done: null,
+  })
+  const table = (run: unknown, chosen?: { format: string; quality: string }) =>
+    render(<StageTable result={{ video_id: 'abc12345678', stages: { download: run } } as never} chosenDownload={chosen} />)
+
+  it('says so when the file was made with another format or quality than the choice now', () => {
+    table(made('mp4', 'best'), { format: 'mp3', quality: '720p' })
+    expect(screen.getByText(/Made as MP4, best; the choice now is MP3, 720p \(not downloaded again by itself\)/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Get the saved file/ })).toBeTruthy()           // the link is still there
+  })
+
+  it('says nothing when they are the same, or when there is no choice to compare with', () => {
+    table(made('mp4', 'best'), { format: 'mp4', quality: 'best' })
+    expect(screen.queryByText(/Made as/)).toBeNull()
+  })
+
+  it('says nothing for an old run without format / quality in its meta', () => {
+    table({ ...made('mp4', 'best'), meta: { file: 'abc12345678.mp4', size: 1024 } }, { format: 'mp3', quality: 'best' })
+    expect(screen.queryByText(/Made as/)).toBeNull()
+  })
+})

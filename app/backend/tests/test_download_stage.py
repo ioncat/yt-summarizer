@@ -105,11 +105,12 @@ def test_the_downloads_folder_is_ignored_by_git_and_never_the_live_one_in_tests(
     root = Path(__file__).resolve().parents[3]
     lines = [l.strip() for l in (root / ".gitignore").read_text(encoding="utf8").splitlines()]
     assert "app/data/downloads/" in lines
-    try:
-        out = subprocess.run(["git", "check-ignore", "-q", "app/data/downloads/x.mp4"], cwd=root, capture_output=True)
-        assert out.returncode == 0
-    except FileNotFoundError:
-        pass                                                                          # no git on the path: the .gitignore line is enough
+    if (root / ".git").exists():                                                      # not in an export / archive without the repository
+        try:
+            out = subprocess.run(["git", "check-ignore", "-q", "app/data/downloads/x.mp4"], cwd=root, capture_output=True)
+            assert out.returncode == 0
+        except FileNotFoundError:
+            pass                                                                      # no git on the path: the .gitignore line is enough
     assert os.path.normcase(os.path.abspath(downloader.downloads_dir())) == os.path.normcase(os.path.abspath(ct.TEST_DOWNLOADS))
     assert os.path.normcase(os.path.abspath(ct.TEST_DOWNLOADS)) != os.path.normcase(ct.LIVE_DOWNLOADS)
 

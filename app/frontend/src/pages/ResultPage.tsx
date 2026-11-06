@@ -403,7 +403,7 @@ export default function ResultPage() {
           />
 
           {/* ── What ran, with which model, and why a step failed (NS-25) ── */}
-          <StageTable result={result} />
+          <StageTable result={result} chosenDownload={{ format: downloadFormat, quality: downloadQuality }} />
         </div>
       </div>
 
