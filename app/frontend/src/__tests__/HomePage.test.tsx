@@ -28,7 +28,7 @@ vi.mock('../api', () => ({
     chat: { stage: 'chat', system_prompt: null, user_prompt_template: null, model: null, is_default: true },
   }),
   getHealth: vi.fn().mockResolvedValue({ backend: true, ollama: false }),
-  processVideo: vi.fn(),
+  processVideo: vi.fn(),   // (Home no longer calls it: "extract only" goes through the queue, NS-11 stage 7)
   processFile: vi.fn(),
   queueBulkAdd: vi.fn(),
   VideoAlreadyExistsError: class VideoAlreadyExistsError extends Error {
@@ -158,5 +158,64 @@ describe('HomePage: a failed or slow add (NS-28)', () => {
     expect(api.queueBulkAdd).toHaveBeenCalledTimes(2)
     expect(vi.mocked(api.queueBulkAdd).mock.calls[1][0]).toEqual(['https://youtu.be/retryHome001'])
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+
+async function submitExtractOnly(url: string) {
+  render(
+    <MemoryRouter>
+      <Routes>
+        <Route path="*" element={<><HomePage /><Where /></>} />
+      </Routes>
+    </MemoryRouter>
+  )
+  fireEvent.change(screen.getByPlaceholderText(/youtube\.com\/watch/i), { target: { value: url } })   // the pipeline stays "Extract only"
+  fireEvent.submit(screen.getByPlaceholderText(/youtube\.com\/watch/i).closest('form')!)
+}
+
+describe('HomePage: "Extract only" is a queue item too (NS-11 stage 7 / NS-24b)', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it('adds the link to the queue with the extract stage, never calls the direct /api/process path, and stays on Home', async () => {
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({ added: 1, ids: [7], invalid: [], duplicates: [], duplicate_details: [] })
+    await submitExtractOnly('https://youtu.be/extractOnly1')
+    expect(await screen.findByText(/Added to the queue/)).toBeTruthy()
+    expect(api.queueBulkAdd).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(api.queueBulkAdd).mock.calls[0][0]).toEqual(['https://youtu.be/extractOnly1'])
+    expect(vi.mocked(api.queueBulkAdd).mock.calls[0][1]).toEqual(['extract'])
+    expect(api.processVideo).not.toHaveBeenCalled()
+    expect(screen.getByTestId('where').textContent).toBe('/')
+  })
+
+  it('a link that is already processed shows the "already processed" note with a link to the result, and does not jump', async () => {
+    const url = 'https://youtu.be/Ifr9JgTm2TE'
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({
+      added: 0, ids: [], invalid: [], duplicates: [url],
+      duplicate_details: [{ url, video_id: 'Ifr9JgTm2TE', reason: 'processed' }],
+    })
+    await submitExtractOnly(url)
+    const link = await screen.findByRole('link', { name: /Open the result/ })
+    expect(link.getAttribute('href')).toBe('/result/Ifr9JgTm2TE')
+    expect(screen.getByText(/Already processed/)).toBeTruthy()
+    expect(screen.getByTestId('where').textContent).toBe('/')
+    expect(api.processVideo).not.toHaveBeenCalled()
+  })
+
+  it('a link already waiting in the queue says so', async () => {
+    const url = 'https://youtu.be/Ifr9JgTm2TE'
+    vi.mocked(api.queueBulkAdd).mockResolvedValue({
+      added: 0, ids: [], invalid: [], duplicates: [url], duplicate_details: [{ url, video_id: 'Ifr9JgTm2TE', reason: 'in_queue' }],
+    })
+    await submitExtractOnly(url)
+    expect(await screen.findByText(/Already in the queue/)).toBeTruthy()
+  })
+
+  it('a failed add shows the reason', async () => {
+    vi.mocked(api.queueBulkAdd).mockRejectedValueOnce(new Error('Failed to add to queue'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await submitExtractOnly('https://youtu.be/failExtract1')
+    expect((await screen.findByRole('alert')).textContent).toContain('Failed to add to queue')
+    expect(api.processVideo).not.toHaveBeenCalled()
   })
 })

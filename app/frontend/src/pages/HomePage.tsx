@@ -1,7 +1,7 @@
 import { useState, useEffect, FormEvent, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { AUTO_PIPELINE_KEY, PIPELINE_PRESETS, autoPipelineStages, readAutoPipeline, resolveStages } from '../utils/pipeline'
-import { processVideo, processFile, getSettings, getHealth, AllSettings, queueBulkAdd, QueueAddResult, VideoAlreadyExistsError, downloadDirect } from '../api'
+import { processFile, getSettings, getHealth, AllSettings, queueBulkAdd, QueueAddResult, downloadDirect } from '../api'
 
 type InputMode = 'url' | 'file'
 
@@ -154,38 +154,19 @@ export default function HomePage() {
         setLoading(false)
       }
     } else {
+      // Every pipeline, "extract only" too, is a queue item (NS-11 stage 7 / NS-24b): the page stays and says what happened. A link
+      // that is already processed shows the "already processed" note with a link to the result instead of jumping there.
       const stages = resolveStages(pipeline, useStt)
-
-      if (stages.length > 1 || useStt) {
-        // Multi-stage or STT → queue
-        setLoading(true)
-        storeAutoDownloadIntent()
-        try {
-          const res = await queueBulkAdd([trimmedUrl], stages, false, language || undefined)
-          afterQueueAdd(res)
-        } catch (err) {
-          console.error('[Home] queueBulkAdd failed:', err)
-          setError(err instanceof Error ? err.message : 'Failed to add to queue')
-        } finally {
-          setLoading(false)
-        }
-      } else {
-        // Extract only → direct flow
-        setLoading(true)
-        storeAutoDownloadIntent()
-        try {
-          const res = await processVideo(trimmedUrl, language)
-          navigate(`/processing/${res.task_id}/${res.video_id}?url=${encodeURIComponent(trimmedUrl)}`)
-        } catch (err) {
-          if (err instanceof VideoAlreadyExistsError) {
-            navigate(`/result/${err.videoId}`)
-            return
-          }
-          console.error('[Home] processVideo failed:', err)
-          setError(err instanceof Error ? err.message : 'Unknown error')
-        } finally {
-          setLoading(false)
-        }
+      setLoading(true)
+      storeAutoDownloadIntent()
+      try {
+        const res = await queueBulkAdd([trimmedUrl], stages, false, language || undefined)
+        afterQueueAdd(res)
+      } catch (err) {
+        console.error('[Home] queueBulkAdd failed:', err)
+        setError(err instanceof Error ? err.message : 'Failed to add to queue')
+      } finally {
+        setLoading(false)
       }
     }
   }
