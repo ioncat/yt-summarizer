@@ -6,6 +6,7 @@ import {
   ResultResponse,
 } from '../../api'
 import { Setter, withStageStopped } from './helpers'
+import { withQueuedProcessing } from './queuedMessage'
 
 type Interval = MutableRefObject<ReturnType<typeof setInterval> | null>
 type Prompts = MutableRefObject<{ system_prompt: string | null; user_prompt_template: string | null }>
@@ -196,6 +197,7 @@ export function useResultHandlers({
       // One path for every video, local files too: the endpoint checks the model and Ollama URL (400 with the reason),
       // queues the work and sets the status at once (NS-11 stage 4a)
       await startCleanup(videoId)
+      setResult(r => r ? withQueuedProcessing(r, ['cleanup']) : r)      // the endpoint set it at once: say so now
       setQueuedMsg('cleanup')
       stopPolling()
       pollRef.current = setInterval(() => loadResult(false), 3000)
@@ -228,6 +230,7 @@ export function useResultHandlers({
               : `${queued.length ? `${[...new Set(queued)].join(' and ')} ${queued.length > 1 ? 'are' : 'is'} already in the queue` : 'This video already has an item in the queue'}: wait for it or remove it on the Queue page.`)
           return
         }
+        setResult(r => r ? withQueuedProcessing(r, ['cleanup', 'summary']) : r)
         setQueuedMsg('cleanup+summary')
         stopPolling()
         pollRef.current = setInterval(() => loadResult(false), 3000)
@@ -243,6 +246,7 @@ export function useResultHandlers({
       // One path for every video, local files too: the endpoint checks the model and Ollama URL (400 with the reason),
       // queues the work and sets the status at once (NS-11 stage 3)
       await startSummary(videoId)
+      setResult(r => r ? withQueuedProcessing(r, ['summary']) : r)
       setQueuedMsg('summary')
       stopSummaryPolling()
       summaryPollRef.current = setInterval(() => loadResult(false), 3000)

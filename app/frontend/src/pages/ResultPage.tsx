@@ -13,6 +13,7 @@ import { MetaRibbons } from '../components/result/MetaRibbons'
 import { ActionsBar } from '../components/result/ActionsBar'
 import { ErrorBanners } from '../components/result/ErrorBanners'
 import { JobsBanner } from '../components/result/JobsBanner'
+import { queuedLineVisible, queuedStagesRunning, QueuedMsg } from '../components/result/queuedMessage'
 import { TabsBar } from '../components/result/TabsBar'
 import { TabContent } from '../components/result/TabContent'
 import { StageTable } from '../components/result/StageTable'
@@ -279,6 +280,11 @@ export default function ResultPage() {
     }
   }, [result?.summary_status]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The "Added to queue" line goes away for good when the queued work is over (NS-17 item 2)
+  useEffect(() => {
+    if (queuedMsg && result && !queuedStagesRunning(queuedMsg as QueuedMsg, result)) setQueuedMsg(null)
+  }, [queuedMsg, result]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const displayText =
     activeTab === 'summary' ? result?.summary_text :
     activeTab === 'cleaned' ? (result?.cleaned_text ?? result?.formatted_text) :
@@ -347,7 +353,7 @@ export default function ResultPage() {
           />
 
           {/* ── Queue message ── */}
-          {queuedMsg && (
+          {queuedLineVisible(queuedMsg, activeTab, result) && (
             <div className="px-6 py-3 border-b border-tertiary/20 bg-tertiary-container/10 flex items-center gap-2">
               <span className="material-symbols-outlined text-tertiary text-[18px]">schedule</span>
               <span className="text-body-sm text-on-surface">

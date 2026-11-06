@@ -204,7 +204,7 @@ describe('ResultPage', () => {
     m.startSummary.mockResolvedValue(undefined as never)
     setResult({ cleanup_status: 'done', cleaned_text: 'c' })
     await renderPage()
-    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summary/))
     expect(screen.getByText(/No summary yet/)).toBeTruthy()
     fireEvent.click(btn(/Summarize/))
     await waitFor(() => expect(m.startSummary).toHaveBeenCalledWith(base.video_id))
@@ -215,7 +215,7 @@ describe('ResultPage', () => {
     m.queueBulkAddByIds.mockResolvedValue({ added: 1, ids: [5], invalid: [], duplicates: [], missing: [] })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     await renderPage()                                             // base: no cleanup yet
-    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summary/))
     fireEvent.click(btn(/Summarize/))
     await waitFor(() => expect(m.queueBulkAddByIds).toHaveBeenCalledWith([base.video_id], ['cleanup', 'summary']))
     expect(m.startCleanup).not.toHaveBeenCalled()                  // no client-side chain any more
@@ -228,7 +228,7 @@ describe('ResultPage', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     setResult({ video_id: 'file-1234', url: 'local://talk.mp3', subtitle_source: 'transcript', subtitles_type: null })
     await renderPage()
-    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summary/))
     fireEvent.click(btn(/Summarize/))
     await waitFor(() => expect(m.queueBulkAddByIds).toHaveBeenCalledWith([base.video_id], ['cleanup', 'summary']))
   })
@@ -236,7 +236,7 @@ describe('ResultPage', () => {
   it('Summarize before any cleanup: declining the confirm queues nothing', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false)
     await renderPage()
-    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summary/))
     fireEvent.click(btn(/Summarize/))
     expect(m.queueBulkAddByIds).not.toHaveBeenCalled()
   })
@@ -245,7 +245,7 @@ describe('ResultPage', () => {
     m.queueBulkAddByIds.mockResolvedValue({ added: 0, ids: [], invalid: [], duplicates: [base.video_id], missing: [] })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     await renderPage()
-    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summary/))
     fireEvent.click(btn(/Summarize/))
     expect((await screen.findAllByText(/already has an item in the queue/)).length).toBeGreaterThan(0)
     expect(screen.queryByText(/cleanup → summary/)).toBeNull()
@@ -256,7 +256,7 @@ describe('ResultPage', () => {
       duplicate_details: [{ url: null, video_id: base.video_id, reason: 'in_queue', stages: ['cleanup', 'summary'] }] })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     await renderPage()
-    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summary/))
     fireEvent.click(btn(/Summarize/))
     expect((await screen.findAllByText(/cleanup and summary are already in the queue/)).length).toBeGreaterThan(0)
   })
@@ -267,7 +267,7 @@ describe('ResultPage', () => {
         message: 'A summary is already queued and would run before the cleanup and summary: wait for it or remove it on the Queue page, then try again.' }] })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     await renderPage()
-    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summary/))
     fireEvent.click(btn(/Summarize/))
     expect((await screen.findAllByText(/summary is already queued and would run before the cleanup and summary: wait for it or remove it/)).length).toBeGreaterThan(0)
   })
@@ -277,7 +277,7 @@ describe('ResultPage', () => {
     setResult({ video_id: 'file-1234', url: 'local://talk.mp3', subtitle_source: 'transcript', subtitles_type: null,
                 cleanup_status: 'done', cleaned_text: 'c' })
     await renderPage()
-    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summary/))
     fireEvent.click(btn(/Summarize/))
     await waitFor(() => expect(m.startSummary).toHaveBeenCalledWith(base.video_id))   // the page's route id
     expect(m.queueBulkAdd).not.toHaveBeenCalledWith(expect.anything(), ['summary'], expect.anything())
@@ -287,7 +287,7 @@ describe('ResultPage', () => {
     m.startSummary.mockResolvedValue(undefined as never)
     setResult({ cleanup_status: 'done', cleaned_text: 'c', summary_status: 'done', summary_text: 'old summary' })
     await renderPage()
-    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summary/))
     fireEvent.click(btn(/Re-run summary/))
     await waitFor(() => expect(m.startSummary).toHaveBeenCalledWith(base.video_id))
   })
@@ -296,7 +296,7 @@ describe('ResultPage', () => {
     m.startSummary.mockRejectedValue(new Error('No summarization model configured. Please select one in Settings → Summarization.'))
     setResult({ cleanup_status: 'done', cleaned_text: 'c' })
     await renderPage()
-    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summary/))
     fireEvent.click(btn(/Summarize/))
     expect((await screen.findAllByText(/No summarization model configured/)).length).toBeGreaterThan(0)
   })
@@ -438,7 +438,7 @@ describe('ResultPage', () => {
   it('failed stages show the stored reason; without one the generic text stays', async () => {
     setResult({ summary_status: 'failed', summary_error: 'model returned no answer (thinking used the whole context)' })
     await renderPage()
-    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summary/))
     expect(screen.getByText('model returned no answer (thinking used the whole context)')).toBeTruthy()
     expect(screen.queryByText(/Possible causes: Ollama not running/)).toBeNull()
   })
@@ -459,7 +459,7 @@ describe('ResultPage', () => {
   it('failed summary without a stored reason keeps the generic text', async () => {
     setResult({ summary_status: 'failed', summary_error: null })
     await renderPage()
-    fireEvent.click(btn('Summary'))
+    fireEvent.click(btn(/Summary/))
     expect(screen.getByText(/Possible causes: Ollama not running/)).toBeTruthy()
   })
 
@@ -622,6 +622,42 @@ describe('ResultPage', () => {
       } finally {
         vi.useRealTimers()
       }
+    })
+
+    it('item 2: the "Added to queue" line goes away when the queued work is done and does not come back', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      try {
+        m.startCleanup.mockResolvedValue(undefined as never)
+        await renderPage()
+        fireEvent.click(btn('Cleaned'))
+        setResult({ cleanup_status: 'processing' })
+        fireEvent.click(btn(/Clean with AI/))
+        expect(await screen.findByText(/Added to queue/)).toBeTruthy()
+        setResult({ cleanup_status: 'done', cleaned_text: 'Fresh cleaned paragraph', cleanup_duration_seconds: 4 })
+        await act(async () => { await vi.advanceTimersByTimeAsync(3200) })
+        expect(await screen.findByText('Fresh cleaned paragraph')).toBeTruthy()
+        expect(screen.queryByText(/Added to queue/)).toBeNull()
+        await act(async () => { await vi.advanceTimersByTimeAsync(6500) })
+        expect(screen.queryByText(/Added to queue/)).toBeNull()             // not back with the next poll
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('item 2: the line belongs to the tab of the queued work and does not follow you to the other tabs', async () => {
+      m.startSummary.mockResolvedValue(undefined as never)
+      setResult({ cleanup_status: 'done', cleaned_text: 'Cleaned text' })
+      await renderPage()
+      setResult({ cleanup_status: 'done', cleaned_text: 'Cleaned text', summary_status: 'processing' })
+      fireEvent.click(btn(/Summary/))
+      fireEvent.click(await screen.findByRole('button', { name: /Summarize/ }))
+      expect(await screen.findByText(/Added to queue/)).toBeTruthy()
+      fireEvent.click(btn('Subtitles'))
+      expect(screen.queryByText(/Added to queue/)).toBeNull()
+      fireEvent.click(btn('Cleaned'))
+      expect(screen.queryByText(/Added to queue/)).toBeNull()
+      fireEvent.click(btn(/Summary/))
+      expect(screen.getByText(/Added to queue/)).toBeTruthy()                  // still there, on its own tab
     })
   })
 })
