@@ -155,7 +155,7 @@ async def get_queue(db: AsyncSession) -> list[dict]:
         text(
             "SELECT id, url, video_id, db_video_id, status, pipeline_stages, "
             "error_message, added_at, started_at, finished_at, sort_order, language "
-            "FROM processing_queue ORDER BY sort_order, added_at"
+            "FROM processing_queue ORDER BY sort_order, added_at, id"
         )
     )
     rows = result.fetchall()

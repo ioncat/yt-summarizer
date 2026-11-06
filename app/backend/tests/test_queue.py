@@ -87,3 +87,20 @@ async def test_queue_clear_all(client):
     items_r = await client.get("/api/queue")
     items = [i for i in _items(items_r.json()) if i["status"] == "pending"]
     assert len(items) == 0
+
+
+@pytest.mark.asyncio
+async def test_queue_rows_with_the_same_time_and_position_are_listed_by_id(client):
+    """NS-17 item 6: the order of the list must not change between two reads."""
+    from sqlalchemy import text
+    from models.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        for n in (3, 1, 2):          # inserted out of order, same sort_order and added_at
+            await db.execute(text(
+                "INSERT INTO processing_queue (id, url, video_id, status, pipeline_stages, added_at, sort_order) "
+                "VALUES (:id, :u, :v, 'pending', '[\"extract\"]', '2026-11-05 10:00:00', 7)"),
+                {"id": n, "u": f"https://www.youtube.com/watch?v=sameTime000{n}", "v": f"sameTime000{n}"})
+        await db.commit()
+    first = [i["id"] for i in (await client.get("/api/queue")).json()["items"]]
+    second = [i["id"] for i in (await client.get("/api/queue")).json()["items"]]
+    assert first == second == [1, 2, 3]

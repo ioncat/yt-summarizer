@@ -154,7 +154,8 @@ export default function QueuePage() {
   const sortedItems = [...items].sort((a, b) => {
     const sd = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)
     if (sd !== 0) return sd
-    return new Date(b.added_at).getTime() - new Date(a.added_at).getTime()
+    // links added in the same second share added_at: the id keeps their order the same on every refresh (NS-17 item 6)
+    return (new Date(b.added_at).getTime() - new Date(a.added_at).getTime()) || (b.id - a.id)
   })
 
   return (

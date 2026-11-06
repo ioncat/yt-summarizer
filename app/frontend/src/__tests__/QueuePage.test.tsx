@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import QueuePage from '../pages/QueuePage'
 import * as api from '../api'
@@ -384,7 +384,8 @@ describe('QueuePage "partial" items (NS-25)', () => {
   it('shows a "partial" pill whose message names the failed stage', async () => {
     renderQueue()
     expect(await screen.findByText('partial')).toBeTruthy()
-    fireEvent.click(screen.getAllByText('expand_more')[0])
+    const row = screen.getByText('partial').closest('tr')!        // (rows with the same time are listed by id, newest first)
+    fireEvent.click(within(row).getByText('expand_more'))
     expect(screen.getByText('Summary failed: the model returned nothing')).toBeTruthy()
   })
 
@@ -548,3 +549,23 @@ describe('QueuePage layout (NS-17 item 5)', () => {
   })
 })
 
+
+describe('QueuePage row order (NS-17 item 6)', () => {
+  const same = '2026-11-05T10:00:00'          // five links added in the same second
+  const rows = [1, 2, 3, 4, 5].map(n => item(n, `https://youtu.be/order00000${n}`, { added_at: same, sort_order: n }))
+  const shown = (container: HTMLElement) => Array.from(container.querySelectorAll('tbody tr')).map(r => r.querySelectorAll('td')[1]?.textContent)
+
+  it('rows with the same time keep the same order whatever order the server lists them in', async () => {
+    vi.clearAllMocks()
+    vi.mocked(api.getQueue).mockResolvedValue({ items: rows, count: 5 })
+    const first = renderQueue()
+    await screen.findByText('order000005')
+    const order1 = shown(first.container)
+    first.unmount()
+    vi.mocked(api.getQueue).mockResolvedValue({ items: [rows[2], rows[0], rows[4], rows[1], rows[3]], count: 5 })   // the next refresh
+    const second = renderQueue()
+    await screen.findByText('order000005')
+    expect(shown(second.container)).toEqual(order1)
+    expect(order1).toEqual(['order000005', 'order000004', 'order000003', 'order000002', 'order000001'])
+  })
+})
