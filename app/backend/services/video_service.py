@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import select, delete, text
+from sqlalchemy import select, delete, insert, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.models import Video, SubtitleRaw, SubtitleFormatted, ProcessingTask, PipelineSettings, AppSetting
@@ -50,42 +50,51 @@ STAGE_DEFAULTS: dict[str, dict] = {
 from services.subtitle_extractor import ExtractionResult, subtitles_to_json
 
 
-async def create_pending_task(db: AsyncSession, url: str, video_id: str) -> ProcessingTask:
-    # Return existing in-progress task to avoid double-processing
+async def _pending_task(db: AsyncSession, video_id: str) -> ProcessingTask | None:
     stmt = (
         select(ProcessingTask)
         .join(Video, ProcessingTask.video_id == Video.id)
         .where(Video.video_id == video_id, ProcessingTask.status == "pending")
+        .order_by(ProcessingTask.started_at.desc())
     )
-    existing = (await db.execute(stmt)).scalar_one_or_none()
+    return (await db.execute(stmt)).scalars().first()
+
+
+async def create_pending_task(db: AsyncSession, url: str, video_id: str) -> ProcessingTask:
+    """The pending task of a video that is being extracted / transcribed; an existing one is returned (no double processing).
+
+    Simultaneous callers for the same video (twins) all get the SAME task: the placeholder video (url "__pending__<id>", unique) is
+    inserted with OR IGNORE and the task only when the video has no pending one, in single statements, so no caller meets a unique
+    conflict. A placeholder left behind by an earlier FAILED task is cleaned first, but never one that has a pending task."""
+    existing = await _pending_task(db, video_id)
     if existing:
         return existing
 
-    # Clean up stale __pending__ video left over from a previous failed task
-    stale_stmt = select(Video).where(Video.url == f"__pending__{video_id}")
-    stale_video = (await db.execute(stale_stmt)).scalar_one_or_none()
-    if stale_video:
-        await db.execute(delete(ProcessingTask).where(ProcessingTask.video_id == stale_video.id))
-        await db.delete(stale_video)
-        await db.flush()
-
-    video = Video(
-        id=generate_id(),
-        url=f"__pending__{video_id}",
-        video_id=video_id,
+    placeholder = f"__pending__{video_id}"
+    # clean up the placeholder left over from a previous failed task (its tasks are all over; a pending one is never touched)
+    await db.execute(
+        text("DELETE FROM processing_tasks WHERE video_id IN (SELECT id FROM videos WHERE url = :ph) AND status != 'pending'"),
+        {"ph": placeholder},
     )
-    db.add(video)
-    await db.flush()
-
-    task = ProcessingTask(
-        id=generate_id(),
-        video_id=video.id,
-        status="pending",
-        progress=0,
-        started_at=datetime.utcnow(),
+    await db.execute(
+        text("DELETE FROM videos WHERE url = :ph AND NOT EXISTS (SELECT 1 FROM processing_tasks t WHERE t.video_id = videos.id)"),
+        {"ph": placeholder},
     )
-    db.add(task)
+    now = datetime.utcnow()
+    await db.execute(
+        insert(Video).prefix_with("OR IGNORE").values(
+            id=generate_id(), url=placeholder, video_id=video_id, is_favorite=False, created_at=now, updated_at=now),
+    )
+    placeholder_id = (await db.execute(select(Video.id).where(Video.url == placeholder))).scalar_one()
+    await db.execute(
+        text("INSERT INTO processing_tasks (id, video_id, status, progress, started_at) "
+             "SELECT :id, :vid, 'pending', 0, :now WHERE NOT EXISTS "
+             "(SELECT 1 FROM processing_tasks WHERE video_id = :vid AND status = 'pending')"),
+        {"id": generate_id(), "vid": placeholder_id, "now": now},
+    )
     await db.commit()
+    task = await _pending_task(db, video_id)
+    assert task is not None
     return task
 
 

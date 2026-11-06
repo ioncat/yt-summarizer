@@ -168,3 +168,63 @@ def test_the_background_copy_of_the_extraction_is_gone():
     import routers.process as proc
     assert not hasattr(proc, "_run_processing")
     assert not hasattr(proc, "BackgroundTasks") and not hasattr(proc, "extract_subtitles")        # the router no longer runs any work itself
+
+
+# --- simultaneous twins of a NEW link (stage 7 review) ----------------------------------------------------------------------
+
+async def test_simultaneous_posts_for_a_new_link_all_get_the_same_task(client):
+    import asyncio
+    answers = await asyncio.gather(*[client.post("/api/process", json={"url": URL}) for _ in range(5)])
+    assert [a.status_code for a in answers] == [200] * 5, [a.status_code for a in answers]
+    assert len({a.json()["task_id"] for a in answers}) == 1
+    assert {a.json()["video_id"] for a in answers} == {NEW}
+
+
+async def test_twins_of_a_link_whose_earlier_task_failed_also_get_one_new_task(client):
+    """A failed attempt leaves its placeholder behind; the next attempt reuses/replaces it, and twins of that attempt agree."""
+    import asyncio
+    with patch("services.subtitle_extractor.extract_subtitles", return_value=failed("No subtitles in ru", ["en"])):
+        first = await client.post("/api/process", json={"url": URL})
+        await run_extract_items(NEW)
+    assert (await _status(client, first.json()["task_id"]))["status"] == "failed"
+    answers = await asyncio.gather(*[client.post("/api/process", json={"url": URL}) for _ in range(4)])
+    assert [a.status_code for a in answers] == [200] * 4
+    ids = {a.json()["task_id"] for a in answers}
+    assert len(ids) == 1 and first.json()["task_id"] not in ids
+    assert (await _status(client, ids.pop()))["status"] == "pending"
+
+
+async def test_twins_on_a_file_database_get_one_task_and_one_placeholder(tmp_path):
+    """Real concurrency: separate connections to a database file."""
+    import asyncio
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.orm import sessionmaker
+    from models.database import create_engine_for
+    from models.models import ProcessingTask, Video
+    from services.video_service import create_pending_task
+
+    engine = create_engine_for(f"sqlite+aiosqlite:///{tmp_path / 'twins.sqlite'}")
+    async with engine.begin() as conn:
+        await conn.run_sync(lambda c: Video.__table__.create(c))
+        await conn.run_sync(lambda c: ProcessingTask.__table__.create(c))
+    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async def one():
+        async with factory() as db:
+            return (await create_pending_task(db, URL, NEW)).id
+
+    ids = await asyncio.gather(*[one() for _ in range(10)])
+    assert len(set(ids)) == 1
+    async with factory() as db:
+        assert (await db.execute(text("SELECT COUNT(*) FROM videos"))).scalar() == 1
+        assert (await db.execute(text("SELECT COUNT(*) FROM processing_tasks"))).scalar() == 1
+    # after that task failed, the next attempt gets a NEW task on a clean placeholder
+    async with factory() as db:
+        await db.execute(text("UPDATE processing_tasks SET status = 'failed'"))
+        await db.commit()
+    again = await asyncio.gather(*[one() for _ in range(6)])
+    assert len(set(again)) == 1 and again[0] != ids[0]
+    async with factory() as db:
+        assert (await db.execute(text("SELECT COUNT(*) FROM videos"))).scalar() == 1
+        assert (await db.execute(text("SELECT COUNT(*) FROM processing_tasks WHERE status = 'pending'"))).scalar() == 1
+    await engine.dispose()
