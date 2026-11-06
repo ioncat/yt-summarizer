@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.database import AsyncSessionLocal
 from services.ollama_options import begin_llm_run, llm_failure_reason
 from services import stage_runs
+from services.extract_queue import release_task
 from services.file_stt import LOCAL_PREFIX, release_upload, run_queued_file, transcribe_text
 from services.reextract import release_reextract, run_queued_reextract
 from services.stage_progress import ProgressWriter
@@ -247,6 +248,8 @@ async def delete_item(db: AsyncSession, item_id: int, upload_message: str = "Rem
         await release_upload(db, row[1], row[4], upload_message)
     if row[0] == "pending" and '"reextract"' in (row[2] or ""):
         await release_reextract(db, row[1], row[3])       # a re-extract that will not run: its run row ends (NS-11 stage 6)
+    if row[0] == "pending" and not (row[3] or "").startswith(LOCAL_PREFIX) and '"reextract"' not in (row[2] or ""):
+        await release_task(db, row[4], upload_message)    # a link typed on the Processing path: its task must not stay pending
     return "deleted"
 
 
@@ -261,6 +264,10 @@ async def clear_pending(db: AsyncSession) -> int:
     uploads = (await db.execute(
         text("SELECT video_id, db_video_id FROM processing_queue WHERE status = 'pending' AND url LIKE 'local://%' "
              "AND pipeline_stages NOT LIKE '%\"reextract\"%' AND video_id IS NOT NULL"),
+    )).fetchall()
+    link_tasks = (await db.execute(
+        text("SELECT db_video_id FROM processing_queue WHERE status = 'pending' AND db_video_id IS NOT NULL "
+             "AND url NOT LIKE 'local://%' AND pipeline_stages NOT LIKE '%\"reextract\"%'"),
     )).fetchall()
     reextracts = (await db.execute(
         text("SELECT video_id, url FROM processing_queue WHERE status = 'pending' AND pipeline_stages LIKE '%\"reextract\"%' "
@@ -277,6 +284,8 @@ async def clear_pending(db: AsyncSession) -> int:
         await release_upload(db, video_id, db_video_id, "Removed from the queue")   # the uploads' tasks end failed, not pending
     for video_id, url in reextracts:
         await release_reextract(db, video_id, url)                                  # the re-extracts' runs end (NS-11 stage 6)
+    for (db_video_id,) in link_tasks:
+        await release_task(db, db_video_id, "Removed from the queue")               # the Processing path's tasks end failed
     return result.rowcount
 
 
@@ -522,6 +531,14 @@ async def _set_failed(item_id: int, error_message: str) -> None:
 # Pipeline stage runners (mirror api.py patterns, no circular import)
 # ---------------------------------------------------------------------------
 
+class ExtractionFailed(RuntimeError):
+    """The extraction failed and its task already says why (message and available languages)."""
+
+
+class ExtractionFailed(RuntimeError):
+    """The extraction failed and its task already says why (message and available languages)."""
+
+
 async def _run_extract(url: str, language: str = "auto") -> dict[str, Any]:
     """Extract subtitles and save to DB. Returns {video_id, db_video_id}."""
     import asyncio as _asyncio
@@ -540,20 +557,30 @@ async def _run_extract(url: str, language: str = "auto") -> dict[str, Any]:
         task = await create_pending_task(db, url, yt_video_id)
         task_id = task.id
 
-    extraction = await _asyncio.to_thread(
-        extract_subtitles, url, language, cookies_path, ytdlp_path
-    )
+    try:
+        extraction = await _asyncio.to_thread(
+            extract_subtitles, url, language, cookies_path, ytdlp_path
+        )
 
-    if not extraction.success:
+        if not extraction.success:
+            message = extraction.error_message or "Extraction failed"
+            async with AsyncSessionLocal() as db:
+                # the languages the video does have go with the failure: the Processing page offers them (NS-11 stage 7)
+                await update_task_failed(db, task_id, message, available_languages=extraction.available_languages)
+            raise ExtractionFailed(message)
+
+        formatted = format_subtitles(extraction.subtitles, chapters=extraction.metadata.chapters)
+
         async with AsyncSessionLocal() as db:
-            await update_task_failed(db, task_id, extraction.error_message or "Extraction failed")
-        raise RuntimeError(extraction.error_message or "Extraction failed")
-
-    formatted = format_subtitles(extraction.subtitles, chapters=extraction.metadata.chapters)
-
-    async with AsyncSessionLocal() as db:
-        db_video = await complete_task(db, task_id, url, extraction, formatted)
-        db_video_id = db_video.id if db_video else None
+            db_video = await complete_task(db, task_id, url, extraction, formatted)
+            db_video_id = db_video.id if db_video else None
+    except ExtractionFailed:
+        raise                                            # the task already says why
+    except Exception as exc:
+        # an exception of the extractor itself: the task must not stay pending
+        async with AsyncSessionLocal() as db:
+            await update_task_failed(db, task_id, str(exc)[:500] or exc.__class__.__name__)
+        raise
 
     return {"video_id": yt_video_id, "db_video_id": db_video_id}
 

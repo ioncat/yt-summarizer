@@ -20,7 +20,7 @@ from models.database import AsyncSessionLocal
 from services import queue_service as q
 from tests.baseline_helpers import (
     VIDEO_ID, Gate, benchmark_rows, clear_router_state, fmt_count, fmt_row,
-    reset_benchmarks, reset_queue, set_fmt, wait_for_counters,
+    reset_benchmarks, reset_queue, run_extract_items, set_fmt, wait_for_counters,
 )
 
 YT_URL = f"https://www.youtube.com/watch?v={VIDEO_ID}"
@@ -399,7 +399,7 @@ async def test_queue_extract_failure_raises_with_message_and_marks_task_failed()
         rows = (await db.execute(text("SELECT status, error_message FROM processing_tasks pt JOIN videos v "
                                       "ON pt.video_id = v.id WHERE v.video_id = 'queueFail01'"))).all()
         assert rows[0][0] == "failed"
-        assert "available_languages" not in (rows[0][1] or "")  # BASELINE: language hints are not kept
+        assert "available_languages" in (rows[0][1] or "")  # NS-11 stage 7: the language hints are kept (BASELINE: they were dropped)
         await db.execute(text("DELETE FROM processing_tasks WHERE video_id IN (SELECT id FROM videos WHERE video_id='queueFail01')"))
         await db.execute(text("DELETE FROM videos WHERE video_id='queueFail01'"))
         await db.commit()
@@ -624,8 +624,9 @@ async def test_process_default_language_is_ru_while_queue_default_is_auto(client
         seen["language"] = language
         return _extraction("bgLang00001")
 
-    with patch("routers.process.extract_subtitles", fake):
+    with patch("services.subtitle_extractor.extract_subtitles", fake):
         r = await client.post("/api/process", json={"url": "https://www.youtube.com/watch?v=bgLang00001"})
+        await run_extract_items("bgLang00001")      # NS-11 stage 7: a queue item
     assert r.status_code == 200 and seen["language"] == "ru"
     await client.delete("/api/result/bgLang00001")
 
@@ -633,11 +634,12 @@ async def test_process_default_language_is_ru_while_queue_default_is_auto(client
 async def test_process_failed_extraction_exposes_message_and_available_languages(client):
     failed = SimpleNamespace(success=False, error_message="No subtitles in ru", available_languages=["en", "de"],
                              error_type="x", subtitles=[], metadata=None, language=None)
-    with patch("routers.process.extract_subtitles", return_value=failed):
+    with patch("services.subtitle_extractor.extract_subtitles", return_value=failed):
         r = await client.post("/api/process", json={"url": "https://www.youtube.com/watch?v=bgFail00001"})
+        await run_extract_items("bgFail00001")
     st = (await client.get(f"/api/status/{r.json()['task_id']}")).json()
     assert st["status"] == "failed" and st["error_message"] == "No subtitles in ru"
-    assert st["available_languages"] == ["en", "de"]  # the queue copy drops these
+    assert st["available_languages"] == ["en", "de"]  # (the queue copy used to drop these: NS-11 stage 7 keeps them)
 
 
 async def test_process_invalid_url_400_and_unknown_task_404(client):

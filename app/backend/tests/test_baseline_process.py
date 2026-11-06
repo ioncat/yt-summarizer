@@ -1,7 +1,7 @@
-"""NS-11 stage 7, commit 1 (tests only): what POST /api/process does TODAY, before it queues an item.
+"""NS-11 stage 7: POST /api/process.
 
-It runs the extraction as a BackgroundTask (the POST returns when it is over). Cases the owner decisions change are marked
-`# BASELINE:`; they are rewritten in the commit that changes the behaviour.
+Written as a baseline of the BackgroundTask version (the POST returned when the extraction was over); since the endpoint queues an
+item (commit 2) the worker does the work, and the cases the owner decisions changed are marked in their comments.
 """
 import asyncio
 import threading
@@ -13,7 +13,7 @@ from sqlalchemy import text
 
 from models.database import AsyncSessionLocal
 from services.subtitle_extractor import ExtractionResult, SubtitleEntry, VideoMetadata
-from tests.baseline_helpers import fmt_row
+from tests.baseline_helpers import fmt_row, reset_queue, run_extract_items
 
 NEW = "stg7Proc001"
 URL = f"https://www.youtube.com/watch?v={NEW}"
@@ -32,6 +32,7 @@ def failed(message="No subtitles in ru", languages=("en", "de")):
 
 
 async def forget(video_id=NEW):
+    await reset_queue()
     async with AsyncSessionLocal() as db:
         for t in ("subtitles_raw", "subtitles_formatted", "processing_tasks"):
             await db.execute(text(f"DELETE FROM {t} WHERE video_id IN (SELECT id FROM videos WHERE video_id = :v)"), {"v": video_id})
@@ -42,8 +43,9 @@ async def forget(video_id=NEW):
 
 
 async def test_a_new_link_is_extracted_and_stored_and_the_task_completes(client):
-    with patch("routers.process.extract_subtitles", return_value=extraction()):
+    with patch("services.subtitle_extractor.extract_subtitles", return_value=extraction()):
         r = await client.post("/api/process", json={"url": URL, "language": "en"})
+        await run_extract_items(NEW)             # NS-11 stage 7: a queue item, the worker does it
     assert r.status_code == 200 and r.json()["video_id"] == NEW and r.json()["task_id"]
     st = (await client.get(f"/api/status/{r.json()['task_id']}")).json()
     assert st["status"] == "completed" and st["progress_text"] is None
@@ -56,17 +58,20 @@ async def test_an_exception_in_the_extractor_fails_the_task_with_its_text(client
     def boom(*a, **k):
         raise RuntimeError("yt-dlp crashed")
 
-    with patch("routers.process.extract_subtitles", boom):
+    with patch("services.subtitle_extractor.extract_subtitles", boom):
         r = await client.post("/api/process", json={"url": URL})
+        (item,) = await run_extract_items(NEW)
     st = (await client.get(f"/api/status/{r.json()['task_id']}")).json()
     assert st["status"] == "failed" and st["error_message"] == "yt-dlp crashed" and st["available_languages"] is None
+    assert item["status"] == "failed" and item["error_message"] == "yt-dlp crashed"       # the queue item says so too
     assert await fmt_row(NEW) is None
     await forget()
 
 
 async def test_a_failure_without_languages_has_none(client):
-    with patch("routers.process.extract_subtitles", return_value=failed("This video is not accessible.", languages=None)):
+    with patch("services.subtitle_extractor.extract_subtitles", return_value=failed("This video is not accessible.", languages=None)):
         r = await client.post("/api/process", json={"url": URL})
+        await run_extract_items(NEW)
     st = (await client.get(f"/api/status/{r.json()['task_id']}")).json()
     assert st["status"] == "failed" and st["error_message"] == "This video is not accessible."
     await forget()
@@ -80,20 +85,18 @@ async def test_the_status_of_a_running_extraction_is_pending_without_progress_te
         release.wait(5)
         return extraction()
 
-    with patch("routers.process.extract_subtitles", slow):
-        post = asyncio.create_task(client.post("/api/process", json={"url": URL}))
+    with patch("services.subtitle_extractor.extract_subtitles", slow):
+        task_id = (await client.post("/api/process", json={"url": URL})).json()["task_id"]
+        worker = asyncio.create_task(run_extract_items(NEW))
         await asyncio.get_running_loop().run_in_executor(None, started.wait, 5)
-        async with AsyncSessionLocal() as db:
-            task_id = (await db.execute(text("SELECT t.id FROM processing_tasks t JOIN videos v ON v.id = t.video_id "
-                                             "WHERE v.video_id = :v"), {"v": NEW})).scalar()
         st = (await client.get(f"/api/status/{task_id}")).json()
-        assert st["status"] == "pending" and st["progress_text"] is None
+        assert st["status"] == "pending" and st["progress_text"] is None      # BASELINE: changes in stage 7 (commit 3)
         release.set()
-        await post
+        await worker
     await forget()
 
 
-async def test_a_second_post_for_a_link_that_is_still_being_extracted_gets_the_same_task(client):
+async def test_a_second_post_for_a_link_that_is_queued_or_running_gets_the_same_task_and_adds_no_item(client):
     release, started = threading.Event(), threading.Event()
 
     def slow(*a, **k):
@@ -101,19 +104,23 @@ async def test_a_second_post_for_a_link_that_is_still_being_extracted_gets_the_s
         release.wait(5)
         return extraction()
 
-    with patch("routers.process.extract_subtitles", slow):
-        first = asyncio.create_task(client.post("/api/process", json={"url": URL}))
+    with patch("services.subtitle_extractor.extract_subtitles", slow):
+        first = await client.post("/api/process", json={"url": URL})
+        queued_again = await client.post("/api/process", json={"url": URL})            # while it waits ...
+        worker = asyncio.create_task(run_extract_items(NEW))
         await asyncio.get_running_loop().run_in_executor(None, started.wait, 5)
-        second = await client.post("/api/process", json={"url": URL})
+        running_again = await client.post("/api/process", json={"url": URL})           # ... and while it runs
+        assert (await client.get("/api/queue")).json()["count"] == 1
         release.set()
-        first_response = await first
-    assert second.status_code == 200 and second.json()["task_id"] == first_response.json()["task_id"]
+        await worker
+    assert queued_again.json()["task_id"] == running_again.json()["task_id"] == first.json()["task_id"]
     await forget()
 
 
 async def test_a_url_with_a_playlist_part_or_other_forms_is_reduced_to_the_video_id(client):
-    with patch("routers.process.extract_subtitles", return_value=extraction()):
+    with patch("services.subtitle_extractor.extract_subtitles", return_value=extraction()):
         r = await client.post("/api/process", json={"url": f"https://youtu.be/{NEW}?t=30"})
+        await run_extract_items(NEW)
     assert r.status_code == 200 and r.json()["video_id"] == NEW
     await forget()
 
@@ -131,14 +138,15 @@ async def test_the_default_language_of_the_request_is_ru(client):
         seen["language"] = language
         return extraction()
 
-    with patch("routers.process.extract_subtitles", fake):
+    with patch("services.subtitle_extractor.extract_subtitles", fake):
         await client.post("/api/process", json={"url": URL})
+        await run_extract_items(NEW)
     assert seen["language"] == "ru"
     await forget()
 
 
-async def test_post_runs_the_extraction_inside_the_request_so_it_answers_only_when_done(client):
-    # BASELINE: changes in stage 7 - the POST will answer at once and the work waits its turn in the queue.
+async def test_the_post_answers_at_once_and_the_work_waits_for_the_queue_worker(client):
+    # NS-11 stage 7 (decision 6): the link is a normal queue item; nothing is extracted until the worker gets to it.
     seen = {}
 
     def quick(*a, **k):
@@ -146,7 +154,13 @@ async def test_post_runs_the_extraction_inside_the_request_so_it_answers_only_wh
         time.sleep(0.01)
         return extraction()
 
-    with patch("routers.process.extract_subtitles", quick):
-        await client.post("/api/process", json={"url": URL})
-    assert seen == {"ran": True}                                           # already ran when the response arrived
+    with patch("services.subtitle_extractor.extract_subtitles", quick):
+        r = await client.post("/api/process", json={"url": URL, "language": "de"})
+        assert seen == {}                                                  # the response came before any extraction
+        (queued,) = (await client.get("/api/queue")).json()["items"]
+        assert (queued["status"], queued["url"], queued["pipeline_stages"], queued["language"]) == ("pending", URL, ["extract"], "de")
+        assert (await client.get(f"/api/status/{r.json()['task_id']}")).json()["status"] == "pending"
+        await run_extract_items(NEW)
+    assert seen == {"ran": True}
+    assert (await client.get(f"/api/status/{r.json()['task_id']}")).json()["status"] == "completed"
     await forget()

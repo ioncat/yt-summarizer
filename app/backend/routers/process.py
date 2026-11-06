@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import get_db
+from services.extract_queue import enqueue_extract
 from services.file_stt import enqueue_local_file, upload_progress_text, uploads_dir
 from services.subtitle_extractor import extract_subtitles, extract_video_id, validate_youtube_url
 from services.text_formatter import format_subtitles
@@ -70,9 +71,10 @@ async def _run_processing(task_id: str, url: str, language: str) -> None:
 @router.post("/process")
 async def process_video(
     body: ProcessRequest,
-    background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    """Extract the subtitles of a YouTube link. The link is queued (NS-11 stage 7): the answer comes at once, the queue worker does
+    the extraction in its turn, and /api/status/{task_id} follows it. A link that is already queued returns the same task."""
     canonical = validate_youtube_url(body.url)
     if not canonical:
         raise HTTPException(status_code=400, detail="Invalid YouTube URL")
@@ -87,7 +89,7 @@ async def process_video(
         )
 
     task = await create_pending_task(db, canonical, video_id)
-    background_tasks.add_task(_run_processing, task.id, canonical, body.language)
+    await enqueue_extract(db, canonical, video_id, task.video_id, body.language)
     return {"task_id": task.id, "video_id": video_id}
 
 

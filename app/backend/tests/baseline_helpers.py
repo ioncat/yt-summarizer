@@ -139,6 +139,19 @@ async def run_queued_stage(video_id: str, stage: str) -> None:
         await run_worker(ids)
 
 
+async def run_extract_items(video_id: str) -> list[dict]:
+    """Let the queue worker run the extract item(s) that POST /api/process queued for this video (NS-11 stage 7); returns the items
+    as the worker left them."""
+    from services import queue_service as q
+    async with AsyncSessionLocal() as db:
+        ids = [i["id"] for i in await q.get_queue(db)
+               if i["video_id"] == video_id and i["pipeline_stages"] == ["extract"] and i["status"] == "pending"]
+    if ids:
+        await run_worker(ids)
+    async with AsyncSessionLocal() as db:
+        return [i for i in await q.get_queue(db) if i["id"] in ids]
+
+
 async def run_reextract_items(video_id: str) -> list[dict]:
     """Let the queue worker run the re-extract item(s) of this video (NS-11 stage 6); returns the items as the worker left them."""
     from services import queue_service as q
