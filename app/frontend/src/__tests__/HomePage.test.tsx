@@ -519,6 +519,32 @@ describe('HomePage: one form for one link or a list', () => {
     expect(vi.mocked(api.queueBulkAdd).mock.calls[1][0]).toEqual([list[0], list[1]])
   })
 
+  it('a link pasted while the request is running is not lost when it succeeds', async () => {
+    let answer!: (v: never) => void
+    vi.mocked(api.queueBulkAdd).mockReturnValue(new Promise(res => { answer = res }) as never)
+    renderHome()
+    fireEvent.change(field(), { target: { value: list[0] } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add to queue' }))
+    await waitFor(() => expect(api.queueBulkAdd).toHaveBeenCalledTimes(1))
+    fireEvent.change(field(), { target: { value: `${list[0]}\n${list[1]}` } })      // pasted while "Adding..."
+    answer({ added: 1, ids: [1], invalid: [], duplicates: [] } as never)
+    expect(await screen.findByText(/Added to the queue/)).toBeTruthy()
+    expect(field().value).toBe(list[1])                                               // only the sent line is gone
+  })
+
+  it('a list pasted over while its request runs keeps the new lines and drops the sent ones', async () => {
+    let answer!: (v: never) => void
+    vi.mocked(api.queueBulkAdd).mockReturnValue(new Promise(res => { answer = res }) as never)
+    renderHome()
+    fireEvent.change(field(), { target: { value: `${list[0]}\n${list[1]}` } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add all (2)' }))
+    await waitFor(() => expect(api.queueBulkAdd).toHaveBeenCalledTimes(1))
+    fireEvent.change(field(), { target: { value: `${list[0]}\n${list[1]}\n${list[2]}` } })
+    answer({ added: 2, ids: [1, 2], invalid: [], duplicates: [] } as never)
+    await screen.findByTestId('bulk-report')
+    expect(field().value).toBe(list[2])
+  })
+
   it('an empty field cannot be sent', () => {
     renderHome()
     expect((screen.getByRole('button', { name: 'Add to queue' }) as HTMLButtonElement).disabled).toBe(true)

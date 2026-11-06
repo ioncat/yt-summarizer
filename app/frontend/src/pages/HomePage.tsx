@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { FileUploadForm } from '../components/home/FileUploadForm'
 import { BulkReport, reportOf } from '../components/home/BulkReport'
 import type { QueueReportEntry } from '../api'
-import { parseLinks } from '../utils/links'
+import { parseLinks, withoutSentLinks } from '../utils/links'
 import { LANGUAGES, inputBase, selectBase } from '../components/home/common'
 import { AUTO_PIPELINE_KEY, PIPELINE_PRESETS, autoPipelineStages, readAutoPipeline, resolveStages } from '../utils/pipeline'
 import { getSettings, getHealth, getQueue, AllSettings, queueBulkAdd, QueueAddResult, downloadDirect } from '../api'
@@ -43,19 +43,22 @@ export default function HomePage() {
 
   // The page stays: a line says what happened, so the next link can be pasted at once.
   // A duplicate carries its video id from the server (links like /live/, youtu.be/ and /shorts/ have no ?v=)
-  function afterQueueAdd(res: QueueAddResult) {
+  function afterQueueAdd(res: QueueAddResult, clearSent: () => void) {
     const dup = res.duplicate_details?.[0]
     if (dup?.reason === 'processed') setQueueNote({ kind: 'processed', videoId: dup.video_id })
     else if (dup) setQueueNote({ kind: 'in_queue' })
-    else if (res.added > 0) { setQueueNote({ kind: 'added' }); setUrl(''); if (res.ids?.length === 1) setWatchedItem(res.ids[0]) }
+    else if (res.added > 0) { setQueueNote({ kind: 'added' }); clearSent(); if (res.ids?.length === 1) setWatchedItem(res.ids[0]) }
     else setQueueNote({ kind: 'invalid' })
   }
 
   // One link: the line above ("Added" / "Already processed" ...) and the follow of its queue item. Two or more: the report of the list.
+  // The field is only emptied of what was sent: a link pasted while the request ran stays.
   function afterAdd(res: QueueAddResult) {
-    if (links.length === 1) { afterQueueAdd(res); return }
+    const sentText = url, sent = links
+    const clearSent = () => setUrl(cur => withoutSentLinks(cur, sentText, sent))
+    if (links.length === 1) { afterQueueAdd(res, clearSent); return }
     setBulkResult({ added: res.added, report: reportOf(res) })
-    if (res.added > 0) setUrl('')
+    if (res.added > 0) clearSent()
   }
 
   // Follow the queued item: one request at a time, an answer that arrives after the watch ended or changed is ignored, and the

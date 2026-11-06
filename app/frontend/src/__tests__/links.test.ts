@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { linkOfLine, parseLinks } from '../utils/links'
+import { linkOfLine, parseLinks, withoutSentLinks } from '../utils/links'
 
 describe('parseLinks', () => {
   it('one link per line, in the order typed', () => {
@@ -20,5 +20,15 @@ describe('parseLinks', () => {
 
   it('a line without a link is passed on as it is, so the server can say it is not a YouTube link', () => {
     expect(parseLinks('not a link\nhttps://youtu.be/a')).toEqual(['not a link', 'https://youtu.be/a'])
+  })
+})
+
+describe('withoutSentLinks', () => {
+  it('empties a field that still holds exactly what was sent', () => {
+    expect(withoutSentLinks('https://youtu.be/a\nhttps://youtu.be/b', 'https://youtu.be/a\nhttps://youtu.be/b', ['https://youtu.be/a', 'https://youtu.be/b'])).toBe('')
+  })
+
+  it('takes out only the sent lines of a field that changed meanwhile', () => {
+    expect(withoutSentLinks('https://youtu.be/a | t\nhttps://youtu.be/new\n', 'https://youtu.be/a | t', ['https://youtu.be/a'])).toBe('https://youtu.be/new\n')
   })
 })
