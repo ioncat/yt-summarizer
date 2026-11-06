@@ -222,3 +222,75 @@ async def test_no_file_and_no_odd_ids_give_404_and_never_a_path(client, asked):
 async def test_a_half_written_file_is_not_served(client):
     (Path(ct.TEST_DOWNLOADS) / f"{VIDEO_ID}.mp4.part").write_bytes(b"half")
     assert (await client.get(f"/api/downloads/{VIDEO_ID}")).status_code == 404
+
+
+# --- item 13: no subtitles, but the download was asked for --------------------------------------------------------------------
+
+NEW = "noSubs00001"
+NEW_URL = f"https://www.youtube.com/watch?v={NEW}"
+
+
+def no_subtitles(*a, **k):
+    return SimpleNamespace(success=False, error_message="This video has no subtitles available.", available_languages=None,
+                           error_type="x", subtitles=[], metadata=None, language=None)
+
+
+async def test_no_subtitles_still_downloads_and_the_item_ends_partial_with_both_facts(client):
+    run, calls = fake_ytdlp()
+    item = await add_item(["extract", "cleanup", "download"], url=NEW_URL, video_id=NEW)
+    cleanups: list[int] = []
+
+    async def cleanup(*a, **k):
+        cleanups.append(1)
+        return "x"
+
+    with patch("services.subtitle_extractor.extract_subtitles", no_subtitles), patch("services.text_cleaner.clean_text", cleanup), \
+            patch.object(downloader.subprocess, "run", run):
+        await run_worker([item])
+    row = await get_item(item)
+    assert row["status"] == "partial"
+    assert "Subtitles failed: This video has no subtitles available." in row["error_message"]
+    assert f"the video was downloaded ({NEW}.mp4" in row["error_message"]
+    assert (Path(ct.TEST_DOWNLOADS) / f"{NEW}.mp4").exists() and len(calls) == 1 and calls[0][-1] == NEW_URL
+    assert cleanups == []                                                  # the text stages did not run: there is no text
+    from tests.baseline_helpers import AsyncSessionLocal
+    from sqlalchemy import text
+    async with AsyncSessionLocal() as db:
+        runs = dict((await db.execute(text("SELECT stage, status FROM processing_stages WHERE video_id = :v"), {"v": NEW})).fetchall())
+    assert runs == {"extract": "failed", "download": "done"}
+    await client.delete(f"/api/queue/{row['id']}")
+
+
+async def test_no_subtitles_and_a_failing_download_report_both_failures(client):
+    item = await add_item(["extract", "download"], url=NEW_URL, video_id=NEW)
+    with patch("services.subtitle_extractor.extract_subtitles", no_subtitles), \
+            patch.object(downloader.subprocess, "run", fake_ytdlp(returncode=1, stderr=b"ERROR: private video")[0]):
+        await run_worker([item])
+    row = await get_item(item)
+    assert row["status"] == "partial"
+    assert "Subtitles failed: This video has no subtitles available." in row["error_message"]
+    assert "Download failed: yt-dlp failed: ERROR: private video" in row["error_message"]
+    assert "was downloaded" not in row["error_message"]
+
+
+async def test_without_the_download_stage_no_subtitles_still_fails_the_item_as_before(client):
+    run, calls = fake_ytdlp()
+    item = await add_item(["extract", "cleanup"], url=NEW_URL, video_id=NEW)
+    with patch("services.subtitle_extractor.extract_subtitles", no_subtitles), patch.object(downloader.subprocess, "run", run):
+        await run_worker([item])
+    row = await get_item(item)
+    assert row["status"] == "failed" and "no subtitles" in row["error_message"].lower()
+    assert calls == []
+
+
+async def test_a_stop_during_the_extract_still_stops_everything_and_downloads_nothing(client):
+    run, calls = fake_ytdlp()
+    item = await add_item(["extract", "download"], url=NEW_URL, video_id=NEW)
+
+    def stopped_extract(*a, **k):
+        ITEM_CANCEL.add(item)
+        return no_subtitles()
+
+    with patch("services.subtitle_extractor.extract_subtitles", stopped_extract), patch.object(downloader.subprocess, "run", run):
+        await run_worker([item])
+    assert (await get_item(item))["status"] == "skipped" and calls == []

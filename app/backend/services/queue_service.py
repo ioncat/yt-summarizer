@@ -464,7 +464,8 @@ async def _set_done(item_id: int, video_id: str | None, db_video_id: str | None)
         await db.commit()
 
 
-_STAGE_LABELS = {"cleanup": "Cleanup", "summary": "Summary", "mindmap": "Mind map", "download": "Download"}
+_STAGE_LABELS = {"extract": "Subtitles", "transcribe": "Speech-to-text", "cleanup": "Cleanup", "summary": "Summary",
+                 "mindmap": "Mind map", "download": "Download"}
 
 
 async def _release_unrun_stages(video_id: str | None, url: str, stages: list[str], reason: str, cancelled: bool = False) -> None:
@@ -1043,20 +1044,33 @@ async def queue_worker() -> None:
         await _set_processing(item_id)
 
         try:
-            yt_video_id, db_video_id = await _run_first_stage(item, item_id, url, pipeline_stages, item_language)
+            first_stage_error: Exception | None = None
+            try:
+                yt_video_id, db_video_id = await _run_first_stage(item, item_id, url, pipeline_stages, item_language)
+            except StageCancelled:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                # No subtitles (or any other failure of stage 1) must not cost the download the user also asked for (NS-17 item 13):
+                # the text stages are skipped, the download still runs, and the item ends partial with the reason.
+                from services.subtitle_extractor import extract_video_id as _video_id_of
+                if "download" not in pipeline_stages or "reextract" in pipeline_stages or url.startswith(LOCAL_PREFIX) or not _video_id_of(url):
+                    raise
+                logger.warning("Queue worker: item %d: stage 1 failed (%s); the download still runs", item_id, exc)
+                first_stage_error = exc
+                yt_video_id, db_video_id = _video_id_of(url), None
 
             # Stage 2: cleanup (optional)
-            if "cleanup" in pipeline_stages:
+            if first_stage_error is None and "cleanup" in pipeline_stages:
                 _check_item_cancel(item_id)
                 await _run_cleanup_stage(yt_video_id, item_id)
 
             # Stage 3: summary (optional)
-            if "summary" in pipeline_stages:
+            if first_stage_error is None and "summary" in pipeline_stages:
                 _check_item_cancel(item_id)
                 await _run_summary_stage(yt_video_id, item_id)
 
             # Stage 4: mindmap (optional)
-            if "mindmap" in pipeline_stages:
+            if first_stage_error is None and "mindmap" in pipeline_stages:
                 _check_item_cancel(item_id)
                 await _run_mindmap_stage(yt_video_id, item_id)
 
@@ -1067,10 +1081,21 @@ async def queue_worker() -> None:
 
             async with AsyncSessionLocal() as db:
                 failed = await _item_failed_stages(db, item_id, pipeline_stages)
+            if first_stage_error is not None:
+                first = "transcribe" if "transcribe" in pipeline_stages else "extract"
+                if first not in {s for s, _ in failed}:
+                    failed = [(first, str(first_stage_error)[:500])] + failed
             if failed:
                 # a stage ended failed without raising (an empty answer): the item is not "done"
                 message = "; ".join(f"{_STAGE_LABELS.get(s, s)} failed: {err or 'no reason recorded'}" for s, err in failed)
+                if first_stage_error is not None and "download" not in {s for s, _ in failed}:
+                    from services.downloader import find_download
+                    saved = find_download(yt_video_id)
+                    if saved is not None:
+                        message += f"; the video was downloaded ({saved.name}, in data/downloads)"
                 await _set_partial(item_id, yt_video_id, db_video_id, message)
+                if first_stage_error is not None:
+                    await _release_unrun_stages(item.get("video_id"), url, pipeline_stages, str(first_stage_error))
                 logger.warning("Queue worker: item %d partial video_id=%s: %s", item_id, yt_video_id, message)
             else:
                 await _set_done(item_id, yt_video_id, db_video_id)
